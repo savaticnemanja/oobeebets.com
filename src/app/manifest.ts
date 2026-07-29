@@ -3,8 +3,11 @@ import { SITE } from "@/lib/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${SITE.name} — ${SITE.tagline}`,
-    short_name: SITE.shortName,
+    // Both are the plain brand name: `name` is what an install prompt shows,
+    // `short_name` is the label under the home screen icon. The tagline lives
+    // in `description`, where a long string is not truncated to nothing.
+    name: SITE.name,
+    short_name: SITE.name,
     description: SITE.description,
     start_url: "/picks",
     // Installed app opens without browser chrome; falls back gracefully on

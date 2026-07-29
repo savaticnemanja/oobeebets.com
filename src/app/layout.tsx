@@ -51,7 +51,9 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: SITE.shortName,
+    // The home screen label when iOS installs from the meta tags rather than
+    // the manifest; keep it in step with the manifest's short_name.
+    title: SITE.name,
     statusBarStyle: "black-translucent",
   },
   formatDetection: { telephone: false },

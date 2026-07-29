@@ -2,7 +2,6 @@
 
 export const SITE = {
   name: "oobee bets",
-  shortName: "oobee",
   domain: "oobeebets.com",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://oobeebets.com",
   tagline: "Every pick, settled in public.",
