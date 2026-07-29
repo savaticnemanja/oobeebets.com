@@ -50,6 +50,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/src/db ./src/db
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/postgres ./node_modules/postgres
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./entrypoint.sh
+# entrypoint.sh invokes ./docker/migrate.mjs, so it has to keep that path.
+COPY --chown=nextjs:nodejs docker/migrate.mjs ./docker/migrate.mjs
 RUN chmod +x ./entrypoint.sh
 
 USER nextjs
