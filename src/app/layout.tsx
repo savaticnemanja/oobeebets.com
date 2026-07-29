@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
+import { Aurora } from "@/components/aurora";
 import { ServiceWorker } from "@/components/pwa/service-worker";
 import "./globals.css";
 
@@ -72,7 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div className="aurora" aria-hidden="true" />
+        <Aurora />
         <div className="grid-lines" aria-hidden="true" />
 
         {/* First focusable element on every page. */}

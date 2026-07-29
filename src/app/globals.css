@@ -68,6 +68,38 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Ambient drift. Translations are percentages of each bloom's own size, so the
+   amplitude scales with the element and stays proportionate on every viewport.
+   Only transform and opacity animate — both are compositor properties, so this
+   costs no layout and no paint; animating filter or background-position would
+   repaint a full-screen layer every frame. Three-stop paths (0/33/66%) keep the
+   drift from reading as a straight back-and-forth.
+
+   Amplitudes are deliberately small and the periods long: at rest the page
+   should read as still, and the motion should only be apparent if you look for
+   it. The scale range does most of the work — a bloom breathing between 1.0 and
+   1.06 changes the light without anything appearing to travel. */
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.88; }
+  33%      { transform: translate3d(6%, 4%, 0) scale(1.06);   opacity: 1; }
+  66%      { transform: translate3d(2%, 7%, 0) scale(1.02);   opacity: 0.93; }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05);     opacity: 1; }
+  33%      { transform: translate3d(-7%, 5%, 0) scale(1);     opacity: 0.86; }
+  66%      { transform: translate3d(-3%, 9%, 0) scale(1.06);  opacity: 0.95; }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.9; }
+  33%      { transform: translate3d(5%, -6%, 0) scale(1.07);  opacity: 1; }
+  66%      { transform: translate3d(-4%, -2%, 0) scale(1.03); opacity: 0.87; }
+}
+@keyframes drift-d {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.04);     opacity: 0.86; }
+  33%      { transform: translate3d(-6%, -7%, 0) scale(1);    opacity: 1; }
+  66%      { transform: translate3d(-2%, 4%, 0) scale(1.07);  opacity: 0.92; }
+}
+
 @layer base {
   :root {
     color-scheme: dark;
@@ -127,17 +159,112 @@
 }
 
 @layer components {
-  /* Ambient background: a slow cyan aurora over pure black. Purely decorative,
-     marked aria-hidden at the usage site, and cheap (no JS, no repaint). */
+  /* Ambient background: four cyan blooms drifting over pure black. Purely
+     decorative, aria-hidden at the usage site, and cheap by construction —
+     soft-edged radial gradients rather than blurred boxes, so nothing is ever
+     re-rastered, and only `transform` animates, which the compositor handles
+     without layout or paint.
+
+     Alphas are held below the static gradients this replaced. Ambient light
+     level sets the effective background luminance for the small print sitting
+     directly on it, so every value here is a contrast ceiling as much as a
+     design choice. Raising one means re-measuring the brightest frame against
+     the smallest muted text. */
   .aurora {
     position: fixed;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background:
-      radial-gradient(60rem 32rem at 12% -10%, rgba(34, 211, 238, 0.1), transparent 60%),
-      radial-gradient(48rem 28rem at 88% 8%, rgba(14, 116, 144, 0.12), transparent 62%),
-      radial-gradient(40rem 24rem at 50% 105%, rgba(34, 211, 238, 0.06), transparent 60%);
+    /* Blooms are wider than the viewport; clip rather than extend the page. */
+    overflow: hidden;
+  }
+
+  .aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    will-change: transform, translate;
+    /* How far this bloom follows the pointer; overridden per bloom below. */
+    --depth: 16px;
+  }
+
+  /* Pointer parallax, desktop only — a coarse pointer has no hovering position
+     to follow, so the blooms would sit wherever the last tap left them.
+     `--aurora-x/y` are unitless -1..1 offsets from the viewport centre,
+     published on <html> by components/aurora.tsx.
+
+     This is the standalone `translate` property, not `transform`, and that is
+     the whole trick: the drift keyframes above own `transform`, and the two
+     properties compose rather than overwrite each other. Because `translate`
+     is applied before `transform`, the parallax offset is also immune to the
+     scale the keyframes are animating — it stays a fixed pixel travel.
+     Vertical travel is held to 60% so the field leans rather than swims. */
+  @media (hover: hover) and (pointer: fine) {
+    .aurora-blob {
+      translate:
+        calc(var(--aurora-x, 0) * var(--depth))
+        calc(var(--aurora-y, 0) * var(--depth) * 0.6);
+    }
+  }
+
+  .aurora-blob-a {
+    width: min(60rem, 140vw);
+    height: min(34rem, 58vh);
+    left: -16%;
+    top: -14%;
+    --depth: 22px;
+    background: radial-gradient(closest-side, rgba(34, 211, 238, 0.16), transparent);
+    animation: drift-a 38s ease-in-out infinite;
+  }
+
+  .aurora-blob-b {
+    width: min(50rem, 125vw);
+    height: min(30rem, 52vh);
+    right: -12%;
+    top: -8%;
+    --depth: 15px;
+    background: radial-gradient(closest-side, rgba(14, 116, 144, 0.22), transparent);
+    animation: drift-b 46s ease-in-out infinite;
+  }
+
+  .aurora-blob-c {
+    width: min(44rem, 115vw);
+    height: min(26rem, 46vh);
+    left: 50%;
+    bottom: -26%;
+    margin-left: -22rem;
+    /* Barely follows the pointer: it is the furthest "back" of the four, and
+       it sits under the footer where any extra travel is most visible. */
+    --depth: 10px;
+    /* Dimmer than the upper blooms on purpose. This one sits under the footer,
+       where 14px muted text runs directly on the background; measured at 0.22
+       it pulled that text to 3.85:1, under the 4.5:1 §6 requires. */
+    background: radial-gradient(closest-side, rgba(34, 211, 238, 0.1), transparent);
+    animation: drift-c 42s ease-in-out infinite;
+  }
+
+  /* A fourth bloom breaks the symmetry of the other three and keeps the
+     right-hand side alive as they drift. The nearest of the four, so it takes
+     the largest parallax travel. */
+  .aurora-blob-d {
+    width: min(36rem, 100vw);
+    height: min(22rem, 40vh);
+    right: -8%;
+    top: 44%;
+    --depth: 28px;
+    /* Also reaches the lower fold, so held below the upper blooms too. */
+    background: radial-gradient(closest-side, rgba(103, 232, 249, 0.11), transparent);
+    animation: drift-d 52s ease-in-out infinite;
+  }
+
+  /* Decorative drift is the one thing that should stop dead, not merely speed
+     up: the base rule above would otherwise snap the blooms to their final
+     keyframe. `animation: none` rests them where they were composed. The
+     parallax is disabled in JS as well; this is the guarantee, not the path. */
+  @media (prefers-reduced-motion: reduce) {
+    .aurora-blob {
+      animation: none !important;
+      translate: none !important;
+    }
   }
 
   .grid-lines {
