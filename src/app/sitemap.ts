@@ -16,6 +16,26 @@ import { SITE } from "@/lib/site";
  */
 export const revalidate = 3600;
 
+/**
+ * This route is prerendered, so both reads below run during `next build` — and
+ * at that moment there may be no database to read. CI builds before it
+ * migrates, and the Docker image builds against a placeholder DATABASE_URL that
+ * points at nothing. Neither is worth failing a build over: a missing date
+ * falls back to the build time, and the first revalidation after the app is
+ * actually serving replaces it with the real one.
+ *
+ * The failure is logged rather than swallowed, so a database that is unreachable
+ * at *runtime* — where it does matter — still says so.
+ */
+async function orNull(label: string, read: () => Promise<Date | null>) {
+  try {
+    return await read();
+  } catch (err) {
+    console.warn(`[sitemap] ${label} unavailable, falling back to build time:`, err);
+    return null;
+  }
+}
+
 /** Newest settlement, which is what changes the public record. */
 async function lastSettlement(): Promise<Date | null> {
   const [row] = await db
@@ -36,7 +56,10 @@ async function lastPublish(): Promise<Date | null> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [settledAt, publishedAt] = await Promise.all([lastSettlement(), lastPublish()]);
+  const [settledAt, publishedAt] = await Promise.all([
+    orNull("last settlement", lastSettlement),
+    orNull("last publish", lastPublish),
+  ]);
 
   // Deployment time is the floor: it is when the copy on the static pages last
   // changed, and it stands in for the data dates before anything is published.

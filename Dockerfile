@@ -18,8 +18,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-# Build-time DATABASE_URL is a placeholder: every DB-touching route is dynamic
-# or revalidated, so nothing connects during `next build`.
+# Build-time DATABASE_URL is a placeholder that points at nothing, and it stays
+# that way: an image must build without a database in reach. Dynamic routes
+# genuinely do not connect here, but revalidated ones are prerendered now and
+# do — /sitemap.xml reads two dates — so those reads fall back to the build time
+# instead of throwing. See the note in src/app/sitemap.ts.
 ENV DATABASE_URL="postgres://build:build@localhost:5432/build"
 RUN npm run build
 
