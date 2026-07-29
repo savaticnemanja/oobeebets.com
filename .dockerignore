@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+README.md
+FSD.md
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage
+.vscode
+.idea
+*.log

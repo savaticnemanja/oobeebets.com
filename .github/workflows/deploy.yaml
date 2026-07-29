@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oobee
+          POSTGRES_PASSWORD: oobee
+          POSTGRES_DB: oobeebets
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U oobee -d oobeebets"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://oobee:oobee@localhost:5432/oobeebets
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_SLATE_TZ: America/New_York
+      BILLING_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      - run: npm run db:migrate
+
+      # This database is created and thrown away with the runner, so the
+      # destructive-seed guard is answered explicitly rather than disabled.
+      - run: npm run db:seed
+        env:
+          ALLOW_DESTRUCTIVE_SEED: 1
+
+      - run: npx playwright install --with-deps chromium
+
+      # verify and e2e both drive a real server, so start one and wait for the
+      # health endpoint rather than sleeping a fixed number of seconds.
+      - name: Start the app
+        run: |
+          npm start &
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:3000/api/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "app did not become healthy in 60s" >&2
+          exit 1
+
+      # Settlement maths, tier gating, admin access control.
+      - run: npm run verify
+      # Signup -> subscribe, settle -> public record, first-visit stability.
+      - run: npm run e2e
+
+  deploy:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Trigger webhook deploy
+        env:
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          PAYLOAD='{"ref":"refs/heads/main"}'
+          SIG="sha256=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')"
+          curl -fsSL -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: $SIG" \
+            -d "$PAYLOAD" \
+            https://nemanjas.dev/hooks/oobeebets

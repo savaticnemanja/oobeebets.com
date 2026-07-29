@@ -1,0 +1,60 @@
+name: oobeebets
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oobee}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oobee}
+      POSTGRES_DB: ${POSTGRES_DB:-oobeebets}
+      # Deterministic collation regardless of host locale — otherwise index
+      # ordering can differ between a dev machine and production.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oobee} -d ${POSTGRES_DB:-oobeebets}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-oobee}:${POSTGRES_PASSWORD:-oobee}@db:5432/${POSTGRES_DB:-oobeebets}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_SLATE_TZ: ${NEXT_PUBLIC_SLATE_TZ:-America/New_York}
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-mock}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      RUN_MIGRATIONS: "1"
+      # Stripe — unused while BILLING_PROVIDER=mock.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_BASE: ${STRIPE_PRICE_BASE:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ELITE: ${STRIPE_PRICE_ELITE:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    # Horizontal scaling: `docker compose up --scale app=3` behind a proxy.
+    # Nothing is held in process memory — sessions, rate limits and settings all
+    # live in Postgres — so replicas are interchangeable.
+
+volumes:
+  pgdata:
