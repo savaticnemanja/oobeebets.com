@@ -4,10 +4,15 @@ import { cn } from "@/lib/utils";
 /**
  * Wide tables must scroll inside their own container so the page body never
  * scrolls horizontally on mobile.
+ *
+ * `overscroll-x-contain` stops the swipe from chaining once the table hits its
+ * end: without it, carrying on past the last column hands the gesture to the
+ * browser, which reads it as a back-navigation and takes the page away
+ * mid-scroll.
  */
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto overscroll-x-contain">
       <table
         className={cn("w-full min-w-[40rem] caption-bottom text-sm", className)}
         {...props}

@@ -19,9 +19,12 @@ export function AdminNav({
     // overlap the header's border) made the strip vertically scrollable and
     // painted a scrollbar. The padding swallows that pixel; the negative margin
     // takes it back off the header, so the underline still lands on the border.
+    //
+    // `overscroll-x-contain` keeps a swipe past the last tab from chaining to
+    // the browser, which would read it as a back-navigation.
     <nav
       aria-label="Admin sections"
-      className="mx-auto -mb-px max-w-7xl overflow-x-auto px-4 pb-px sm:px-6"
+      className="mx-auto -mb-px max-w-7xl overflow-x-auto overscroll-x-contain px-4 pb-px sm:px-6"
     >
       <ul className="flex items-center gap-1">
         {items.map((item) => {

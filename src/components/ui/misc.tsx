@@ -51,6 +51,9 @@ function AlertDialogContent({
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2",
           "card-hairline bg-surface-2 p-6 shadow-2xl",
+          // Matches Dialog: the page behind is scroll-locked, so anything
+          // taller than the viewport is unreachable without its own scroller.
+          "max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className,
         )}

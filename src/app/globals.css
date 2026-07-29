@@ -146,6 +146,16 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    /* Everything the browser scrolls into view — the skip link's #main, a
+       field that just took focus, a find-in-page hit — has to clear the
+       sticky header, or it lands underneath it. That header is the 3.5rem
+       row plus whatever the status bar takes, and the last rem keeps the
+       target off the hairline rather than flush against it.
+
+       Set on the scroller rather than as `scroll-margin-top` on the targets:
+       this way it covers scrolls to elements that were never anchor targets
+       and never needed an id. */
+    scroll-padding-top: calc(3.5rem + var(--spacing-safe-top) + 1rem);
   }
 
   body {
@@ -154,8 +164,13 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    /* Keeps the page from shifting when a Radix modal locks scroll. */
-    overflow-x: hidden;
+    /* Keeps the page from shifting when a Radix modal locks scroll.
+       `clip` rather than `hidden`: both hide the overflow, but `hidden` makes
+       the body a scroll container, and once it is one the root scroller — the
+       thing `scroll-behavior` and `scroll-padding-top` above are set on — can
+       stop being the element that actually scrolls. `clip` hides the same
+       overflow without ever creating that second scroll container. */
+    overflow-x: clip;
   }
 
   /* Numbers are tabular everywhere so odds/units/percentages align in columns. */

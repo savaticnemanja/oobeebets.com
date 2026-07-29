@@ -27,6 +27,13 @@ function DialogContent({
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2",
           "card-hairline bg-surface-2 p-6 shadow-2xl",
+          // A dialog taller than the viewport used to run off both ends with
+          // nothing to scroll — the page behind it is locked, so the overflow
+          // was simply unreachable. `dvh` rather than `vh` so the mobile URL
+          // bar collapsing does not leave the bottom cut off, and
+          // `overscroll-contain` keeps a flick past the end of the dialog from
+          // chaining out to whatever is behind it.
+          "max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className,
