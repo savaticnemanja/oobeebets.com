@@ -40,7 +40,9 @@ export function MobileNav({
       >
         <Menu className="size-4" aria-hidden="true" />
       </DialogTrigger>
-      <DialogContent className="top-0 max-w-full translate-y-0 rounded-b-2xl rounded-t-none pt-14">
+      {/* Drops from y=0, so it clears the header (3.5rem) *and* the status bar
+          it is now sitting under. */}
+      <DialogContent className="top-0 max-w-full translate-y-0 rounded-b-2xl rounded-t-none pt-[calc(3.5rem+var(--spacing-safe-top))]">
         <DialogTitle className="sr-only">Navigation</DialogTitle>
         <nav aria-label="Mobile" className="flex flex-col">
           {links.map((l) => (

@@ -9,8 +9,11 @@ import { MobileNav } from "@/components/mobile-nav";
 export async function SiteHeader() {
   const auth = await getAuth();
 
+  // The safe-area insets sit on the <header>, not on the row inside it, so the
+  // blurred black bar extends up under the status bar and out under the island
+  // rather than leaving a transparent strip above itself.
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-black/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border bg-black/70 backdrop-blur-xl pt-safe-top pl-safe-left pr-safe-right">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-8">
           <Logo />
