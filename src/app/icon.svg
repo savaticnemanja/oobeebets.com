@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- The brand mark from components/brand/logo.tsx, scaled 24 -> 32 and given
+       the black field the product is always designed on. Proportions match the
+       PWA icons in public/icons so the tab, the home screen and the install
+       prompt all show the same thing. -->
+  <rect width="32" height="32" fill="#000000" />
+  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#22d3ee" stroke-width="3.65" />
+</svg>
