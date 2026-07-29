@@ -137,12 +137,17 @@ export default async function PricingPage() {
             </h2>
           </Reveal>
           <dl className="mt-8 space-y-6">
+            {/* Reveal renders each group's own <div>; a second wrapper inside
+                it put the dt/dd two levels below the <dl>, which is one more
+                than a definition list allows. */}
             {FAQ.map((f, i) => (
-              <Reveal key={f.q} delay={i * 0.04}>
-                <div className="border-b border-border pb-6 last:border-0">
-                  <dt className="font-medium text-fg">{f.q}</dt>
-                  <dd className="mt-2 text-sm leading-relaxed text-fg-muted">{f.a}</dd>
-                </div>
+              <Reveal
+                key={f.q}
+                delay={i * 0.04}
+                className="border-b border-border pb-6 last:border-0"
+              >
+                <dt className="font-medium text-fg">{f.q}</dt>
+                <dd className="mt-2 text-sm leading-relaxed text-fg-muted">{f.a}</dd>
               </Reveal>
             ))}
           </dl>

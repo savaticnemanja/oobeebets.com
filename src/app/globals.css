@@ -40,14 +40,25 @@
   --color-hit: #22c55e;
   --color-hit-dim: rgba(34, 197, 94, 0.14);
   --color-miss: #ef4444;
-  --color-miss-dim: rgba(239, 68, 68, 0.14);
+  /* 0.14 like its siblings put the miss badge at 4.62:1 — passing, but with no
+     room, and any ancestor mid-fade drops it under. The other dim fills sit at
+     7:1 or better because their foregrounds are lighter. */
+  --color-miss-dim: rgba(239, 68, 68, 0.08);
   --color-pending: #eab308;
   --color-pending-dim: rgba(234, 179, 8, 0.14);
-  --color-void: #6b7280;
+  /* Was #6b7280 — 4.34:1 on black, 3.83:1 on surface-2 where the void badge
+     actually renders. */
+  --color-void: #7b8290;
 
+  /* Text tones. Every one of these has to clear 4.5:1 on all four backgrounds
+     it can land on — black, surface, surface-2, and the brightest frame of the
+     aurora — because none of it is large text. fg-subtle was #5b6462, which
+     measured 3.44:1 on black and failed at every size it was used; it accounts
+     for the bulk of the small print, so it was also the single biggest source
+     of contrast failures in the app. */
   --color-fg: #e8ecea;
   --color-fg-muted: #8b9694;
-  --color-fg-subtle: #5b6462;
+  --color-fg-subtle: #788481;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
@@ -152,6 +163,19 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
+  }
+
+  /* Nothing in Preflight sets a cursor on buttons, so they fall back to the
+     UA's arrow and only the handful of components that opted into
+     `cursor-pointer` ever showed a hand. Do it once here rather than per
+     component: a rule in the base layer reaches Radix triggers and one-off
+     <button> elements too, and the UI kit's `disabled:cursor-not-allowed`
+     still wins over it, because utilities outrank base. */
+  button:not(:disabled),
+  summary,
+  [role="button"]:not([aria-disabled="true"]),
+  input:where([type="button"], [type="reset"], [type="submit"], [type="checkbox"], [type="radio"]):not(:disabled) {
+    cursor: pointer;
   }
 
   /* A single visible focus treatment, brand cyan, used by every interactive

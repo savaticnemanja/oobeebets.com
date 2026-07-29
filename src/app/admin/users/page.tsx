@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { subscriptions, users } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { UserTable } from "@/components/admin/user-table";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Users" };
 
 export const dynamic = "force-dynamic";
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
@@ -9,6 +10,18 @@ import { logoutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * robots.txt disallows /admin, but that only asks crawlers not to fetch it — a
+ * URL linked from anywhere else can still be indexed on the strength of the
+ * link alone. These pages inherited `index, follow` from the root, so say it
+ * explicitly. The title also stops all five admin routes reporting themselves
+ * as the marketing homepage.
+ */
+export const metadata: Metadata = {
+  title: { default: "Admin", template: "%s · Admin" },
+  robots: { index: false, follow: false, nocache: true },
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const auth = await getAuth();

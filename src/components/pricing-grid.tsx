@@ -12,6 +12,9 @@ import { cn, formatMoney } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/** A badge pinned to the top edge of a card, overlapping its border. */
+const EDGE_BADGE = "absolute -top-2.5 left-6 bg-surface bg-linear-to-b";
+
 export function PricingGrid({
   pricing,
   seatsLeft,
@@ -60,19 +63,35 @@ export function PricingGrid({
                 isCurrent && "border-hit/40",
               )}
             >
+              {/* Both badges straddle the card's top border, so they need an
+                  opaque fill or the border draws straight through them. The
+                  variants' own fills are translucent — right for a badge
+                  sitting inside a card, wrong for one lifted onto its edge.
+                  `bg-surface` replaces that fill (tailwind-merge keeps the
+                  later background-color) and the flat gradient re-applies the
+                  variant's tint on top of it, so the colour is unchanged and
+                  only what shows through is. */}
               {featured && !isCurrent && (
-                <Badge variant="brand" className="absolute -top-2.5 left-6">
+                <Badge
+                  variant="brand"
+                  className={cn(EDGE_BADGE, "from-brand/10 to-brand/10")}
+                >
                   <Sparkles className="size-3" aria-hidden="true" />
                   Most popular
                 </Badge>
               )}
               {isCurrent && (
-                <Badge variant="hit" className="absolute -top-2.5 left-6">
+                <Badge
+                  variant="hit"
+                  className={cn(EDGE_BADGE, "from-hit-dim to-hit-dim")}
+                >
                   Your plan
                 </Badge>
               )}
 
-              <h3 className="text-lg font-semibold tracking-tight">{tier.name}</h3>
+              {/* h2, not h3: each plan is a section directly under the page's
+                  h1, and an h3 here skipped a level. */}
+              <h2 className="text-lg font-semibold tracking-tight">{tier.name}</h2>
               <p className="mt-1 text-sm text-fg-muted">{tier.tagline}</p>
 
               <p className="mt-5 flex items-baseline gap-1.5">
@@ -150,7 +169,7 @@ function WaitlistPanel() {
 
   return (
     <div className="card-hairline mx-auto max-w-md p-6 text-center">
-      <h3 className="text-lg font-semibold tracking-tight">The room is full</h3>
+      <h2 className="text-lg font-semibold tracking-tight">The room is full</h2>
       <p className="mt-2 text-sm text-fg-muted">
         We cap membership on purpose. Leave your email and you get first refusal when
         a seat opens.

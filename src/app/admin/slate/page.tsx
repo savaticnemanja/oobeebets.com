@@ -5,6 +5,9 @@ import { PickComposer } from "@/components/admin/pick-composer";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Publish slate" };
 
 export const dynamic = "force-dynamic";
 

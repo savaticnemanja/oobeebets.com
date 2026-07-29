@@ -3,6 +3,9 @@ import { db } from "@/db";
 import { picks } from "@/db/schema";
 import { SettleList } from "@/components/admin/settle-list";
 import { Badge } from "@/components/ui/badge";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Settle" };
 
 export const dynamic = "force-dynamic";
 

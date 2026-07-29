@@ -54,11 +54,20 @@ export function SettleList({
 
   return (
     <>
-      <div className={cn("space-y-2", muted && "opacity-70")}>
+      {/* `muted` used to be opacity-70 on this wrapper, which fades the text and
+          the card under it together: every foreground in the group landed
+          between 2.9:1 and 4.1:1, and it would have taken 0.95 to clear 4.5 —
+          by which point there is no visible de-emphasis left. Recede the card
+          chrome instead and leave the text alone. The group is already
+          announced by its own heading; this is only a visual echo of that. */}
+      <div className="space-y-2">
         {picks.map((p) => {
           const profit = pickProfit(p);
           return (
-            <div key={p.id} className="card-hairline p-3">
+            <div
+              key={p.id}
+              className={cn("card-hairline p-3", muted && "bg-transparent border-border/60")}
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -11,6 +11,9 @@ import { getSeatUsage } from "@/lib/settings";
 import { getTrackRecord } from "@/lib/stats";
 import { slateDateString, formatSlateDate } from "@/lib/slate-date";
 import { formatUnits } from "@/lib/utils";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Overview" };
 
 export const dynamic = "force-dynamic";
 

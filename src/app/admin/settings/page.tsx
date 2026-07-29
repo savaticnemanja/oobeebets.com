@@ -1,6 +1,9 @@
 import { getSeatUsage, getSettings } from "@/lib/settings";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { StatTile } from "@/components/stat-tile";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Settings" };
 
 export const dynamic = "force-dynamic";
 

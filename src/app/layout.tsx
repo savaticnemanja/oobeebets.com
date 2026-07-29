@@ -27,7 +27,10 @@ export const metadata: Metadata = {
   authors: [{ name: SITE.name, url: SITE.url }],
   creator: SITE.name,
   publisher: SITE.name,
-  alternates: { canonical: "/" },
+  // No canonical here. Metadata is inherited, so a root canonical is not a
+  // default — it is an assertion every page without its own repeats verbatim,
+  // and nine of them were declaring themselves to be the homepage. Each public
+  // route sets its own; the home page's lives in (site)/page.tsx.
   openGraph: {
     type: "website",
     siteName: SITE.name,

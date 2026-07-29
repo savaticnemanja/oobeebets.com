@@ -35,8 +35,15 @@ export function StatTile({
         )}
       >
         {value}
+        {/* Inside the <dd>, not beside it. A <div> inside a <dl> may hold
+            nothing but one term/definition group, so a sibling <p> here made
+            every stat grid in the app an invalid definition list. */}
+        {sub && (
+          <span className="mt-1 block font-sans text-xs font-normal tracking-normal text-fg-muted">
+            {sub}
+          </span>
+        )}
       </dd>
-      {sub && <p className="mt-1 text-xs text-fg-muted">{sub}</p>}
     </div>
   );
 }
@@ -72,28 +79,26 @@ export function WindowTile({ stats }: { stats: WindowStats }) {
 export function WinRateTile({ stats }: { stats: WindowStats }) {
   const rateable = stats.wins + stats.losses;
   return (
+    // dt/dd rather than <p>, because this tile sits in the same <dl> as the
+    // StatTiles beside it and a definition list may not hold loose paragraphs.
     <div className="card-hairline p-4">
-      <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
+      <dt className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
         Win rate
-      </p>
+      </dt>
       {stats.sampleTooSmall ? (
-        <>
-          <p className="num mt-1.5 text-2xl font-semibold tracking-tight text-fg-muted">
-            {stats.wins}/{rateable}
-          </p>
-          <p className="mt-1 text-xs uppercase tracking-wider text-pending">
+        <dd className="num mt-1.5 text-2xl font-semibold tracking-tight text-fg-muted">
+          {stats.wins}/{rateable}
+          <span className="mt-1 block font-sans text-xs font-normal uppercase tracking-wider text-pending">
             Too few to be a rate
-          </p>
-        </>
+          </span>
+        </dd>
       ) : (
-        <>
-          <p className="num mt-1.5 text-2xl font-semibold tracking-tight text-brand">
-            {((stats.winRate ?? 0) * 100).toFixed(1)}%
-          </p>
-          <p className="mt-1 text-xs text-fg-muted">
+        <dd className="num mt-1.5 text-2xl font-semibold tracking-tight text-brand">
+          {((stats.winRate ?? 0) * 100).toFixed(1)}%
+          <span className="mt-1 block font-sans text-xs font-normal tracking-normal text-fg-muted">
             {stats.wins}&ndash;{stats.losses} over {rateable} picks
-          </p>
-        </>
+          </span>
+        </dd>
       )}
     </div>
   );
