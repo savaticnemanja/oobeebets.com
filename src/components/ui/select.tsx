@@ -17,7 +17,10 @@ function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-10 w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg",
+        // A Radix trigger is a button, so it never triggers the iOS zoom that
+        // `touch:text-base` exists for — it matches so a select and the input
+        // beside it are the same size on a phone.
+        "flex h-10 w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm touch:text-base text-fg",
         "transition-colors duration-200 hover:border-border-strong",
         "data-[state=open]:border-brand/60",
         "disabled:cursor-not-allowed disabled:opacity-50",

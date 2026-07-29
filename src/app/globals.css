@@ -2,6 +2,17 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Touch devices, by primary pointer rather than by width — a phone in
+   landscape is wider than `md` but still a phone.
+
+   iOS Safari zooms the whole viewport when a focused field's text is under
+   16px, and it does not zoom back out afterwards, so the rest of the form is
+   filled in at whatever scale the first tap produced. Form controls use this
+   to render at 16px on touch, which removes the trigger. The other way to stop
+   it is locking maximum-scale in the viewport, which takes pinch-zoom away
+   from everyone permanently — see the note on `viewport` in app/layout.tsx. */
+@custom-variant touch (@media (pointer: coarse));
+
 /* ---------------------------------------------------------------------------
    oobee bets design tokens
    Brand rules from the product brief, non-negotiable:

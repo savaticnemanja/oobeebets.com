@@ -24,7 +24,10 @@ export function SlateDatePicker({
       value={dates.includes(current) ? current : undefined}
       onValueChange={(v) => router.push(`/picks?date=${v}`)}
     >
-      <SelectTrigger className="h-8 w-40 text-xs" aria-label="Choose a date">
+      {/* Deliberately compact, and a Radix trigger is a button, so it is not
+          one of the controls iOS zooms for — opt back out of touch:text-base
+          or 16px text would not fit the 2rem height. */}
+      <SelectTrigger className="h-8 w-40 text-xs touch:text-xs" aria-label="Choose a date">
         <SelectValue placeholder={formatSlateDate(current)} />
       </SelectTrigger>
       <SelectContent>
