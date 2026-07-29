@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTransition } from "react";
 import { LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
@@ -24,6 +25,7 @@ export function UserMenu({
   tier: Tier | null;
 }) {
   const initial = email.charAt(0).toUpperCase();
+  const [signingOut, startSignOut] = useTransition();
 
   return (
     <DropdownMenu>
@@ -66,13 +68,19 @@ export function UserMenu({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <form action={logoutAction} className="w-full">
-            <button type="submit" className="flex w-full items-center gap-2 text-left">
-              <LogOut aria-hidden="true" />
-              Sign out
-            </button>
-          </form>
+        {/* Called through onSelect rather than wrapped in a <form>. A form here
+            never submits: selecting a menu item closes the menu, React flushes
+            that unmount synchronously while still inside the click event, and
+            the browser will not submit a form that has left the document by the
+            time it runs the button's default action. Keyboard select was worse
+            still — Radix activates an item with `currentTarget.click()`, which
+            on a <form> does nothing at all. */}
+        <DropdownMenuItem
+          disabled={signingOut}
+          onSelect={() => startSignOut(async () => { await logoutAction(); })}
+        >
+          <LogOut aria-hidden="true" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
