@@ -77,9 +77,22 @@ export function SiteFooter() {
             Never stake money you cannot afford to lose. If gambling stops being fun,
             stop &mdash; and use the help links above.
           </p>
-          <p className="mt-4 text-xs text-fg-subtle">
-            &copy; {new Date().getFullYear()} {SITE.name}. All rights reserved.
-          </p>
+          <div className="mt-4 flex flex-col gap-2 text-xs text-fg-subtle sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              &copy; {new Date().getFullYear()} {SITE.name}. All rights reserved.
+            </p>
+            <p>
+              Developed by{" "}
+              <a
+                href="https://nemanjas.dev"
+                className="text-fg-muted hover:text-fg"
+                rel="noopener noreferrer external"
+                target="_blank"
+              >
+                nemanjas.dev
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </footer>
