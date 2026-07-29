@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+
 /** Site-wide constants used by metadata, JSON-LD, sitemap and absolute URLs. */
 
 export const SITE = {
@@ -8,7 +10,9 @@ export const SITE = {
   description:
     "Daily sports betting picks with a public, unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
   twitter: "@oobeebets",
-  locale: "en_US",
+  // Locale lives in lib/i18n/config.ts — it is one value with several
+  // representations (lang, og, Intl), and splitting it across two files is how
+  // it drifted into en / en_US / en-GB in the first place.
   themeColor: "#000000",
   brandColor: "#22d3ee",
 } as const;
@@ -18,15 +22,15 @@ export function appUrl(path = "/"): string {
 }
 
 export const NAV_PUBLIC = [
-  { href: "/track-record", label: "Track record" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/about", label: "About" },
+  { href: "/track-record", label: t().nav.trackRecord },
+  { href: "/pricing", label: t().nav.pricing },
+  { href: "/about", label: t().nav.about },
 ] as const;
 
 export const NAV_APP = [
-  { href: "/picks", label: "Picks" },
-  { href: "/track-record", label: "Track record" },
-  { href: "/account", label: "Account" },
+  { href: "/picks", label: t().nav.picks },
+  { href: "/track-record", label: t().nav.trackRecord },
+  { href: "/account", label: t().nav.account },
 ] as const;
 
 export const NAV_ADMIN = [

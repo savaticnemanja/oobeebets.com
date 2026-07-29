@@ -1,7 +1,8 @@
-import { cn, formatUnits } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/ui/motion";
 import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
 import type { WindowStats } from "@/lib/stats";
+import { formatUnits } from "@/lib/i18n/format";
 
 /**
  * A single number with its label. `tone` colours the value by result, and the

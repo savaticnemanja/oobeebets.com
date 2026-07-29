@@ -14,9 +14,9 @@ import { Reveal, CountUp } from "@/components/ui/motion";
 import { getSettledHistory, getTrackRecord } from "@/lib/stats";
 import { pickProfit } from "@/lib/settlement";
 import { STATUS_LABEL, STATUS_VARIANT, SPORT_EMOJI } from "@/components/pick-card";
-import { cn, formatOdds, formatUnits, formatPct } from "@/lib/utils";
-import { formatSlateDate } from "@/lib/slate-date";
+import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/site";
+import { formatOdds, formatPct, formatSlateDate, formatUnits } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Track record",

@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { subscribeAction, joinWaitlistAction } from "@/app/actions/billing";
 import { TIERS, TIER_ORDER, TRIAL_DAYS } from "@/lib/tiers";
 import type { Tier } from "@/db/schema";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMoney } from "@/lib/i18n/format";
 
 /** A badge pinned to the top edge of a card, overlapping its border. */
 const EDGE_BADGE = "absolute -top-2.5 left-6 bg-surface bg-linear-to-b";

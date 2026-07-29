@@ -11,6 +11,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { NAV_PUBLIC } from "@/lib/site";
+import { t } from "@/lib/i18n";
 
 export function MobileNav({
   isAuthed,
@@ -25,17 +26,17 @@ export function MobileNav({
     ...NAV_PUBLIC,
     ...(isAuthed
       ? ([
-          { href: "/picks", label: "Picks" },
-          { href: "/account", label: "Account" },
+          { href: "/picks", label: t().nav.picks },
+          { href: "/account", label: t().nav.account },
         ] as const)
-      : ([{ href: "/login", label: "Sign in" }] as const)),
-    ...(isAdmin ? ([{ href: "/admin", label: "Admin" }] as const) : []),
+      : ([{ href: "/login", label: t().nav.signIn }] as const)),
+    ...(isAdmin ? ([{ href: "/admin", label: t().nav.admin }] as const) : []),
   ];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        aria-label="Open menu"
+        aria-label={t().nav.openMenu}
         className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-fg-muted transition-colors hover:text-fg md:hidden"
       >
         <Menu className="size-4" aria-hidden="true" />
@@ -44,7 +45,7 @@ export function MobileNav({
           it is now sitting under. */}
       <DialogContent className="top-0 max-w-full translate-y-0 rounded-b-2xl rounded-t-none pt-[calc(3.5rem+var(--spacing-safe-top))]">
         <DialogTitle className="sr-only">Navigation</DialogTitle>
-        <nav aria-label="Mobile" className="flex flex-col">
+        <nav aria-label={t().nav.mobileNav} className="flex flex-col">
           {links.map((l) => (
             <DialogClose asChild key={l.href}>
               <Link

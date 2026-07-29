@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSeatUsage } from "@/lib/settings";
 import { getTrackRecord } from "@/lib/stats";
-import { slateDateString, formatSlateDate } from "@/lib/slate-date";
-import { formatUnits } from "@/lib/utils";
+import { slateDateString } from "@/lib/slate-date";
 import type { Metadata } from "next";
+import { formatDateTime, formatSlateDate, formatUnits } from "@/lib/i18n/format";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -181,12 +181,7 @@ export default async function AdminOverviewPage() {
                       dateTime={a.createdAt.toISOString()}
                       className="num shrink-0 text-fg-subtle"
                     >
-                      {a.createdAt.toLocaleString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatDateTime(a.createdAt)}
                     </time>
                   </li>
                 ))}

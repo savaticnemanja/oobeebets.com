@@ -2,9 +2,11 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
+import { getLocale, localeConfig } from "@/lib/i18n/config";
 import { Aurora } from "@/components/aurora";
 import { ServiceWorker } from "@/components/pwa/service-worker";
 import "./globals.css";
+import { t } from "@/lib/i18n";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
@@ -37,7 +39,7 @@ export const metadata: Metadata = {
     title: `${SITE.name} — ${SITE.tagline}`,
     description: SITE.description,
     url: SITE.url,
-    locale: SITE.locale,
+    locale: localeConfig(getLocale()).ogLocale,
   },
   twitter: {
     card: "summary_large_image",
@@ -75,8 +77,17 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // `dir` was never set at all, and `lang` was the string "en" in the markup
+  // while og:locale said en_US and the formatters said en-GB.
+  const locale = localeConfig(getLocale());
+
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html
+      lang={locale.tag}
+      dir={locale.dir}
+      className="dark"
+      suppressHydrationWarning
+    >
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Aurora />
         <div className="grid-lines" aria-hidden="true" />
@@ -86,7 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-[calc(1rem+var(--spacing-safe-top))] focus:z-100 focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-black"
         >
-          Skip to content
+          {t().nav.skipToContent}
         </a>
 
         {children}

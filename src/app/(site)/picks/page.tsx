@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { SlateDatePicker } from "@/components/slate-date-picker";
 import { TIERS } from "@/lib/tiers";
-import { formatSlateDate, isValidSlateDate, slateDateString } from "@/lib/slate-date";
+import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
+import { formatSlateDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Today's picks",

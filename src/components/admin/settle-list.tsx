@@ -18,10 +18,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { settlePickAction, unsettlePickAction } from "@/app/actions/admin";
 import type { Pick } from "@/db/schema";
-import { cn, formatOdds, formatUnits } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
-import { formatSlateDate } from "@/lib/slate-date";
+import { formatDateTime, formatOdds, formatSlateDate, formatUnits } from "@/lib/i18n/format";
 
 export function SettleList({
   picks,
@@ -93,13 +93,7 @@ export function SettleList({
                   </div>
                   <p className="mt-0.5 truncate text-xs text-fg-muted">{p.event}</p>
                   <p className="num mt-0.5 text-[0.6875rem] text-fg-subtle">
-                    {formatSlateDate(p.slateDate)} ·{" "}
-                    {p.startsAt.toLocaleString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatSlateDate(p.slateDate)} · {formatDateTime(p.startsAt)}
                     {p.finalScore && ` · Final ${p.finalScore}`}
                   </p>
                 </div>

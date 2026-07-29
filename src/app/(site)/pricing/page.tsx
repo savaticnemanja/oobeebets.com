@@ -6,7 +6,7 @@ import { getSeatUsage, getSettings } from "@/lib/settings";
 import { getAuth } from "@/lib/auth";
 import { SITE } from "@/lib/site";
 import { TIERS, TRIAL_DAYS } from "@/lib/tiers";
-import { formatSlateDate } from "@/lib/slate-date";
+import { formatSlateDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Pricing",

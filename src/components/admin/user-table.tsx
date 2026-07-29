@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { grantSubscriptionAction, setUserRoleAction } from "@/app/actions/admin";
 import type { Role, SubscriptionStatus, Tier } from "@/db/schema";
+import { formatDate } from "@/lib/i18n/format";
 
 interface Row {
   id: string;
@@ -112,11 +113,7 @@ export function UserTable({
                   </TableCell>
 
                   <TableCell className="num text-xs text-fg-subtle">
-                    {u.createdAt.toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "2-digit",
-                    })}
+                    {formatDate(u.createdAt, { year: "2-digit" })}
                   </TableCell>
 
                   <TableCell>

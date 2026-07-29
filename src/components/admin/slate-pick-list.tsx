@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { deletePickAction } from "@/app/actions/admin";
 import type { Pick } from "@/db/schema";
 import { TIERS, tierForRank } from "@/lib/tiers";
-import { cn, formatOdds } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
+import { formatDateTime, formatOdds } from "@/lib/i18n/format";
 
 const TIER_TINT: Record<string, string> = {
   base: "border-l-hit",
@@ -72,12 +73,7 @@ export function SlatePickList({
                 {Number(p.units).toFixed(2)}u
                 {p.confidence !== null && ` · ${p.confidence}% conf`}
                 {" · "}
-                {p.startsAt.toLocaleString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {formatDateTime(p.startsAt)}
               </p>
             </div>
 

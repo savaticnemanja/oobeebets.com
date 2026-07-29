@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { logoutAction } from "@/app/actions/auth";
 import type { Tier } from "@/db/schema";
+import { t } from "@/lib/i18n";
 
 export function UserMenu({
   email,
@@ -30,7 +31,7 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Account menu"
+        aria-label={t().nav.accountMenu}
         className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-2 text-sm font-semibold text-brand transition-colors hover:border-brand/40"
       >
         {initial}
@@ -42,7 +43,7 @@ export function UserMenu({
             {tier ? (
               <Badge variant="brand">{tier}</Badge>
             ) : (
-              <Badge variant="outline">No plan</Badge>
+              <Badge variant="outline">{t().account.noPlan}</Badge>
             )}
           </span>
         </DropdownMenuLabel>
@@ -50,20 +51,20 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/picks">
             <UserIcon aria-hidden="true" />
-            Today&apos;s picks
+            {t().account.todaysPicks}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/account">
             <Settings aria-hidden="true" />
-            Account &amp; billing
+            {t().account.billing}
           </Link>
         </DropdownMenuItem>
         {isAdmin && (
           <DropdownMenuItem asChild>
             <Link href="/admin">
               <Shield aria-hidden="true" />
-              Admin panel
+              {t().account.adminPanel}
             </Link>
           </DropdownMenuItem>
         )}
@@ -80,7 +81,7 @@ export function UserMenu({
           onSelect={() => startSignOut(async () => { await logoutAction(); })}
         >
           <LogOut aria-hidden="true" />
-          Sign out
+          {t().nav.signOut}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

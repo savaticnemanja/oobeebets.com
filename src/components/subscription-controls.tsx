@@ -21,9 +21,9 @@ import {
 } from "@/app/actions/billing";
 import { TIERS, TIER_ORDER } from "@/lib/tiers";
 import type { Tier } from "@/db/schema";
-import { formatMoney } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/i18n/format";
 
 export function SubscriptionControls({
   currentTier,

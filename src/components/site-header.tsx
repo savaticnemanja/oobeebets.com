@@ -5,6 +5,7 @@ import { getAuth } from "@/lib/auth";
 import { NAV_PUBLIC } from "@/lib/site";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
+import { t } from "@/lib/i18n";
 
 export async function SiteHeader() {
   const auth = await getAuth();
@@ -17,7 +18,7 @@ export async function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-8">
           <Logo />
-          <nav aria-label="Main" className="hidden items-center gap-6 md:flex">
+          <nav aria-label={t().nav.mainNav} className="hidden items-center gap-6 md:flex">
             {NAV_PUBLIC.map((item) => (
               <Link
                 key={item.href}
@@ -34,7 +35,7 @@ export async function SiteHeader() {
           {auth ? (
             <>
               <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-                <Link href="/picks">Picks</Link>
+                <Link href="/picks">{t().nav.picks}</Link>
               </Button>
               <UserMenu
                 email={auth.user.email}
@@ -45,10 +46,10 @@ export async function SiteHeader() {
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/login">Sign in</Link>
+                <Link href="/login">{t().nav.signIn}</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/pricing">Get picks</Link>
+                <Link href="/pricing">{t().nav.getPicks}</Link>
               </Button>
             </>
           )}

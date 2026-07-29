@@ -61,12 +61,6 @@ export function isValidSlateDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));
 }
 
-/** "Mon 29 Jul" — compact, unambiguous, locale-stable. */
-export function formatSlateDate(dateStr: string): string {
-  return new Date(`${dateStr}T12:00:00Z`).toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
+// formatSlateDate lives in lib/i18n/format.ts. This module is the slate-day
+// calendar — which UTC instant a betting day starts at — and that is fixed by
+// the product, not by the reader's locale.

@@ -4,19 +4,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { LockedPick, UnlockedPick, ViewPick } from "@/lib/gating";
 import { isLocked } from "@/lib/gating";
-import { cn, formatOdds, formatUnits } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { TIERS } from "@/lib/tiers";
 import type { PickStatus, Sport } from "@/db/schema";
+import { formatKickoff, formatOdds, formatUnits, timeZoneLabel } from "@/lib/i18n/format";
+import { t } from "@/lib/i18n";
 
-const SPORT_LABEL: Record<Sport, string> = {
-  soccer: "Soccer",
-  basketball: "Basketball",
-  baseball: "Baseball",
-  tennis: "Tennis",
-  hockey: "Hockey",
-  football: "Football",
-};
+// Words come from the catalogue; the emoji below does not, because a picture
+// of a ball is the same picture in every language.
+const SPORT_LABEL: Record<Sport, string> = t().sport;
 
 const SPORT_EMOJI: Record<Sport, string> = {
   soccer: "⚽",
@@ -36,25 +33,12 @@ const STATUS_VARIANT: Record<PickStatus, "hit" | "miss" | "pending" | "default" 
 };
 
 /** Result is never colour-only — the word ships with it. */
-const STATUS_LABEL: Record<PickStatus, string> = {
-  won: "Won",
-  lost: "Lost",
-  pending: "Pending",
-  push: "Push",
-  void: "Void",
-};
+const STATUS_LABEL: Record<PickStatus, string> = t().status;
 
 function KickoffTime({ at }: { at: Date }) {
   return (
     <time dateTime={at.toISOString()} className="num text-xs text-fg-subtle">
-      {at.toLocaleString("en-GB", {
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: "UTC",
-      })}{" "}
-      UTC
+      {formatKickoff(at)} {timeZoneLabel()}
     </time>
   );
 }

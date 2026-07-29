@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { StatTile } from "@/components/stat-tile";
 import { SubscriptionControls } from "@/components/subscription-controls";
 import { TIERS } from "@/lib/tiers";
-import { formatMoney } from "@/lib/utils";
+import { formatDate, formatMoney } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -96,11 +96,7 @@ export default async function AccountPage() {
                   <>
                     Cancelled — access ends{" "}
                     <span className="num text-fg">
-                      {sub.currentPeriodEnd.toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {formatDate(sub.currentPeriodEnd)}
                     </span>
                     .
                   </>
@@ -108,11 +104,7 @@ export default async function AccountPage() {
                   <>
                     Trial converts to {formatMoney(sub.priceCents)} on{" "}
                     <span className="num text-fg">
-                      {sub.currentPeriodEnd.toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {formatDate(sub.currentPeriodEnd)}
                     </span>
                     .
                   </>
@@ -120,11 +112,7 @@ export default async function AccountPage() {
                   <>
                     Renews{" "}
                     <span className="num text-fg">
-                      {sub.currentPeriodEnd.toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {formatDate(sub.currentPeriodEnd)}
                     </span>
                     .
                   </>

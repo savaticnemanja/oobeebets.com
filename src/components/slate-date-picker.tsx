@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatSlateDate } from "@/lib/slate-date";
+import { formatSlateDate } from "@/lib/i18n/format";
 
 export function SlateDatePicker({
   dates,
