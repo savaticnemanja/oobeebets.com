@@ -23,6 +23,7 @@ import {
   type NewPick,
   type Sport,
 } from "./schema";
+import { addDays, slateDateString } from "../lib/slate-date";
 
 // No default: this script deletes every row it touches. Guessing a connection
 // string is exactly how a seed ends up wiping the wrong database.
@@ -130,11 +131,20 @@ function mulberry32(seed: number) {
 
 const rand = mulberry32(20260729);
 
+/**
+ * Slate dates come from the app's betting-day calendar, never the UTC one.
+ *
+ * A betting day starts at 04:00 in SLATE_TIMEZONE — eight hours behind UTC for
+ * America/New_York — so between 00:00 and 08:00 UTC the UTC calendar date is a
+ * day ahead of the slate the site actually serves. Seeding on UTC dates put the
+ * newest slate one day into the future for that whole window: the demo's "live
+ * board" was yesterday's fully-settled slate, and the verify suite sized its
+ * expectations from a slate the app had never rendered.
+ */
+const TODAY = slateDateString();
+
 function dateStr(daysAgo: number): string {
-  const d = new Date();
-  d.setUTCHours(12, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
+  return addDays(TODAY, -daysAgo);
 }
 
 async function main() {
@@ -211,8 +221,23 @@ async function main() {
     for (let rank = 1; rank <= count; rank++) {
       const g = GAMES[Math.floor(rand() * GAMES.length)];
 
-      const startsAt = new Date(`${date}T12:00:00Z`);
-      startsAt.setUTCHours(16 + Math.floor(rand() * 8), Math.floor(rand() * 4) * 15);
+      const hourRoll = Math.floor(rand() * 8);
+      const minuteRoll = Math.floor(rand() * 4) * 15;
+
+      // Past slates get an evening window on their own date. Today's is
+      // anchored on the current moment instead: a betting day is not a UTC day,
+      // so a fixed 16:00–23:59 UTC window can sit entirely in the past by the
+      // time the slate is served, leaving the "live" board fully settled with
+      // nothing left to bet — or to settle, which is what the e2e suite needs.
+      let startsAt: Date;
+      if (isToday) {
+        startsAt = new Date(
+          Date.now() + (hourRoll - 3) * 3600_000 + minuteRoll * 60_000,
+        );
+      } else {
+        startsAt = new Date(`${date}T12:00:00Z`);
+        startsAt.setUTCHours(16 + hourRoll, minuteRoll);
+      }
 
       // Confidence decays down the board: rank 1 is the best play of the day.
       const confidence = Math.round(82 - (rank / count) * 26 + rand() * 6);
