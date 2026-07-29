@@ -14,9 +14,14 @@ export function AdminNav({
   const pathname = usePathname();
 
   return (
+    // `overflow-x: auto` forces overflow-y from `visible` to `auto`, so the one
+    // pixel the active underline hangs below this box (it is positioned to
+    // overlap the header's border) made the strip vertically scrollable and
+    // painted a scrollbar. The padding swallows that pixel; the negative margin
+    // takes it back off the header, so the underline still lands on the border.
     <nav
       aria-label="Admin sections"
-      className="mx-auto max-w-7xl overflow-x-auto px-4 sm:px-6"
+      className="mx-auto -mb-px max-w-7xl overflow-x-auto px-4 pb-px sm:px-6"
     >
       <ul className="flex items-center gap-1">
         {items.map((item) => {
