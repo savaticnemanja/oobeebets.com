@@ -14,7 +14,23 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-export const revalidate = 300;
+/**
+ * Rendered per request, because the stats strip below reads the database and a
+ * build has none in reach — CI builds before it migrates, and the image builds
+ * against a placeholder DATABASE_URL that points at nothing. `revalidate` here
+ * would mean prerendered, and prerendered means read at build time.
+ *
+ * This is what the page already did. Until the pre-launch gate landed, every
+ * page under (site) was dynamic because SiteHeader reads the session cookie;
+ * the gate swaps in PrelaunchChrome, which does not, and the two pages that
+ * never called getAuth() themselves — this one and /track-record — silently
+ * became prerenderable and took the build down. Saying it here rather than
+ * relying on a header two levels up is the point.
+ *
+ * Falling back to zeroes the way /sitemap.xml does is not an option: a page
+ * about grading every loss in public must not ship a baked-in 0–0 record.
+ */
+export const dynamic = "force-dynamic";
 
 export default async function AboutPage() {
   const stats = await getHeadlineStats();
