@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ListChecks, ScrollText, ShieldCheck } from "lucide-react";
 import { SubscribeForm } from "@/components/newsletter/subscribe-form";
 import { SITE } from "@/lib/site";
 
@@ -9,6 +8,9 @@ import { SITE } from "@/lib/site";
  * Served at `/` by a rewrite in proxy.ts, which is why the canonical below
  * points at the site root and not at this route's own path — `/soon` is an
  * implementation detail of the gate and must never be the indexed URL.
+ *
+ * Sized to sit inside one viewport: the layout pins the chrome to the screen,
+ * so everything here has to earn its height.
  */
 export const metadata: Metadata = {
   // Absolute, or the root layout's `%s · oobee bets` template appends the brand
@@ -19,34 +21,15 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-const PROMISES = [
-  {
-    icon: ListChecks,
-    title: "Logged before kick-off",
-    body: "Every pick is on the record before the game starts. No retroactive edits.",
-  },
-  {
-    icon: ScrollText,
-    title: "Graded on the final score",
-    body: "Each one is settled against the real result — wins and losses both.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Losses stay up",
-    body: "Nothing gets quietly deleted. The whole ledger is public, permanently.",
-  },
-] as const;
-
 export default function PrelaunchPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-16 pt-12 sm:px-6 sm:pt-20">
+    <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
       {/* Delays are staggered by hand rather than through the motion components:
           this is the one page every visitor loads, and a CSS keyframe already
           in the theme costs nothing to ship. */}
       <div className="animate-rise">
         <div className="flex items-center gap-2">
-          <span className="relative inline-flex size-2" aria-hidden="true">
-            <span className="absolute inline-flex size-full rounded-full bg-brand [animation:var(--animate-pulse-ring)]" />
+          <span className="ripple size-2" aria-hidden="true">
             <span className="relative inline-flex size-2 rounded-full bg-brand" />
           </span>
           <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
@@ -75,21 +58,6 @@ export default function PrelaunchPage() {
       <div className="animate-rise max-w-xl" style={{ animationDelay: "180ms" }}>
         <SubscribeForm />
       </div>
-
-      <ul
-        className="animate-rise mt-14 grid gap-4 sm:grid-cols-3"
-        style={{ animationDelay: "240ms" }}
-      >
-        {PROMISES.map((promise) => (
-          <li key={promise.title} className="card-hairline p-5">
-            <div className="w-fit rounded-lg bg-brand/10 p-2 text-brand">
-              <promise.icon className="size-5" aria-hidden="true" />
-            </div>
-            <h2 className="mt-4 text-sm font-semibold tracking-tight">{promise.title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-fg-muted">{promise.body}</p>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

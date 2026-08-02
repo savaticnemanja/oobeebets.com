@@ -21,15 +21,25 @@ export function UnsubscribeForm({ token }: { token?: string }) {
 
   const errorId = state && !state.ok ? "unsubscribe-error" : undefined;
 
+  // A link that has just failed is a link worth abandoning. Whatever went
+  // wrong — a truncated URL, an id that matches nothing any more — pressing
+  // the same button again repeats it, so the form drops the token and asks for
+  // the address instead, which is the one route that needs nothing from the
+  // email.
+  const useToken = Boolean(token) && !errorId;
+
   return (
-    <form action={formAction} className="mt-6">
-      {token ? (
+    // No top margin: the card is the spacing now that the heading has moved out
+    // to the page.
+    <form action={formAction}>
+      {useToken ? (
         <>
-          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="token" value={token ?? ""} />
+          {/* The page above already says what this does. The one thing worth
+              repeating next to the button is what gets lost with it. */}
           <p className="text-sm leading-relaxed text-fg-muted">
-            You&rsquo;re about to stop receiving emails from {""}
-            <span className="text-fg">oobee bets</span>. That includes the launch
-            notification.
+            This includes the launch announcement &mdash; the one email most people
+            joined for.
           </p>
         </>
       ) : (
@@ -75,19 +85,21 @@ function Unsubscribed() {
   }, []);
 
   return (
-    <div ref={ref} tabIndex={-1} role="status" className="mt-6 focus:outline-none">
-      <MailMinus className="size-6 text-fg-muted" aria-hidden="true" />
+    <div ref={ref} tabIndex={-1} role="status" className="focus:outline-none">
+      <span className="inline-flex rounded-full border border-border bg-surface p-2.5 text-fg-muted">
+        <MailMinus className="size-5" aria-hidden="true" />
+      </span>
 
       <h2 className="mt-4 text-lg font-semibold tracking-tight text-fg">
-        You&rsquo;re unsubscribed.
+        You&rsquo;re unsubscribed
       </h2>
 
-      <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-        That address is off the list. You won&rsquo;t hear from us again &mdash;
-        including when we launch.
+      <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+        That address is off the list, and you won&rsquo;t hear from us again &mdash;
+        including on launch day.
       </p>
 
-      <p className="mt-3 text-sm leading-relaxed text-fg-muted">
+      <p className="mt-4 text-sm leading-relaxed text-fg-muted">
         Changed your mind?{" "}
         <Link href="/" className="text-brand underline-offset-4 hover:underline">
           Sign back up

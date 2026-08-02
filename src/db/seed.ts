@@ -18,7 +18,6 @@ import {
   slates,
   subscriptions,
   users,
-  waitlist,
   type Market,
   type NewPick,
   type Sport,
@@ -73,7 +72,7 @@ requireSeedOptIn(connectionString);
 
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client, {
-  schema: { users, sessions, subscriptions, slates, picks, settings, waitlist, auditLog, rateLimits },
+  schema: { users, sessions, subscriptions, slates, picks, settings, auditLog, rateLimits },
 });
 
 /* --------------------------------------------------------- demo fixtures */
@@ -151,7 +150,6 @@ async function main() {
   console.log("[seed] clearing existing data...");
   await db.delete(auditLog);
   await db.delete(rateLimits);
-  await db.delete(waitlist);
   await db.delete(picks);
   await db.delete(slates);
   await db.delete(subscriptions);

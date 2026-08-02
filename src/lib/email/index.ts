@@ -4,10 +4,13 @@ import { Resend } from "resend";
 /**
  * Resend, created once and only if a key exists.
  *
- * There is deliberately no throw when the key is missing. Sending is always
- * best-effort here: the subscriber row is the thing that matters, and a local
- * dev box or a Resend outage must not be able to turn a successful signup into
- * an error page. Callers get told what happened and decide.
+ * `sendEmail` below still treats a missing key as a skip rather than a throw —
+ * a failed welcome email must not turn a successful signup into an error page.
+ *
+ * The contact book is a different matter. Since it became the mailing list
+ * itself (see lib/newsletter.ts) there is no local copy to fall back on, so
+ * `resendClient` throws when the key is absent instead of quietly doing
+ * nothing: a signup that stores the address nowhere has to fail loudly.
  */
 const apiKey = process.env.RESEND_API_KEY;
 
@@ -17,6 +20,20 @@ function resend(): Resend | null {
   if (!apiKey) return null;
   client ??= new Resend(apiKey);
   return client;
+}
+
+/** The client, for callers that cannot degrade without it. */
+export function resendClient(): Resend {
+  const mailer = resend();
+
+  if (!mailer) {
+    throw new Error(
+      "RESEND_API_KEY is not set. It holds the mailing list, so subscribing " +
+        "cannot work without it — set a key from https://resend.com/api-keys.",
+    );
+  }
+
+  return mailer;
 }
 
 /** `oobee bets <hello@oobeebets.com>` — must be a domain verified in Resend. */

@@ -160,9 +160,17 @@ export interface Email {
   headers: Record<string, string>;
 }
 
-/** The human-facing page, linked from the footer of every message. */
-export function unsubscribeUrlFor(token: string): string {
-  return appUrl(`/unsubscribe?token=${encodeURIComponent(token)}`);
+/**
+ * The human-facing page, linked from the footer of every message.
+ *
+ * The `token` in the URL is the Resend contact id. It used to be a random
+ * secret we minted and stored ourselves; now that Resend holds the list there
+ * is nowhere local to keep such a secret, and the contact id is the identifier
+ * the opt-out actually needs. The query parameter keeps its old name because
+ * that is what the page, the form and the endpoint all read.
+ */
+export function unsubscribeUrlFor(contactId: string): string {
+  return appUrl(`/unsubscribe?token=${encodeURIComponent(contactId)}`);
 }
 
 /**
@@ -170,15 +178,15 @@ export function unsubscribeUrlFor(token: string): string {
  * route that accepts POST — the mail provider submits to it directly, with no
  * browser and no page to render.
  */
-function oneClickUnsubscribeUrl(token: string): string {
-  return appUrl(`/api/unsubscribe?token=${encodeURIComponent(token)}`);
+function oneClickUnsubscribeUrl(contactId: string): string {
+  return appUrl(`/api/unsubscribe?token=${encodeURIComponent(contactId)}`);
 }
 
 /**
  * Sent once, immediately after someone subscribes.
  */
-export function welcomeEmail(unsubscribeToken: string): Email {
-  const unsubscribeUrl = unsubscribeUrlFor(unsubscribeToken);
+export function welcomeEmail(contactId: string): Email {
+  const unsubscribeUrl = unsubscribeUrlFor(contactId);
 
   const body = `
     <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:${c.brand};">Pre-launch</p>
@@ -244,7 +252,7 @@ export function welcomeEmail(unsubscribeToken: string): Email {
     }),
     text,
     headers: {
-      "List-Unsubscribe": `<${oneClickUnsubscribeUrl(unsubscribeToken)}>`,
+      "List-Unsubscribe": `<${oneClickUnsubscribeUrl(contactId)}>`,
       // Tells Gmail/Yahoo the URI above is safe to POST to without a human,
       // which is what turns on the native unsubscribe button beside the
       // sender name. Both are required for bulk mail to those two.
