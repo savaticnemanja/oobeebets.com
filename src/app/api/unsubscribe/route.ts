@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { unsubscribeByToken } from "@/lib/newsletter";
+import { unsubscribeById } from "@/lib/newsletter";
 import { appUrl } from "@/lib/site";
 
 /**
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   if (!token) return new NextResponse("Missing token", { status: 400 });
 
   try {
-    await unsubscribeByToken(token);
+    await unsubscribeById(token);
   } catch (err) {
     console.error("[newsletter] one-click unsubscribe failed:", err);
     return new NextResponse("Unsubscribe failed", { status: 500 });

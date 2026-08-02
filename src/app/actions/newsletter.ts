@@ -2,7 +2,12 @@
 
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "@/lib/auth";
-import { subscribe, unsubscribeByEmail, unsubscribeByToken } from "@/lib/newsletter";
+import {
+  InvalidUnsubscribeLink,
+  subscribe,
+  unsubscribeByEmail,
+  unsubscribeById,
+} from "@/lib/newsletter";
 import { emailSchema, waitlistSchema, type ActionState } from "@/lib/validation";
 
 const SUBSCRIBE_LIMIT = 5;
@@ -15,16 +20,17 @@ export async function subscribeAction(
   formData: FormData,
 ): Promise<ActionState> {
   // Before the rate limiter, so a malformed address is rejected without
-  // touching the database at all.
+  // touching the database or Resend at all.
   const parsed = waitlistSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) {
     return { ok: false, error: "That doesn't look like an email" };
   }
 
-  // Everything below can reach Postgres, the limiter included, and an action
-  // that throws takes the whole page to the error boundary. A signup form is
-  // the wrong place to lose the page over a database blip — the reachable
-  // failure is an inline message the visitor can retry.
+  // Everything below leaves the process — the limiter to Postgres, the signup
+  // itself to Resend — and an action that throws takes the whole page to the
+  // error boundary. A signup form is the wrong place to lose the page over a
+  // database blip or a provider outage; the reachable failure is an inline
+  // message the visitor can retry.
   try {
     const ip = clientIp(await headers());
     if (
@@ -51,7 +57,7 @@ export async function unsubscribeAction(
 ): Promise<ActionState> {
   const token = formData.get("token");
 
-  // Same shape as subscribeAction above: the limiter is a database call too,
+  // Same shape as subscribeAction above: both the limiter and Resend can fail,
   // and someone trying to opt out is the last person who should be handed a
   // crash page.
   try {
@@ -68,7 +74,7 @@ export async function unsubscribeAction(
     }
 
     if (typeof token === "string" && token.length > 0) {
-      await unsubscribeByToken(token);
+      await unsubscribeById(token);
     } else {
       const parsed = emailSchema.safeParse(formData.get("email"));
       if (!parsed.success) {
@@ -77,6 +83,16 @@ export async function unsubscribeAction(
       await unsubscribeByEmail(parsed.data);
     }
   } catch (err) {
+    // A broken link is not a transient fault, so "try again in a moment" would
+    // send them round the same loop forever. Point them at the form that does
+    // not need the link instead.
+    if (err instanceof InvalidUnsubscribeLink) {
+      return {
+        ok: false,
+        error: "That unsubscribe link is incomplete — use the form below instead.",
+      };
+    }
+
     console.error("[newsletter] unsubscribe failed:", err);
     return { ok: false, error: "Something went wrong. Try again in a moment." };
   }

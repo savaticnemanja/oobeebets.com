@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { auditLog, waitlist } from "@/db/schema";
+import { auditLog } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
 import { billing, BillingError } from "@/lib/billing";
+import { subscribe } from "@/lib/newsletter";
 import { getSettings, seatsAvailable } from "@/lib/settings";
 import { tierSchema, waitlistSchema, type ActionState } from "@/lib/validation";
 import { appUrl } from "@/lib/site";
@@ -116,6 +117,15 @@ export async function changeTierAction(
   return { ok: true, message: `You're on ${tier.data} now.` };
 }
 
+/**
+ * The seat waitlist on the pricing page, for when the cap is reached.
+ *
+ * Shares the Resend contact book with the pre-launch list — one address, one
+ * contact, whichever door they came through — but sends no welcome, since the
+ * pre-launch email promises a launch notification and that is not what these
+ * people asked for. Set `RESEND_SEGMENT_ID` if the two ever need mailing
+ * separately.
+ */
 export async function joinWaitlistAction(
   _prev: ActionState,
   formData: FormData,
@@ -123,10 +133,15 @@ export async function joinWaitlistAction(
   const parsed = waitlistSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) return { ok: false, error: "Enter a valid email" };
 
-  await db
-    .insert(waitlist)
-    .values({ email: parsed.data.email })
-    .onConflictDoNothing({ target: waitlist.email });
+  // Resend is a network call now, not an insert, so it can fail in ways a
+  // local table could not. Losing the page over it would be a poor trade for
+  // someone who has just been told there is no room.
+  try {
+    await subscribe(parsed.data.email, { welcome: false });
+  } catch (err) {
+    console.error("[billing] waitlist join failed:", err);
+    return { ok: false, error: "Something went wrong. Try again in a moment." };
+  }
 
   return { ok: true, message: "You're on the list. We'll email when a seat opens." };
 }

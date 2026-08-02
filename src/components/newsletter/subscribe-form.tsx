@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { Bell, Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { subscribeAction } from "@/app/actions/newsletter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,12 @@ import { Label } from "@/components/ui/label";
 export function SubscribeForm() {
   const [state, formAction, pending] = useActionState(subscribeAction, null);
 
-  if (state?.ok) return <Subscribed />;
+  // Controlled only so the confirmation can name the address back. It is the
+  // one thing that turns "something happened" into "the address I typed is the
+  // one that got it", and it catches a typo while the visitor still cares.
+  const [email, setEmail] = React.useState("");
+
+  if (state?.ok) return <Subscribed email={email} />;
 
   const errorId = state && !state.ok ? "newsletter-error" : undefined;
 
@@ -30,6 +36,8 @@ export function SubscribeForm() {
             required
             placeholder="you@example.com"
             className="h-12 sm:text-base"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             aria-invalid={Boolean(errorId)}
             aria-describedby={errorId}
           />
@@ -38,7 +46,7 @@ export function SubscribeForm() {
           {pending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (
-            <ArrowRight aria-hidden="true" />
+            <Bell aria-hidden="true" />
           )}
           Notify me
         </Button>
@@ -59,47 +67,66 @@ export function SubscribeForm() {
 }
 
 /**
- * Replaces the form outright rather than sitting beside it — there is nothing
- * left to do here, and leaving a live field under a success message invites a
- * second submission.
+ * Replaces the form in place rather than stacking a message under it: there is
+ * nothing left to do here, and leaving a live field below a success message
+ * invites a second submission.
  *
- * Takes focus on mount because that replacement is what makes it reachable: a
- * screen reader user who just submitted is left on a button that no longer
- * exists, and `role="status"` alone announces the text without moving them to
- * it.
+ * Kept to roughly the height of the form it replaces. The page is pinned to one
+ * viewport, so a taller block would either push the footer off-screen or make
+ * the whole thing jump the moment someone succeeds.
+ *
+ * Announcement is handled by moving focus here, not by a live region — the
+ * toast below is already one, and two would say it twice. Focus has to move
+ * regardless: a screen reader user who just submitted is otherwise parked on a
+ * button that no longer exists.
  */
-function Subscribed() {
+function Subscribed({ email }: { email: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     ref.current?.focus();
+    toast.success("You're on the list", {
+      description: "Check your inbox for the welcome note.",
+    });
   }, []);
 
   return (
     <div
       ref={ref}
       tabIndex={-1}
-      role="status"
-      className="card-hairline brand-glow mt-8 p-6 focus:outline-none sm:p-7"
+      aria-labelledby="newsletter-subscribed"
+      className="card-hairline brand-glow animate-rise mt-8 flex items-start gap-4 p-5 focus:outline-none"
     >
-      <CheckCircle2 className="size-6 text-hit" aria-hidden="true" />
+      <span className="mt-0.5 shrink-0 rounded-full bg-hit-dim p-2 text-hit">
+        <Check className="size-5" aria-hidden="true" />
+      </span>
 
-      <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">
-        Thank you for subscribing to oobee bets!
-      </h2>
+      <div className="min-w-0">
+        <h2
+          id="newsletter-subscribed"
+          className="text-base font-semibold tracking-tight text-fg"
+        >
+          You&rsquo;re on the list
+        </h2>
 
-      <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-        Please check your email for welcome messages, official launch notification and
-        new things coming to our platform.
-      </p>
-
-      <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-        We appreciate you joining the oobee bets family!
-      </p>
-
-      <p className="mt-5 text-base font-semibold tracking-tight text-brand">
-        Let&rsquo;s beat the books
-      </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
+          {email ? (
+            <>
+              A welcome note is on its way to{" "}
+              {/* Breaks only when an address genuinely will not fit, rather
+                  than mid-word on every wrap. */}
+              <span className="break-words font-medium text-fg">{email}</span>.
+              We&rsquo;ll
+              email you the day the board opens.
+            </>
+          ) : (
+            <>
+              A welcome note is on its way. We&rsquo;ll email you the day the board
+              opens.
+            </>
+          )}
+        </p>
+      </div>
     </div>
   );
 }

@@ -228,36 +228,15 @@ export const settings = pgTable("settings", {
 
 /* --------------------------------------------------------------- waitlist */
 
-/**
- * Doubles as the pre-launch newsletter list. One row per address, kept forever:
- * unsubscribing sets a timestamp rather than deleting, because an opt-out we
- * cannot prove is an opt-out we will eventually violate by accident.
+/*
+ * There is no waitlist table any more.
+ *
+ * The mailing list — both the pre-launch newsletter and the seat waitlist on
+ * the pricing page — lives in Resend's contact book, which is now the only
+ * copy. See lib/newsletter.ts for why, and for what that costs. Nothing here
+ * should grow a local mirror of it again: two stores of the same addresses
+ * drift, and the one people get mailed from is the one that matters.
  */
-export const waitlist = pgTable(
-  "waitlist",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    /**
-     * The secret in every unsubscribe link. Random per row and never derived
-     * from the address, so knowing someone's email is not enough to
-     * unsubscribe them. The column default only exists to backfill rows that
-     * predate it — the app generates its own, from a CSPRNG.
-     */
-    unsubscribeToken: text("unsubscribe_token")
-      .notNull()
-      .default(sql`gen_random_uuid()::text`),
-    /** Null while subscribed. Set on opt-out, cleared if they come back. */
-    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("waitlist_email_unique").on(t.email),
-    // Looked up on every unsubscribe click, and unique so a token identifies
-    // exactly one subscriber.
-    uniqueIndex("waitlist_unsubscribe_token_unique").on(t.unsubscribeToken),
-  ],
-);
 
 /* -------------------------------------------------------------- audit log */
 
