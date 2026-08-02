@@ -2,8 +2,15 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { SmoothScroll } from "@/components/smooth-scroll";
+import { PrelaunchChrome } from "@/components/prelaunch-chrome";
+import { PRELAUNCH } from "@/lib/prelaunch";
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
+  // The gate lets the legal pages through, and they render in here. Giving them
+  // the normal chrome would surround them with a header and footer whose every
+  // link redirects back to the signup page.
+  if (PRELAUNCH) return <PrelaunchChrome>{children}</PrelaunchChrome>;
+
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Public pages only. /admin is a tool people work in for an hour at a

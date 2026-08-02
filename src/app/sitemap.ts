@@ -3,6 +3,7 @@ import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { picks, slates } from "@/db/schema";
 import { SITE } from "@/lib/site";
+import { PRELAUNCH } from "@/lib/prelaunch";
 
 /**
  * Only public, indexable pages. /picks, /account and /admin are deliberately
@@ -56,14 +57,27 @@ async function lastPublish(): Promise<Date | null> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Deployment time is the floor: it is when the copy on the static pages last
+  // changed, and it stands in for the data dates before anything is published.
+  const built = new Date();
+
+  // Everything else redirects to the signup page while the gate is up, and a
+  // sitemap is a claim that a URL is worth crawling. The picks data the dates
+  // below come from is not published yet either, so the reads are skipped
+  // rather than merely ignored.
+  if (PRELAUNCH) {
+    return [
+      { url: SITE.url, lastModified: built, changeFrequency: "weekly", priority: 1 },
+      { url: `${SITE.url}/legal/terms`, lastModified: built, changeFrequency: "yearly", priority: 0.2 },
+      { url: `${SITE.url}/legal/privacy`, lastModified: built, changeFrequency: "yearly", priority: 0.2 },
+    ];
+  }
+
   const [settledAt, publishedAt] = await Promise.all([
     orNull("last settlement", lastSettlement),
     orNull("last publish", lastPublish),
   ]);
 
-  // Deployment time is the floor: it is when the copy on the static pages last
-  // changed, and it stands in for the data dates before anything is published.
-  const built = new Date();
   const newest = (...dates: (Date | null)[]) =>
     dates.filter((d): d is Date => d !== null).sort((a, b) => b.getTime() - a.getTime())[0] ?? built;
 
