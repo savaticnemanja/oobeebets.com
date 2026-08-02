@@ -27,6 +27,12 @@ jobs:
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       NEXT_PUBLIC_SLATE_TZ: America/New_York
       BILLING_PROVIDER: mock
+      # The pre-launch gate defaults to on, and it 307s /picks, /pricing,
+      # /signup, /track-record and /admin/* to the signup page — which is every
+      # route verify and e2e drive. Left at its default, the suite would test
+      # the gate instead of the product. Lifted here so CI keeps exercising the
+      # thing being shipped; the gate itself is a deployment setting.
+      PRELAUNCH: "0"
     steps:
       - uses: actions/checkout@v4
 

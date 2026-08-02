@@ -25,7 +25,17 @@ export const metadata: Metadata = {
   alternates: { canonical: "/track-record" },
 };
 
-export const revalidate = 60;
+/**
+ * Rendered per request. See the note in /about: this page and that one are the
+ * only two under (site) that never call getAuth() themselves, so when the
+ * pre-launch gate swapped SiteHeader (which reads the session cookie) for
+ * PrelaunchChrome (which does not), both stopped being dynamic, started being
+ * prerendered, and read the database during `next build` — where there is none.
+ *
+ * The whole page is the record, so there is nothing here worth prerendering
+ * against an empty or absent database.
+ */
+export const dynamic = "force-dynamic";
 
 export default async function TrackRecordPage() {
   const [record, history] = await Promise.all([getTrackRecord(), getSettledHistory(200)]);
