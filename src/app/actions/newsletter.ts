@@ -14,17 +14,25 @@ export async function subscribeAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const ip = clientIp(await headers());
-  if (!(await rateLimit("newsletter:subscribe", ip, SUBSCRIBE_LIMIT, SUBSCRIBE_WINDOW_MS))) {
-    return { ok: false, error: "Too many attempts. Try again in a few minutes." };
-  }
-
+  // Before the rate limiter, so a malformed address is rejected without
+  // touching the database at all.
   const parsed = waitlistSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) {
     return { ok: false, error: "That doesn't look like an email" };
   }
 
+  // Everything below can reach Postgres, the limiter included, and an action
+  // that throws takes the whole page to the error boundary. A signup form is
+  // the wrong place to lose the page over a database blip — the reachable
+  // failure is an inline message the visitor can retry.
   try {
+    const ip = clientIp(await headers());
+    if (
+      !(await rateLimit("newsletter:subscribe", ip, SUBSCRIBE_LIMIT, SUBSCRIBE_WINDOW_MS))
+    ) {
+      return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+    }
+
     // The outcome is intentionally discarded. "Already subscribed" and "just
     // subscribed" have to be indistinguishable from the outside, or the form
     // becomes an oracle for whether a given address is on the list.
@@ -41,16 +49,24 @@ export async function unsubscribeAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const ip = clientIp(await headers());
-  if (
-    !(await rateLimit("newsletter:unsubscribe", ip, UNSUBSCRIBE_LIMIT, UNSUBSCRIBE_WINDOW_MS))
-  ) {
-    return { ok: false, error: "Too many attempts. Try again in a few minutes." };
-  }
-
   const token = formData.get("token");
 
+  // Same shape as subscribeAction above: the limiter is a database call too,
+  // and someone trying to opt out is the last person who should be handed a
+  // crash page.
   try {
+    const ip = clientIp(await headers());
+    if (
+      !(await rateLimit(
+        "newsletter:unsubscribe",
+        ip,
+        UNSUBSCRIBE_LIMIT,
+        UNSUBSCRIBE_WINDOW_MS,
+      ))
+    ) {
+      return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+    }
+
     if (typeof token === "string" && token.length > 0) {
       await unsubscribeByToken(token);
     } else {
