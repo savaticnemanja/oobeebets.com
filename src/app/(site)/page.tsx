@@ -26,11 +26,13 @@ export default function PrelaunchPage() {
           this is the one page every visitor loads, and a CSS keyframe already
           in the theme costs nothing to ship. */}
       <div className="animate-rise">
-        <div className="flex items-center gap-2">
-          <span className="ripple size-2" aria-hidden="true">
-            <span className="relative inline-flex size-2 rounded-full bg-brand" />
+        <div className="flex items-center gap-2.5">
+          {/* The dot grows with the label so the badge stays in proportion —
+              the ripple rings are inset from this span, so they scale too. */}
+          <span className="ripple size-2.5" aria-hidden="true">
+            <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
           </span>
-          <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
+          <span className="text-sm font-medium uppercase tracking-[0.2em] text-brand">
             Launching soon
           </span>
         </div>
