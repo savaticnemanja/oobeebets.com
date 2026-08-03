@@ -183,11 +183,8 @@ export default function PrivacyPage() {
           <h2 className="text-base font-semibold text-fg">Contact</h2>
           <p className="mt-2">
             Email{" "}
-            <a
-              href={`mailto:privacy@${SITE.domain}`}
-              className="text-brand hover:underline"
-            >
-              privacy@{SITE.domain}
+            <a href={`mailto:${SITE.supportEmail}`} className="text-brand hover:underline">
+              {SITE.supportEmail}
             </a>{" "}
             about anything on this page, including any request to see or delete your
             data.
