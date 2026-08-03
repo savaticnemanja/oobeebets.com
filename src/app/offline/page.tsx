@@ -19,11 +19,13 @@ export default function OfflinePage() {
       </div>
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">You&apos;re offline</h1>
       <p className="mt-2 max-w-sm text-sm text-fg-muted">
-        Picks and results are never served from cache — a stale board is worse than no
-        board. Reconnect and we&apos;ll load the live one.
+        We can&apos;t reach the network from here. Reconnect and the page will load
+        normally.
       </p>
+      {/* Home, not /picks: that route went with the product, so the button on
+          the page people reach when things are already broken was a 404. */}
       <Button asChild className="mt-6">
-        <Link href="/picks">Try again</Link>
+        <Link href="/">Try again</Link>
       </Button>
     </main>
   );
