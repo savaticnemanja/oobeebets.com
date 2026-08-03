@@ -25,14 +25,9 @@ jobs:
     env:
       DATABASE_URL: postgres://oobee:oobee@localhost:5432/oobeebets
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
-      NEXT_PUBLIC_SLATE_TZ: America/New_York
-      BILLING_PROVIDER: mock
-      # The pre-launch gate defaults to on, and it 307s /picks, /pricing,
-      # /signup, /track-record and /admin/* to the signup page — which is every
-      # route verify and e2e drive. Left at its default, the suite would test
-      # the gate instead of the product. Lifted here so CI keeps exercising the
-      # thing being shipped; the gate itself is a deployment setting.
-      PRELAUNCH: "0"
+      # No PRELAUNCH flag any more: this branch has no product to gate, so the
+      # gate that used to be lifted here is gone with it. No BILLING_PROVIDER
+      # either — nothing is for sale on the pre-launch site.
     steps:
       - uses: actions/checkout@v4
 
@@ -47,18 +42,12 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+      # Creates rate_limits, the one table left. There is nothing to seed: the
+      # mailing list lives at Resend and the product tables are gone.
       - run: npm run db:migrate
 
-      # This database is created and thrown away with the runner, so the
-      # destructive-seed guard is answered explicitly rather than disabled.
-      - run: npm run db:seed
-        env:
-          ALLOW_DESTRUCTIVE_SEED: 1
-
-      - run: npx playwright install --with-deps chromium
-
-      # verify and e2e both drive a real server, so start one and wait for the
-      # health endpoint rather than sleeping a fixed number of seconds.
+      # verify drives a real server, so start one and wait for the health
+      # endpoint rather than sleeping a fixed number of seconds.
       - name: Start the app
         run: |
           npm start &
@@ -69,10 +58,9 @@ jobs:
           echo "app did not become healthy in 60s" >&2
           exit 1
 
-      # Settlement maths, tier gating, admin access control.
+      # The pages serve, the removed surfaces stay 404, robots and sitemap
+      # describe the site that exists. No browser and no Resend key needed.
       - run: npm run verify
-      # Signup -> subscribe, settle -> public record, first-visit stability.
-      - run: npm run e2e
 
   deploy:
     needs: checks

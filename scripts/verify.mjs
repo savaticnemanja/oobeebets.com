@@ -1,20 +1,20 @@
 /**
- * POC verification suite. Run against a seeded database with the app serving
- * on APP_URL:
+ * Pre-launch smoke check. Run against the app serving on APP_URL:
  *
  *   npm run build && npm start &
  *   npm run verify
  *
- * Checks the three things that would actually cost money if they broke:
- *   1. Settlement maths — every stat on the site is a sum of this.
- *   2. Tier gating — locked picks must not be in the response at all.
- *   3. Access control — /admin must not be reachable by a normal user.
+ * The suite this replaced checked settlement maths, tier gating and admin
+ * access control — none of which exist in this build. What matters now is
+ * narrower and worth stating plainly: the signup page is served at `/`, the
+ * legal pages a subscriber is entitled to read are reachable, and the two
+ * crawler files describe the site that actually exists.
+ *
+ * Deliberately no database and no Resend key: this runs in CI, and a check
+ * that needs live credentials is a check that gets skipped.
  */
-import { createHash, randomBytes } from "node:crypto";
-import postgres from "postgres";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
-const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
 let failures = 0;
 const pass = (name, extra = "") => console.log(`  PASS  ${name}${extra ? "  " + extra : ""}`);
@@ -24,201 +24,60 @@ const fail = (name, extra = "") => {
 };
 const check = (cond, name, extra) => (cond ? pass(name, extra) : fail(name, extra));
 
-/* ------------------------------------------------------ 1. settlement maths */
-
-console.log("\nSettlement maths");
-
-// Mirrors src/lib/settlement.ts. If these two ever disagree, the public record
-// disagrees with itself.
-function profitUnits(price, units, status) {
-  switch (status) {
-    case "won":
-      return price > 0 ? units * (price / 100) : units * (100 / Math.abs(price));
-    case "lost":
-      return -units;
-    default:
-      return 0;
-  }
+async function get(path) {
+  const res = await fetch(`${APP_URL}${path}`, { redirect: "manual" });
+  return { status: res.status, body: await res.text() };
 }
 
-const near = (a, b) => Math.abs(a - b) < 1e-9;
+/* ------------------------------------------------------------ 1. the pages */
 
-check(near(profitUnits(150, 1, "won"), 1.5), "+150 @ 1u won = +1.50u");
-check(near(profitUnits(-120, 1, "won"), 0.8333333333333334), "-120 @ 1u won = +0.83u");
-check(near(profitUnits(-110, 1, "won"), 0.9090909090909091), "-110 @ 1u won = +0.909u");
-check(near(profitUnits(200, 2.5, "won"), 5), "+200 @ 2.5u won = +5.00u");
-check(near(profitUnits(150, 1, "lost"), -1), "any price @ 1u lost = -1.00u");
-check(near(profitUnits(-110, 2, "lost"), -2), "-110 @ 2u lost = -2.00u");
-check(near(profitUnits(150, 1, "push"), 0), "push = 0");
-check(near(profitUnits(150, 1, "void"), 0), "void = 0");
-check(near(profitUnits(150, 1, "pending"), 0), "pending = 0");
+console.log("\nPages");
 
-// Cross-check the DB aggregate used on the landing page against the same maths
-// applied row by row — these are two independent implementations.
-const rows = await sql`
-  select p.price, p.units, p.status from picks p
-  join slates s on s.date = p.slate_date and s.published_at is not null
-`;
-const manual = rows.reduce(
-  (acc, r) => acc + profitUnits(r.price, Number(r.units), r.status),
-  0,
-);
-const [{ agg }] = await sql`
-  select coalesce(sum(
-    case
-      when p.status = 'won' and p.price > 0 then p.units * (p.price::numeric / 100)
-      when p.status = 'won' and p.price < 0 then p.units * (100 / abs(p.price)::numeric)
-      when p.status = 'lost' then -p.units
-      else 0
-    end
-  ), 0)::float as agg
-  from picks p
-  join slates s on s.date = p.slate_date and s.published_at is not null
-`;
+const home = await get("/");
+check(home.status === 200, "/ serves 200", `got ${home.status}`);
 check(
-  Math.abs(manual - agg) < 1e-6,
-  "SQL aggregate matches row-by-row maths",
-  `js=${manual.toFixed(4)} sql=${agg.toFixed(4)}`,
+  home.body.includes('name="email"') && home.body.includes("Notify me"),
+  "/ serves the signup form",
+);
+check(!home.body.includes("/soon"), "/ is the page, not a redirect to a placeholder");
+
+for (const path of ["/legal/privacy", "/legal/terms", "/unsubscribe"]) {
+  const res = await get(path);
+  check(res.status === 200, `${path} serves 200`, `got ${res.status}`);
+}
+
+const health = await get("/api/health");
+check(health.status === 200, "/api/health serves 200", `got ${health.status}`);
+check(health.body.includes('"db":"up"'), "/api/health reports the database up");
+
+/* ------------------------------------------------- 2. nothing left behind */
+
+console.log("\nRemoved surfaces are gone");
+
+// If any of these come back, something was reintroduced by accident — this
+// build is meant to have no product in it at all.
+for (const path of ["/picks", "/pricing", "/admin", "/login", "/account"]) {
+  const res = await get(path);
+  check(res.status === 404, `${path} is 404`, `got ${res.status}`);
+}
+
+/* ---------------------------------------------------------- 3. crawlers */
+
+console.log("\nCrawler files");
+
+const robots = await get("/robots.txt");
+check(robots.status === 200, "/robots.txt serves 200", `got ${robots.status}`);
+check(robots.body.includes("Disallow: /unsubscribe"), "robots keeps /unsubscribe out");
+
+const sitemap = await get("/sitemap.xml");
+check(sitemap.status === 200, "/sitemap.xml serves 200", `got ${sitemap.status}`);
+check(sitemap.body.includes("/legal/privacy"), "sitemap lists the privacy policy");
+check(
+  !sitemap.body.includes("/track-record") && !sitemap.body.includes("/pricing"),
+  "sitemap claims no page that no longer exists",
 );
 
-/* ------------------------------------------------------------ 2. tier gating */
+/* -------------------------------------------------------------- summary */
 
-console.log("\nTier gating (locked picks must be absent from the payload)");
-
-const [{ date: todayRaw }] = await sql`select max(date) as date from slates`;
-const today = todayRaw instanceof Date ? todayRaw.toISOString().slice(0, 10) : todayRaw;
-const [{ n: total }] = await sql`
-  select count(*)::int as n from picks where slate_date = ${today}
-`;
-
-async function sessionFor(email) {
-  const [user] = await sql`select id from users where email = ${email}`;
-  const token = randomBytes(32).toString("base64url");
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  await sql`
-    insert into sessions (user_id, token_hash, expires_at)
-    values (${user.id}, ${tokenHash}, ${new Date(Date.now() + 3600_000)})
-  `;
-  return { token, cleanup: () => sql`delete from sessions where token_hash = ${tokenHash}` };
-}
-
-const EXPECT = {
-  "free@example.com": 1,
-  "base@example.com": 6,
-  "pro@example.com": 15,
-  "elite@example.com": total,
-  "owner@oobeebets.com": total,
-};
-
-for (const [email, expected] of Object.entries(EXPECT)) {
-  const { token, cleanup } = await sessionFor(email);
-  const html = await (
-    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
-  ).text();
-
-  // Rank comes from the rendered aria-label, not from matching selection text:
-  // the seed reuses selections across ranks, so text matching false-positives.
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  const over = [...unlocked].filter((r) => r > expected);
-  const missing = [];
-  for (let r = 1; r <= expected; r++) if (!unlocked.has(r)) missing.push(r);
-
-  check(
-    over.length === 0 && missing.length === 0,
-    email.padEnd(22),
-    `unlocked=${unlocked.size}/${expected}` +
-      (over.length ? ` OVER-SERVED:${over.join(",")}` : "") +
-      (missing.length ? ` MISSING:${missing.join(",")}` : ""),
-  );
-  await cleanup();
-}
-
-{
-  const html = await (await fetch(`${APP_URL}/picks`)).text();
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  check(
-    unlocked.size === 1 && unlocked.has(1),
-    "(anonymous)".padEnd(22),
-    `unlocked=${unlocked.size}/1`,
-  );
-}
-
-/* -------------------------------------------------------- 3. access control */
-
-console.log("\nAccess control");
-
-const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/settings"];
-
-{
-  for (const route of adminRoutes) {
-    const res = await fetch(`${APP_URL}${route}`, { redirect: "manual" });
-    // 404, not 403 — a non-admin should not learn the route exists.
-    check(res.status === 404, `anonymous ${route}`, `-> ${res.status}`);
-  }
-
-  const { token, cleanup } = await sessionFor("elite@example.com");
-  for (const route of adminRoutes) {
-    const res = await fetch(`${APP_URL}${route}`, {
-      headers: { cookie: `oobee_session=${token}` },
-      redirect: "manual",
-    });
-    check(res.status === 404, `subscriber ${route}`, `-> ${res.status}`);
-  }
-  await cleanup();
-
-  const admin = await sessionFor("admin@oobeebets.com");
-  const res = await fetch(`${APP_URL}/admin`, {
-    headers: { cookie: `oobee_session=${admin.token}` },
-  });
-  check(res.status === 200, "admin /admin", `-> ${res.status}`);
-
-  // Role management is owner-only, even for an admin.
-  const usersRes = await fetch(`${APP_URL}/admin/users`, {
-    headers: { cookie: `oobee_session=${admin.token}` },
-  });
-  check(usersRes.status === 404, "admin /admin/users (owner-only)", `-> ${usersRes.status}`);
-  await admin.cleanup();
-
-  const owner = await sessionFor("owner@oobeebets.com");
-  const ownerRes = await fetch(`${APP_URL}/admin/users`, {
-    headers: { cookie: `oobee_session=${owner.token}` },
-  });
-  check(ownerRes.status === 200, "owner /admin/users", `-> ${ownerRes.status}`);
-  await owner.cleanup();
-}
-
-/* ---------------------------------------------------------- 4. expired session */
-
-console.log("\nSession handling");
-
-{
-  const [user] = await sql`select id from users where email = ${"elite@example.com"}`;
-  const token = randomBytes(32).toString("base64url");
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  await sql`
-    insert into sessions (user_id, token_hash, expires_at)
-    values (${user.id}, ${tokenHash}, ${new Date(Date.now() - 1000)})
-  `;
-  const html = await (
-    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
-  ).text();
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  check(unlocked.size === 1, "expired session falls back to free", `unlocked=${unlocked.size}/1`);
-  await sql`delete from sessions where token_hash = ${tokenHash}`;
-
-  const garbage = await fetch(`${APP_URL}/picks`, {
-    headers: { cookie: "oobee_session=not-a-real-token" },
-  });
-  check(garbage.status === 200, "forged cookie is rejected, page still renders");
-}
-
-/* ------------------------------------------------------------------ result */
-
-console.log(
-  failures === 0
-    ? `\n✓ All checks passed (slate ${today}, ${total} picks).\n`
-    : `\n✗ ${failures} check(s) failed.\n`,
-);
-
-await sql.end();
+console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
 process.exit(failures === 0 ? 0 : 1);

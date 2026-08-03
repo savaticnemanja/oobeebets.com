@@ -5,55 +5,16 @@
  * this object is the contract, so a missing or misspelled key is a build error
  * rather than a blank on the page.
  *
- * Migration is incremental and deliberately so. What lives here first is the
- * copy that is *structurally* hard to translate later: strings held in
- * `Record<enum, string>` tables and shipped to the client as data, where a
- * translator has no component to look at and no context to work from. Prose
- * still inline in a page is easy to move whenever that page is next touched.
+ * Cut to what the pre-launch site renders. The sport, status and account
+ * tables that used to live here described picks, tiers and an account menu,
+ * none of which are in this build; they belong with the product rather than
+ * with a signup form. The mechanism is kept rather than inlined because the
+ * strings come back with the pages that need them.
  */
 export const en = {
-  /** Sport names. Keys are the `sport` enum in db/schema.ts. */
-  sport: {
-    soccer: "Soccer",
-    basketball: "Basketball",
-    baseball: "Baseball",
-    tennis: "Tennis",
-    hockey: "Hockey",
-    football: "Football",
-  },
-
-  /** Pick outcomes. Keys are the `pick_status` enum. Never colour-only. */
-  status: {
-    won: "Won",
-    lost: "Lost",
-    pending: "Pending",
-    push: "Push",
-    void: "Void",
-  },
-
   /** Site chrome. */
   nav: {
-    trackRecord: "Track record",
-    pricing: "Pricing",
-    about: "About",
-    picks: "Picks",
-    account: "Account",
-    admin: "Admin",
-    signIn: "Sign in",
-    signOut: "Sign out",
-    getPicks: "Get picks",
     skipToContent: "Skip to content",
-    openMenu: "Open menu",
-    accountMenu: "Account menu",
-    mainNav: "Main",
-    mobileNav: "Mobile",
-  },
-
-  account: {
-    todaysPicks: "Today's picks",
-    billing: "Account & billing",
-    adminPanel: "Admin panel",
-    noPlan: "No plan",
   },
 } as const;
 
