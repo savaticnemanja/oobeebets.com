@@ -3,14 +3,12 @@ import { SubscribeForm } from "@/components/newsletter/subscribe-form";
 import { SITE } from "@/lib/site";
 
 /**
- * The pre-launch signup page.
+ * The pre-launch signup page, and the site's root.
  *
- * Served at `/` by a rewrite in proxy.ts, which is why the canonical below
- * points at the site root and not at this route's own path — `/soon` is an
- * implementation detail of the gate and must never be the indexed URL.
- *
- * Sized to sit inside one viewport: the layout pins the chrome to the screen,
- * so everything here has to earn its height.
+ * It used to be `/soon`, served at `/` through a rewrite in the gate's proxy.
+ * With the product gone there is nothing left to gate, so this is simply the
+ * root page — which also means it prerenders instead of passing through
+ * middleware on every request.
  */
 export const metadata: Metadata = {
   // Absolute, or the root layout's `%s · oobee bets` template appends the brand
@@ -23,7 +21,7 @@ export const metadata: Metadata = {
 
 export default function PrelaunchPage() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+    <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-12 sm:px-6 sm:pt-20">
       {/* Delays are staggered by hand rather than through the motion components:
           this is the one page every visitor loads, and a CSS keyframe already
           in the theme costs nothing to ship. */}
