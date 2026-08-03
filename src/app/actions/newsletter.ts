@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { clientIp, rateLimit } from "@/lib/auth";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   InvalidUnsubscribeLink,
   subscribe,
