@@ -71,9 +71,10 @@ export function SubscribeForm() {
  * nothing left to do here, and leaving a live field below a success message
  * invites a second submission.
  *
- * Kept to roughly the height of the form it replaces. The page is pinned to one
- * viewport, so a taller block would either push the footer off-screen or make
- * the whole thing jump the moment someone succeeds.
+ * Kept to roughly the height of the form it replaces, so the page does not
+ * lurch under the reader at the moment they succeed. That mattered more when
+ * the layout was pinned to the viewport, but a block that changes height on
+ * submit is worth avoiding either way.
  *
  * Announcement is handled by moving focus here, not by a live region — the
  * toast below is already one, and two would say it twice. Focus has to move
