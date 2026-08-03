@@ -119,11 +119,8 @@ export default function TermsPage() {
           <h2 className="text-base font-semibold text-fg">7. Changes and contact</h2>
           <p className="mt-2">
             We may update these terms; the date at the top says when we last did. Email{" "}
-            <a
-              href={`mailto:hello@${SITE.domain}`}
-              className="text-brand hover:underline"
-            >
-              hello@{SITE.domain}
+            <a href={`mailto:${SITE.supportEmail}`} className="text-brand hover:underline">
+              {SITE.supportEmail}
             </a>{" "}
             with any question about this page.
           </p>

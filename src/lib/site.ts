@@ -1,8 +1,19 @@
 /** Site-wide constants used by metadata, JSON-LD, sitemap and absolute URLs. */
 
+const DOMAIN = "oobeebets.com";
+
 export const SITE = {
   name: "oobee bets",
-  domain: "oobeebets.com",
+  domain: DOMAIN,
+  /**
+   * The single address anyone is invited to write to, from any page.
+   *
+   * One inbox on purpose. The legal pages used to point at privacy@ and
+   * hello@ separately, which asks a reader to work out which of their
+   * questions is a privacy question — and splits a mailbox nobody has staffed
+   * yet across two names.
+   */
+  supportEmail: `support@${DOMAIN}`,
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://oobeebets.com",
   tagline: "Every pick, settled in public.",
   description:
