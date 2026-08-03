@@ -5,32 +5,35 @@ import { SITE } from "@/lib/site";
 /**
  * Header and footer for every page on the pre-launch site.
  *
- * Sticky footer, the ordinary way: the column is at least a viewport tall and
- * `main` takes the slack, so the footer sits on the bottom edge when a page is
- * short and gets pushed down normally when it is not. The margin above it is
- * counted in that slack, so it costs no scrollbar on a short page.
+ * Plain document flow: the page is exactly as tall as its content and scrolls
+ * once it outgrows the viewport, which is all any of these pages need.
  *
- * This replaced a `fill` variant that pinned everything to `h-dvh` with
- * `overflow-hidden`. Locking the viewport meant long-form copy had to scroll
- * inside `main` instead of the page, which fights the scroll gesture people
- * expect and hides content behind a container edge at large text sizes. Letting
- * the page scroll is both simpler and better behaved; the footer staying put on
- * short pages was the only part worth keeping.
+ * This was a `min-h-dvh` column with `flex-1` on `main` — the ordinary sticky
+ * footer — and on a tall phone it made the signup page measure exactly one
+ * viewport: `main` swallowed the shortfall, the footer pinned itself to the
+ * bottom edge, and the page did not scroll at all. The dead band it opened
+ * between the form and the footer grew with the screen, 38px at 932 tall and
+ * 104px at 998. A page that ends where its content ends reads as an ordinary
+ * page at every size. The cost is background below the footer in a tall desktop
+ * window, and that is invisible: the footer carries no fill of its own, so what
+ * shows under it is the same black and the same aurora as above it.
+ *
+ * An earlier `fill` variant went further still and pinned everything to `h-dvh`
+ * with `overflow-hidden`, which left long-form copy scrolling inside `main`
+ * instead of the page. Nothing here should constrain the page to the viewport.
  */
 export function PrelaunchChrome({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col pl-safe-left pr-safe-right">
-      <header className="shrink-0 pt-safe-top">
+    <div className="pl-safe-left pr-safe-right">
+      <header className="pt-safe-top">
         <div className="mx-auto flex h-16 max-w-3xl items-center px-4 sm:px-6">
           <Logo />
         </div>
       </header>
 
-      <main id="main" className="flex-1">
-        {children}
-      </main>
+      <main id="main">{children}</main>
 
-      <footer className="mt-16 shrink-0 border-t border-border pb-safe-bottom">
+      <footer className="mt-16 border-t border-border pb-safe-bottom">
         <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
           <nav
             aria-label="Footer"
