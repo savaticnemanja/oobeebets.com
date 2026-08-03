@@ -1,5 +1,3 @@
-import { t } from "@/lib/i18n";
-
 /** Site-wide constants used by metadata, JSON-LD, sitemap and absolute URLs. */
 
 export const SITE = {
@@ -21,22 +19,8 @@ export function appUrl(path = "/"): string {
   return new URL(path, SITE.url).toString();
 }
 
-export const NAV_PUBLIC = [
-  { href: "/track-record", label: t().nav.trackRecord },
-  { href: "/pricing", label: t().nav.pricing },
-  { href: "/about", label: t().nav.about },
-] as const;
-
-export const NAV_APP = [
-  { href: "/picks", label: t().nav.picks },
-  { href: "/track-record", label: t().nav.trackRecord },
-  { href: "/account", label: t().nav.account },
-] as const;
-
-export const NAV_ADMIN = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/slate", label: "Publish slate" },
-  { href: "/admin/settle", label: "Settle" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/settings", label: "Settings" },
-] as const;
+/*
+ * The NAV_PUBLIC / NAV_APP / NAV_ADMIN tables are gone with the header and
+ * mobile nav that rendered them. Every entry pointed at a route this build no
+ * longer serves, and the pre-launch footer names its three links directly.
+ */
