@@ -31,7 +31,7 @@ export default async function UnsubscribePage({
   const { token } = await searchParams;
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-10 sm:px-6 sm:py-14">
+    <div className="mx-auto w-full max-w-md px-4 pb-16 pt-12 sm:px-6 sm:pt-20">
       <div className="animate-rise">
         <span className="inline-flex rounded-full border border-border bg-surface p-2.5 text-fg-muted">
           <BellOff className="size-5" aria-hidden="true" />
