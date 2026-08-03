@@ -67,8 +67,8 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-fg">Why we are allowed to hold it</h2>
           <p className="mt-2">
-            We rely on your <strong className="font-medium text-fg">consent</strong> for
-            the email address &mdash; you gave it to us by submitting the form, and you
+            We rely on your <strong className="font-medium text-fg">consent</strong>{" "}
+            for the email address &mdash; you gave it to us by submitting the form, and you
             can withdraw it at any time by unsubscribing, which costs you one click and
             no explanation.
           </p>
@@ -83,17 +83,16 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-fg">Who else sees it</h2>
           <p className="mt-2">
-            <strong className="font-medium text-fg">Resend</strong> both stores the list
-            and delivers our email. Your address is held in their contact book &mdash;
-            that is the only copy of it, we do not keep a second one in our own database
-            &mdash; and is used to send you the welcome note and the launch
-            announcement. They process it on our instructions and for no purpose of
-            their own.
+            <strong className="font-medium text-fg">Resend</strong>{" "}
+            both stores the list and delivers our email. Your address is held in their
+            contact book &mdash; that is the only copy of it, we do not keep a second
+            one in our own database &mdash; and is used to send you the welcome note and
+            the launch announcement. They process it on our instructions and for no
+            purpose of their own.
           </p>
           <p className="mt-2">
-            Some of these providers operate outside the UK and the EEA, so your address
-            may be processed there under the safeguards their data processing terms
-            provide.
+            Resend operates outside the UK and the EEA, so your address may be processed
+            there under the safeguards their data processing terms provide.
           </p>
           <p className="mt-2">
             Nobody else. We do not sell your data, we do not rent or share it with
