@@ -77,6 +77,52 @@ check(
   "sitemap claims no page that no longer exists",
 );
 
+/* ------------------------------------------------------- 4. install + share */
+
+console.log("\nManifest and share tags");
+
+// The sitemap was checked for dead routes and the manifest was not, which is
+// how start_url sat on /picks — a route the section above asserts is a 404.
+// An installed app launching into "Nothing here" is invisible until someone
+// installs it, so it gets a check rather than a reread.
+const manifest = await get("/manifest.webmanifest");
+check(manifest.status === 200, "/manifest.webmanifest serves 200", `got ${manifest.status}`);
+
+let start = null;
+try {
+  const parsed = JSON.parse(manifest.body);
+  start = parsed.start_url;
+  const targets = [parsed.start_url, ...(parsed.shortcuts ?? []).map((s) => s.url)];
+  const dead = [];
+  for (const url of targets) {
+    const res = await get(url);
+    if (res.status !== 200) dead.push(`${url} -> ${res.status}`);
+  }
+  check(dead.length === 0, "every manifest destination serves 200", dead.join(", "));
+} catch {
+  fail("manifest is valid JSON");
+}
+check(typeof start === "string" && start.length > 0, "manifest declares a start_url", `${start}`);
+
+// Both icon routes and the share image, which are only ever noticed by their
+// absence — a 404 here is a blank tab and a bare text link on every share.
+for (const path of ["/favicon.ico", "/icon.svg", "/apple-icon.png", "/opengraph-image"]) {
+  const res = await get(path);
+  check(res.status === 200, `${path} serves 200`, `got ${res.status}`);
+}
+
+// og: and twitter: inherit from the root layout unless a page overrides both,
+// so the home page's card is checked against the page's own copy.
+check(
+  home.body.includes('property="og:image"') && home.body.includes('name="twitter:card"'),
+  "/ carries an image card",
+);
+check(
+  home.body.includes('property="og:title" content="oobee bets — launching soon"'),
+  "/ share card says launching soon, like the page does",
+);
+check(home.body.includes('application/ld+json'), "/ carries structured data");
+
 /* -------------------------------------------------------------- summary */
 
 console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
