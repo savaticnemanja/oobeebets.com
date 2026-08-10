@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { SITE } from "@/lib/site";
+import { appUrl } from "@/lib/site";
 
 /**
  * Three pages exist and two of them are worth indexing.
@@ -19,7 +19,7 @@ const DISALLOWED = [
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [{ userAgent: "*", allow: "/", disallow: DISALLOWED }],
-    sitemap: `${SITE.url}/sitemap.xml`,
-    host: SITE.url,
+    sitemap: appUrl("/sitemap.xml"),
+    host: appUrl("/"),
   };
 }

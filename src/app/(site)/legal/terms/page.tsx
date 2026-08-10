@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
+import { shareCard } from "@/lib/metadata";
+
+const DESCRIPTION = `Terms for using the ${SITE.name} pre-launch site and email list.`;
 
 export const metadata: Metadata = {
   title: "Terms of use",
-  description: `Terms for using the ${SITE.name} pre-launch site and email list.`,
+  description: DESCRIPTION,
   alternates: { canonical: "/legal/terms" },
+  ...shareCard({
+    title: `Terms of use · ${SITE.name}`,
+    description: DESCRIPTION,
+    path: "/legal/terms",
+  }),
 };
 
 /**
