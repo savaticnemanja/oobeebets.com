@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { SITE } from "@/lib/site";
+import { appUrl } from "@/lib/site";
 
 /**
  * The three indexable pages, and no database read to produce them.
@@ -18,16 +18,19 @@ export const revalidate = 3600;
 export default function sitemap(): MetadataRoute.Sitemap {
   const built = new Date();
 
+  // appUrl rather than `${SITE.url}${path}` — NEXT_PUBLIC_SITE_URL is set by
+  // whoever deploys, and one trailing slash there turns every entry into a
+  // double-slashed URL that does not match the canonical the page declares.
   return [
-    { url: SITE.url, lastModified: built, changeFrequency: "weekly", priority: 1 },
+    { url: appUrl("/"), lastModified: built, changeFrequency: "weekly", priority: 1 },
     {
-      url: `${SITE.url}/legal/terms`,
+      url: appUrl("/legal/terms"),
       lastModified: built,
       changeFrequency: "yearly",
       priority: 0.2,
     },
     {
-      url: `${SITE.url}/legal/privacy`,
+      url: appUrl("/legal/privacy"),
       lastModified: built,
       changeFrequency: "yearly",
       priority: 0.2,

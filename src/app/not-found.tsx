@@ -19,12 +19,12 @@ export default function NotFound() {
         <p className="mt-2 max-w-sm text-sm text-fg-muted">
           That page doesn&apos;t exist, or you don&apos;t have access to it.
         </p>
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+        {/* One button, because there is one page. The "Track record" link that
+            sat beside it pointed at a route this build does not serve, so a 404
+            was offering a second 404 as the way out. */}
+        <div className="mt-6">
           <Button asChild>
             <Link href="/">Home</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/track-record">Track record</Link>
           </Button>
         </div>
       </main>
