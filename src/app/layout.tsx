@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
+import { shareCard } from "@/lib/metadata";
 import { getLocale, localeConfig } from "@/lib/i18n/config";
 import { Aurora } from "@/components/aurora";
 import { ServiceWorker } from "@/components/pwa/service-worker";
@@ -33,21 +34,8 @@ export const metadata: Metadata = {
   // default — it is an assertion every page without its own repeats verbatim,
   // and nine of them were declaring themselves to be the homepage. Each public
   // route sets its own; the home page's lives in (site)/page.tsx.
-  openGraph: {
-    type: "website",
-    siteName: SITE.name,
-    title: `${SITE.name} — ${SITE.tagline}`,
-    description: SITE.description,
-    url: SITE.url,
-    locale: localeConfig(getLocale()).ogLocale,
-  },
-  twitter: {
-    card: "summary_large_image",
-    site: SITE.twitter,
-    creator: SITE.twitter,
-    title: `${SITE.name} — ${SITE.tagline}`,
-    description: SITE.description,
-  },
+  // The evergreen card every page inherits unless it says otherwise.
+  ...shareCard({ title: `${SITE.name} — ${SITE.tagline}`, description: SITE.description }),
   robots: {
     index: true,
     follow: true,

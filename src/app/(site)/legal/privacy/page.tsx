@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
+import { shareCard } from "@/lib/metadata";
+
+const DESCRIPTION = `How ${SITE.name} handles the email address you give the pre-launch list.`;
 
 export const metadata: Metadata = {
   title: "Privacy policy",
-  description: `How ${SITE.name} handles the email address you give the pre-launch list.`,
+  description: DESCRIPTION,
   alternates: { canonical: "/legal/privacy" },
+  // The page title carries the brand, since the card is read without the
+  // %s · oobee bets template the <title> gets.
+  ...shareCard({
+    title: `Privacy policy · ${SITE.name}`,
+    description: DESCRIPTION,
+    path: "/legal/privacy",
+  }),
 };
 
 /**
