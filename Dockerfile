@@ -18,6 +18,18 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# NEXT_PUBLIC_* is substituted into the client bundle by `next build`, so these
+# have to exist here — at runtime they are already baked and setting them does
+# nothing. Without the ARG lines the --build-arg values compose passes are
+# accepted and silently dropped, and lib/site.ts falls back to its hardcoded
+# production URL: every canonical, OG tag and sitemap entry a preview build
+# emits then claims to be oobeebets.com.
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_SLATE_TZ
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV NEXT_PUBLIC_SLATE_TZ=${NEXT_PUBLIC_SLATE_TZ}
+
 # Build-time DATABASE_URL is a placeholder that points at nothing, and it stays
 # that way: an image must build without a database in reach. Dynamic routes
 # genuinely do not connect here, but revalidated ones are prerendered now and
