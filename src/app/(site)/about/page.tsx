@@ -44,8 +44,8 @@ export default async function AboutPage() {
             <p className="mt-3">
               So we made it checkable. Every pick is logged with its price and stake
               before the game starts, and settled against the real final score after.
-              The losses sit on the same page as the wins, permanently, and the win rate
-              is the arithmetic of everything we published — not a highlight reel.
+              The losses count the same as the wins, permanently, and the win rate is
+              the arithmetic of everything we published — not a highlight reel.
             </p>
           </div>
 
@@ -110,12 +110,9 @@ export default async function AboutPage() {
       <Reveal delay={0.15}>
         <div className="mt-12 flex flex-col gap-3 sm:flex-row">
           <Button asChild>
-            <Link href="/track-record">
-              See the full record <ArrowRight aria-hidden="true" />
+            <Link href="/picks">
+              See today&apos;s picks <ArrowRight aria-hidden="true" />
             </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/picks">See today&apos;s picks</Link>
           </Button>
         </div>
       </Reveal>

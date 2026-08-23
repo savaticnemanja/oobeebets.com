@@ -23,13 +23,11 @@ export function appUrl(path = "/"): string {
 
 export const NAV_PUBLIC = [
   { href: "/top-picks", label: t().nav.topPicks },
-  { href: "/track-record", label: t().nav.trackRecord },
   { href: "/about", label: t().nav.about },
 ] as const;
 
 export const NAV_APP = [
   { href: "/picks", label: t().nav.picks },
-  { href: "/track-record", label: t().nav.trackRecord },
   { href: "/account", label: t().nav.account },
 ] as const;
 

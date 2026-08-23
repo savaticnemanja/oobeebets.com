@@ -70,12 +70,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     // Headline stats come off settled picks, and the seat count off the board.
     { url: SITE.url, lastModified: newest(settledAt, publishedAt), changeFrequency: "daily", priority: 1 },
-    {
-      url: `${SITE.url}/track-record`,
-      lastModified: newest(settledAt),
-      changeFrequency: "hourly",
-      priority: 0.9,
-    },
     { url: `${SITE.url}/about`, lastModified: built, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE.url}/legal/terms`, lastModified: built, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE.url}/legal/privacy`, lastModified: built, changeFrequency: "yearly", priority: 0.2 },

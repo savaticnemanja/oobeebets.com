@@ -34,7 +34,6 @@ export const en = {
   /** Site chrome. */
   nav: {
     topPicks: "Our Top Picks",
-    trackRecord: "Track record",
     about: "About",
     picks: "Picks",
     account: "Account",

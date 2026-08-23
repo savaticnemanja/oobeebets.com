@@ -72,9 +72,6 @@ export default async function HomePage() {
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/track-record">Check the record first</Link>
-            </Button>
           </div>
         </Reveal>
 

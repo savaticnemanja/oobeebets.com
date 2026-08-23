@@ -19,7 +19,6 @@ export function SiteFooter() {
               </h2>
               <ul className="mt-3 space-y-2">
                 <li><Link href="/picks" className="text-fg-muted hover:text-fg">Picks</Link></li>
-                <li><Link href="/track-record" className="text-fg-muted hover:text-fg">Track record</Link></li>
               </ul>
             </div>
             <div>

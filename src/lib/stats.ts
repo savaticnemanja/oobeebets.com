@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { picks } from "@/db/schema";
 import type { Pick } from "@/db/schema";
-import { and, gte, isNotNull, sql } from "drizzle-orm";
+import { and, gte, sql } from "drizzle-orm";
 import { pickProfit, countsTowardRate, MIN_SAMPLE_FOR_RATE } from "./settlement";
 import { startOfSlateDay, slateDateString } from "./slate-date";
 
@@ -185,21 +185,6 @@ export async function getTrackRecord(): Promise<TrackRecord> {
   }
 
   return record;
-}
-
-/** All published picks, newest first, for the public history table. */
-export async function getSettledHistory(limit = 200): Promise<Pick[]> {
-  return db
-    .select()
-    .from(picks)
-    .where(
-      and(
-        isNotNull(picks.settledAt),
-        publishedSlate,
-      ),
-    )
-    .orderBy(sql`${picks.slateDate} desc, ${picks.rank} asc`)
-    .limit(limit);
 }
 
 /** Headline numbers for the landing page strip. Cheap aggregate query. */
