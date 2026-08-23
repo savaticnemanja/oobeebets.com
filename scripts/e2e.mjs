@@ -2,6 +2,11 @@
  * Browser-driven flow tests for the paths that mutate money or the public
  * record. These exercise real server actions, not just rendering.
  *
+ * Beta has no paid plans, so there is no subscribe flow to drive from the UI.
+ * The subscription assertions that used to live in section 1 belong with the
+ * pricing page and should come back with it — the billing backend is still
+ * there, just unwired.
+ *
  *   npm run e2e
  *
  * Leaves the database as it found it (test user removed, settled pick reopened).
@@ -9,9 +14,24 @@
 import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { chromium } from "playwright";
+// Same rule as scripts/verify.mjs: how much a viewer should see is asked of
+// the app's gate, never restated here, so a product change to the tiers can
+// not leave a stale number behind. Run under tsx — see package.json.
+import { visibleRankLimit } from "../src/lib/gating.ts";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+
+/** What a signed-out / unsubscribed visitor is entitled to on today's board. */
+const [{ date: latestRaw }] = await sql`select max(date) as date from slates`;
+// max() on a date column can come back as a Date; compare as YYYY-MM-DD so the
+// driver never re-interprets it in another timezone.
+const latestSlate =
+  latestRaw instanceof Date ? latestRaw.toISOString().slice(0, 10) : latestRaw;
+const [{ n: slateSize }] = await sql`
+  select count(*)::int as n from picks where slate_date = ${latestSlate}
+`;
+const freeBoard = Math.min(visibleRankLimit(null), slateSize);
 
 let failures = 0;
 const check = (cond, name, extra = "") => {
@@ -50,9 +70,9 @@ async function hydrated(page, selector = "form") {
 
 const browser = await chromium.launch();
 
-/* ------------------------------------------------- 1. signup -> subscribe */
+/* -------------------------------------------------- 1. signup -> the board */
 
-console.log("\nSignup and subscription");
+console.log("\nSignup and the free board");
 
 const testEmail = `e2e-${Date.now()}@example.com`;
 {
@@ -77,35 +97,28 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(Boolean(created), "user row created");
   check(created?.role === "user", "new users are not admins", `role=${created?.role}`);
 
-  // A brand-new account sees exactly the free Top Pick of the Day.
-  let html = await page.content();
-  let unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  check(unlocked.size === 1, "new account sees 1 free pick", `unlocked=${unlocked.size}`);
-
-  // Subscribe to Pro through the pricing page.
-  await page.goto(`${APP_URL}/pricing`);
-  await hydrated(page);
-  await page.locator('form:has(input[value="pro"]) button[type="submit"]').first().click();
-  await page.waitForURL("**/picks**", { timeout: 15000 });
-
-  const [sub] = await sql`
-    select tier, status, price_cents from subscriptions
-    where user_id = ${created.id}
-  `;
-  check(sub?.tier === "pro", "subscription created on the right tier", `tier=${sub?.tier}`);
+  // A brand-new account gets the whole free board immediately — no plan step.
+  const html = await page.content();
+  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
+  const overServed = [...unlocked].filter((r) => r > freeBoard);
   check(
-    sub?.status === "trialing",
-    "first subscription starts as a trial",
-    `status=${sub?.status}`,
+    unlocked.size === freeBoard && overServed.length === 0,
+    "new account sees the free board",
+    `unlocked=${unlocked.size}/${freeBoard}` +
+      (overServed.length ? ` OVER-SERVED:${overServed.join(",")}` : ""),
   );
 
-  const [afterTrial] = await sql`select has_used_trial from users where id = ${created.id}`;
-  check(afterTrial?.has_used_trial === true, "has_used_trial is set (one trial ever)");
+  // No paid plans during beta, but /pricing is still linked from the wild.
+  // It must land on the board rather than 404 — a prerendered redirect page
+  // is the kind of thing a build quietly gets wrong.
+  await page.goto(`${APP_URL}/pricing`);
+  await page.waitForURL("**/picks**", { timeout: 15000 });
+  check(page.url().includes("/picks"), "/pricing redirects to the board", page.url());
 
-  await page.goto(`${APP_URL}/picks`);
-  html = await page.content();
-  unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  check(unlocked.size === 15, "Pro unlocks 15 picks", `unlocked=${unlocked.size}`);
+  const [subs] = await sql`
+    select count(*)::int as n from subscriptions where user_id = ${created.id}
+  `;
+  check(subs.n === 0, "no subscription is created during beta", `subscriptions=${subs.n}`);
 
   await ctx.close();
 }

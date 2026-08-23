@@ -6,12 +6,12 @@ import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
+import { gatePicks, isLocked, type UnlockedPick } from "@/lib/gating";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { SlateDatePicker } from "@/components/slate-date-picker";
-import { FREE_VISIBLE_RANKS } from "@/lib/tiers";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 
@@ -42,17 +42,23 @@ export default async function PicksPage({
   // Admins preview drafts; nobody else sees an unpublished slate exists.
   const visible = Boolean(slate?.publishedAt) || Boolean(auth?.isAdmin);
 
-  // Beta: one free tier for everyone — top 15, no locked/paid split.
   const rows: Pick[] = visible
     ? await db
         .select()
         .from(picksTable)
         .where(eq(picksTable.slateDate, date))
         .orderBy(asc(picksTable.rank))
-        .limit(FREE_VISIBLE_RANKS)
     : [];
 
-  const view = rows.map((p) => ({ ...p, locked: false as const }));
+  // Still THE gate: the only path from the picks table to a response body.
+  // Beta collapses every tier to the same free limit inside visibleRankLimit,
+  // so routing through the gate costs nothing here and keeps its admin bypass
+  // — capping the query instead cost admins the rest of the board when
+  // previewing a draft slate. Locked picks are dropped rather than rendered:
+  // beta has no plan to upsell anyone to, and a stripped pick shows nothing.
+  const view = gatePicks(rows, auth?.tier ?? null, auth?.isAdmin ?? false).filter(
+    (p): p is UnlockedPick => !isLocked(p),
+  );
   const [top, ...rest] = view;
 
   const availableDates = await db

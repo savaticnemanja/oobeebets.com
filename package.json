@@ -12,8 +12,8 @@
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "verify": "node --env-file-if-exists=.env scripts/verify.mjs",
-    "e2e": "node --env-file-if-exists=.env scripts/e2e.mjs",
+    "verify": "tsx --env-file-if-exists=.env scripts/verify.mjs",
+    "e2e": "tsx --env-file-if-exists=.env scripts/e2e.mjs",
     "shots": "node --env-file-if-exists=.env scripts/shots.mjs"
   },
   "dependencies": {
