@@ -57,6 +57,7 @@ jobs:
       # verify and e2e both drive a real server, so start one and wait for the
       # health endpoint rather than sleeping a fixed number of seconds.
       - name: Start the app
+        id: app
         run: |
           npm start &
           for i in $(seq 1 60); do
@@ -68,8 +69,14 @@ jobs:
 
       # Settlement maths, tier gating, admin access control.
       - run: npm run verify
-      # Signup -> subscribe, settle -> public record, first-visit stability.
+
+      # Signup -> the free board, settle -> public record, first-visit stability.
+      # Runs even when verify failed, as long as there is a server to drive it:
+      # both suites read the same product rules, so a product change tends to
+      # break both, and learning that one round-trip at a time is what made the
+      # 2026-08-23 beta break look smaller than it was.
       - run: npm run e2e
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
 
   deploy:
     needs: checks

@@ -5,13 +5,21 @@
  *   npm run build && npm start &
  *   npm run verify
  *
- * Checks the three things that would actually cost money if they broke:
+ * Checks the things that would actually cost money if they broke:
  *   1. Settlement maths — every stat on the site is a sum of this.
- *   2. Tier gating — locked picks must not be in the response at all.
+ *   2. Tier gating — locked picks must not be in the response at all,
+ *      and the gate's own contract, called directly.
  *   3. Access control — /admin must not be reachable by a normal user.
+ *   4. Session handling — an expired cookie drops to the free view.
  */
 import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
+// The app's own gate, imported rather than re-described. Everything this file
+// expects a viewer to see is computed from it, so a change to what a tier
+// unlocks can never leave a stale number behind in here. (It did once: the
+// 2026-08-23 beta collapsed every tier to one free limit and these checks
+// still asserted 1/6/15/all.) Run under tsx — see package.json.
+import { gatePicks, visibleRankLimit } from "../src/lib/gating.ts";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
@@ -102,44 +110,122 @@ async function sessionFor(email) {
   return { token, cleanup: () => sql`delete from sessions where token_hash = ${tokenHash}` };
 }
 
-const EXPECT = {
-  "free@example.com": 1,
-  "base@example.com": 6,
-  "pro@example.com": 15,
-  "elite@example.com": total,
-  "owner@oobeebets.com": total,
-};
+/**
+ * Rank comes from the rendered aria-label, not from matching selection text:
+ * the seed reuses selections across ranks, so text matching false-positives.
+ * A locked card's label reads "Pick N, locked" — the colon is what makes this
+ * count only what the viewer was actually served.
+ */
+const servedRanks = (html) =>
+  new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
 
-for (const [email, expected] of Object.entries(EXPECT)) {
-  const { token, cleanup } = await sessionFor(email);
-  const html = await (
-    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
-  ).text();
-
-  // Rank comes from the rendered aria-label, not from matching selection text:
-  // the seed reuses selections across ranks, so text matching false-positives.
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  const over = [...unlocked].filter((r) => r > expected);
+/** Ranks 1..expected, no more and no fewer. */
+function rankDiff(served, expected) {
+  const over = [...served].filter((r) => r > expected);
   const missing = [];
-  for (let r = 1; r <= expected; r++) if (!unlocked.has(r)) missing.push(r);
+  for (let r = 1; r <= expected; r++) if (!served.has(r)) missing.push(r);
+  return { over, missing, ok: over.length === 0 && missing.length === 0 };
+}
 
+const reportRanks = (name, served, expected) => {
+  const { over, missing, ok } = rankDiff(served, expected);
   check(
-    over.length === 0 && missing.length === 0,
-    email.padEnd(22),
-    `unlocked=${unlocked.size}/${expected}` +
+    ok,
+    name.padEnd(22),
+    `unlocked=${served.size}/${expected}` +
       (over.length ? ` OVER-SERVED:${over.join(",")}` : "") +
       (missing.length ? ` MISSING:${missing.join(",")}` : ""),
   );
+};
+
+/**
+ * Who to test is a fixed list; how much each should see is not. Tiers come
+ * from the database (whatever getLiveSubscription would resolve), the limit
+ * comes from the app, and the slate size caps both — so this holds on a
+ * one-free-tier beta and on a tiered main without editing.
+ */
+const DEMO_EMAILS = [
+  "free@example.com",
+  "base@example.com",
+  "pro@example.com",
+  "elite@example.com",
+  "admin@oobeebets.com",
+  "owner@oobeebets.com",
+];
+
+const viewers = await sql`
+  -- distinct on: a second live subscription row would otherwise test the same
+  -- account twice and make the count check below look like a missing user.
+  select distinct on (u.email) u.email, u.role, s.tier
+    from users u
+    left join subscriptions s
+      on s.user_id = u.id
+     and s.status in ('trialing','active','past_due')
+     and s.current_period_end > now()
+   where u.email = any(${DEMO_EMAILS})
+   order by u.email
+`;
+
+check(
+  viewers.length === DEMO_EMAILS.length,
+  "every demo account exists",
+  `${viewers.length}/${DEMO_EMAILS.length}`,
+);
+
+/** Mirrors gatePicks' admin bypass; the rank limit itself is asked of the app. */
+const expectedFor = ({ role, tier }) =>
+  role === "admin" || role === "owner"
+    ? total
+    : Math.min(visibleRankLimit(tier ?? null), total);
+
+for (const viewer of viewers) {
+  const { token, cleanup } = await sessionFor(viewer.email);
+  const html = await (
+    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
+  ).text();
+  reportRanks(viewer.email, servedRanks(html), expectedFor(viewer));
   await cleanup();
 }
 
 {
   const html = await (await fetch(`${APP_URL}/picks`)).text();
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
+  reportRanks("(anonymous)", servedRanks(html), Math.min(visibleRankLimit(null), total));
+}
+
+/* ------------------------------------------------ 2b. the gate's own contract */
+
+console.log("\nGate contract (gatePicks, called directly)");
+
+{
+  // Deliberately five ranks past whatever the free limit is, so there is always
+  // something locked to inspect however the tiers are configured.
+  const beyond = visibleRankLimit(null) + 5;
+  const sample = Array.from({ length: beyond }, (_, i) => ({
+    id: `p${i + 1}`,
+    rank: i + 1,
+    sport: "soccer",
+    league: "EPL",
+    startsAt: new Date(0),
+    market: "moneyline",
+    selection: "SHOULD-NOT-LEAK",
+    price: -110,
+    book: "SHOULD-NOT-LEAK",
+    reasoning: "SHOULD-NOT-LEAK",
+    status: "pending",
+  }));
+
+  const gated = gatePicks(sample, null, false);
+  const locked = gated.filter((p) => p.locked);
+  const leaked = locked.filter((p) =>
+    ["selection", "price", "book", "reasoning"].some((k) => k in p),
+  );
+  check(locked.length > 0, "sample actually produces locked picks", `locked=${locked.length}`);
+  check(leaked.length === 0, "locked picks carry metadata only", `leaked=${leaked.length}`);
+
+  // The bypass the picks page depends on when an admin previews a draft slate.
   check(
-    unlocked.size === 1 && unlocked.has(1),
-    "(anonymous)".padEnd(22),
-    `unlocked=${unlocked.size}/1`,
+    gatePicks(sample, null, true).every((p) => !p.locked),
+    "admins bypass the gate entirely",
   );
 }
 
@@ -202,8 +288,13 @@ console.log("\nSession handling");
   const html = await (
     await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
   ).text();
-  const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
-  check(unlocked.size === 1, "expired session falls back to free", `unlocked=${unlocked.size}/1`);
+  const anonLimit = Math.min(visibleRankLimit(null), total);
+  const served = servedRanks(html);
+  check(
+    rankDiff(served, anonLimit).ok,
+    "expired session falls back to free",
+    `unlocked=${served.size}/${anonLimit}`,
+  );
   await sql`delete from sessions where token_hash = ${tokenHash}`;
 
   const garbage = await fetch(`${APP_URL}/picks`, {
