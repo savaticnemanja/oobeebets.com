@@ -15,6 +15,13 @@
       "when": 1787520453435,
       "tag": "0001_yielding_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787522149250,
+      "tag": "0002_deferrable_rank_constraint",
+      "breakpoints": true
     }
   ]
 }

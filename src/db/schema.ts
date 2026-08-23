@@ -145,6 +145,13 @@ export const picks = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // NOTE: declared here as a plain index because drizzle-kit's schema
+    // builder can't express DEFERRABLE — but in the live DB, as of migration
+    // 0002, this is actually a DEFERRABLE INITIALLY DEFERRED unique
+    // constraint (same name), which is what lets reorderPicksAction commit a
+    // whole new rank ordering in one transaction. Don't `db:generate` a
+    // "fix" for this line — it would silently drop back to a non-deferrable
+    // index and break drag-and-drop reordering.
     uniqueIndex("picks_slate_rank_unique").on(t.slateDate, t.rank),
     index("picks_slate_idx").on(t.slateDate),
     index("picks_status_idx").on(t.status),

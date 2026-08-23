@@ -61,6 +61,23 @@ export function isValidSlateDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));
 }
 
+/**
+ * Interprets a `<input type="datetime-local">` value ("YYYY-MM-DDTHH:mm", no
+ * timezone) as wall-clock time in `timeZone` and returns the matching UTC
+ * instant.
+ *
+ * `datetime-local` carries no timezone of its own — `new Date(value)` reads
+ * it in whatever zone the *server* process happens to run in, which is UTC
+ * on most deployments. An admin typing a 7pm ET kickoff would silently get
+ * stored as 7pm UTC (3pm ET) instead. This forces the one timezone kickoffs
+ * are actually entered in, regardless of where the app is deployed.
+ */
+export function zonedTimeToUtc(local: string, timeZone: string = SLATE_TIMEZONE): Date {
+  const naiveUtc = new Date(`${local}:00Z`);
+  const offset = tzOffsetMinutes(naiveUtc, timeZone);
+  return new Date(naiveUtc.getTime() - offset * 60000);
+}
+
 // formatSlateDate lives in lib/i18n/format.ts. This module is the slate-day
 // calendar — which UTC instant a betting day starts at — and that is fixed by
 // the product, not by the reader's locale.

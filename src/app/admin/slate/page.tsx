@@ -5,6 +5,7 @@ import { PickComposer } from "@/components/admin/pick-composer";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
+import { VISIBLE_PICKS } from "@/lib/board";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Publish slate" };
@@ -27,14 +28,13 @@ export default async function AdminSlatePage({
 
   const slate = slateRow[0] ?? null;
   const published = Boolean(slate?.publishedAt);
-  const usedRanks = rows.map((r) => r.rank);
 
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Publish slate</h1>
       <p className="mt-1.5 text-sm text-fg-muted">
-        Add picks in rank order. Rank 1 is the best play of the day and is free to
-        everyone; 1&ndash;6 is Base, 1&ndash;15 Pro, all 30 Elite.
+        Rank 1 is the best play of the day. Add picks in any order, then drag rows
+        below to set the final rank — the top {VISIBLE_PICKS} are free to everyone.
       </p>
 
       <PublishBar
@@ -46,9 +46,9 @@ export default async function AdminSlatePage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="lg:sticky lg:top-32 lg:self-start">
-          <PickComposer date={date} usedRanks={usedRanks} disabled={published} />
+          <PickComposer date={date} pickCount={rows.length} disabled={published} />
         </div>
-        <SlatePickList picks={rows} published={published} />
+        <SlatePickList date={date} picks={rows} published={published} />
       </div>
     </div>
   );
