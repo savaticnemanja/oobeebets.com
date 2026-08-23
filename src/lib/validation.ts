@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PICKS_PER_SLATE } from "./board";
+import type { Sport } from "@/db/schema";
 
 /** Rejects the handful of passwords that make up most credential-stuffing hits. */
 const COMMON_PASSWORDS = new Set([
@@ -44,12 +44,21 @@ export const sportValues = [
 
 export const marketValues = ["moneyline", "spread", "total", "prop"] as const;
 
+/** The only leagues the composer publishes to right now. */
+export const leagueValues = ["MLB", "NFL"] as const;
+
+/** Sport is derived from league, never submitted independently — one less
+ * thing a form (or a forged request) can get out of sync. */
+export const LEAGUE_SPORT: Record<(typeof leagueValues)[number], Sport> = {
+  MLB: "baseball",
+  NFL: "football",
+};
+
 export const pickSchema = z.object({
   slateDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-  rank: z.coerce.number().int().min(1).max(PICKS_PER_SLATE),
-  sport: z.enum(sportValues),
-  league: z.string().trim().min(1, "League is required").max(80),
-  event: z.string().trim().min(1, "Game is required").max(200),
+  league: z.enum(leagueValues),
+  awayTeam: z.string().trim().min(1, "Away team is required").max(90),
+  homeTeam: z.string().trim().min(1, "Home team is required").max(90),
   startsAt: z.string().min(1, "Kick-off time is required"),
   market: z.enum(marketValues),
   selection: z.string().trim().min(1, "Selection is required").max(120),
@@ -57,7 +66,6 @@ export const pickSchema = z.object({
     .number()
     .int()
     .refine((n) => n >= 100 || n <= -100, "American odds: >= +100 or <= -100"),
-  book: z.string().trim().max(60).optional().or(z.literal("")),
   units: z.coerce.number().min(0.1).max(10).default(1),
   confidence: z.coerce.number().int().min(0).max(100).optional(),
   evPct: z.coerce.number().min(-100).max(100).optional(),

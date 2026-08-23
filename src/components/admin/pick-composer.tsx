@@ -16,54 +16,51 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { createPickAction } from "@/app/actions/admin";
-import { marketValues, sportValues } from "@/lib/validation";
+import { leagueValues, marketValues } from "@/lib/validation";
 import { PICKS_PER_SLATE, VISIBLE_PICKS } from "@/lib/board";
 
+const SIDES = ["Over", "Under"] as const;
+
 /**
- * Publishing 30 picks is a daily chore, so this form is built for speed:
- * it keeps its sport/league/book values between submissions, auto-advances the
- * rank, and returns focus to the first field. One pick should take seconds.
+ * Publishing picks is a daily chore, so this form is built for speed: it
+ * keeps league/market between submissions and returns focus to the first
+ * field. Rank is never typed in — a new pick always lands on the next free
+ * slot; reordering happens by dragging rows in the list below.
  */
 export function PickComposer({
   date,
-  usedRanks,
+  pickCount,
   disabled,
 }: {
   date: string;
-  usedRanks: number[];
+  pickCount: number;
   disabled: boolean;
 }) {
   const [state, action, pending] = useActionState(createPickAction, null);
   const formRef = React.useRef<HTMLFormElement>(null);
   const firstFieldRef = React.useRef<HTMLInputElement>(null);
 
-  const nextRank = React.useMemo(() => {
-    for (let i = 1; i <= PICKS_PER_SLATE; i++) if (!usedRanks.includes(i)) return i;
-    return PICKS_PER_SLATE;
-  }, [usedRanks]);
-
-  const [rank, setRank] = React.useState(nextRank);
-  const [sport, setSport] = React.useState<string>("soccer");
+  const [league, setLeague] = React.useState<(typeof leagueValues)[number]>("MLB");
   const [market, setMarket] = React.useState<string>("total");
+  const [side, setSide] = React.useState<(typeof SIDES)[number]>("Over");
+  const [line, setLine] = React.useState("");
 
-  // Auto-advance to the next free rank after a save, while still letting the
-  // admin type a rank by hand. This is React's documented "adjust state when a
-  // prop changes" pattern — a render-phase set, not an effect, so there is no
-  // extra commit and no flash of the stale rank.
-  const [lastAutoRank, setLastAutoRank] = React.useState(nextRank);
-  if (lastAutoRank !== nextRank) {
-    setLastAutoRank(nextRank);
-    setRank(nextRank);
+  // Render-phase reset (not inside the effect below) so clearing `line` on a
+  // successful submit doesn't cause an extra, avoidable render pass.
+  const [lastHandledState, setLastHandledState] = React.useState(state);
+  if (state !== lastHandledState) {
+    setLastHandledState(state);
+    if (state?.ok) setLine("");
   }
 
   React.useEffect(() => {
     if (state?.ok) {
       toast.success(state.message ?? "Pick added");
-      // Clear only the game-specific fields; sport/league/book persist because
+      // Clear only the game-specific fields; league/market persist because
       // consecutive picks usually share them.
       const form = formRef.current;
       if (form) {
-        for (const name of ["event", "selection", "price", "confidence", "evPct", "reasoning"]) {
+        for (const name of ["awayTeam", "homeTeam", "selection", "price", "confidence", "evPct", "reasoning"]) {
           const el = form.elements.namedItem(name) as HTMLInputElement | null;
           if (el) el.value = "";
         }
@@ -75,7 +72,10 @@ export function PickComposer({
   }, [state]);
 
   const fe = state && !state.ok ? state.fieldErrors : undefined;
-  const visible = rank <= VISIBLE_PICKS;
+  const nextPick = pickCount + 1;
+  const visible = nextPick <= VISIBLE_PICKS;
+  const isTotal = market === "total";
+  const ouSelection = line.trim() ? `${side} ${line.trim()}` : "";
 
   if (disabled) {
     return (
@@ -96,78 +96,69 @@ export function PickComposer({
       <CardHeader>
         <CardTitle>Add a pick</CardTitle>
         <CardDescription>
-          Rank {rank} is{" "}
-          <span className="text-brand">{visible ? "visible to everyone" : "admin-only preview"}</span>
+          {pickCount >= PICKS_PER_SLATE ? (
+            "Slate is full"
+          ) : (
+            <>
+              Pick {nextPick} of {PICKS_PER_SLATE} will be{" "}
+              <span className="text-brand">{visible ? "visible to everyone" : "admin-only preview"}</span>
+            </>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form ref={formRef} action={action} className="space-y-3">
           <input type="hidden" name="slateDate" value={date} />
-          <input type="hidden" name="sport" value={sport} />
           <input type="hidden" name="market" value={market} />
+          {isTotal && <input type="hidden" name="selection" value={ouSelection} />}
+
+          <div>
+            <Label htmlFor="league-trigger">League</Label>
+            <Select value={league} onValueChange={(v) => setLeague(v as typeof league)}>
+              <SelectTrigger id="league-trigger" className="mt-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {leagueValues.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <input type="hidden" name="league" value={league} />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="rank">Rank</Label>
+              <Label htmlFor="awayTeam">Away team</Label>
               <Input
-                id="rank"
-                name="rank"
-                type="number"
-                min={1}
-                max={PICKS_PER_SLATE}
+                ref={firstFieldRef}
+                id="awayTeam"
+                name="awayTeam"
                 required
-                value={rank}
-                onChange={(e) => setRank(Number(e.target.value))}
+                placeholder="Las Vegas Aces"
                 className="mt-1.5"
-                aria-invalid={Boolean(fe?.rank)}
+                aria-invalid={Boolean(fe?.awayTeam)}
               />
-              {fe?.rank && <p className="mt-1 text-xs text-miss">{fe.rank[0]}</p>}
+              {fe?.awayTeam && <p className="mt-1 text-xs text-miss">{fe.awayTeam[0]}</p>}
             </div>
             <div>
-              <Label htmlFor="sport-trigger">Sport</Label>
-              <Select value={sport} onValueChange={setSport}>
-                <SelectTrigger id="sport-trigger" className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sportValues.map((s) => (
-                    <SelectItem key={s} value={s} className="capitalize">
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="homeTeam">Home team</Label>
+              <Input
+                id="homeTeam"
+                name="homeTeam"
+                required
+                placeholder="New York Liberty"
+                className="mt-1.5"
+                aria-invalid={Boolean(fe?.homeTeam)}
+              />
+              {fe?.homeTeam && <p className="mt-1 text-xs text-miss">{fe.homeTeam[0]}</p>}
             </div>
           </div>
 
           <div>
-            <Label htmlFor="league">League</Label>
-            <Input
-              id="league"
-              name="league"
-              required
-              placeholder="MLB"
-              className="mt-1.5"
-              aria-invalid={Boolean(fe?.league)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="event">Game</Label>
-            <Input
-              ref={firstFieldRef}
-              id="event"
-              name="event"
-              required
-              placeholder="New York Liberty vs Las Vegas Aces"
-              className="mt-1.5"
-              aria-invalid={Boolean(fe?.event)}
-            />
-            {fe?.event && <p className="mt-1 text-xs text-miss">{fe.event[0]}</p>}
-          </div>
-
-          <div>
-            <Label htmlFor="startsAt">Kick-off (local time)</Label>
+            <Label htmlFor="startsAt">Kick-off (Eastern time)</Label>
             <Input
               id="startsAt"
               name="startsAt"
@@ -210,18 +201,49 @@ export function PickComposer({
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="selection">Selection</Label>
-            <Input
-              id="selection"
-              name="selection"
-              required
-              placeholder="Over 177.5"
-              className="mt-1.5"
-              aria-invalid={Boolean(fe?.selection)}
-            />
-            {fe?.selection && <p className="mt-1 text-xs text-miss">{fe.selection[0]}</p>}
-          </div>
+          {isTotal ? (
+            <div>
+              <Label>Selection</Label>
+              <div className="mt-1.5 grid grid-cols-2 gap-3">
+                <Select value={side} onValueChange={(v) => setSide(v as typeof side)}>
+                  <SelectTrigger aria-label="Over or under">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SIDES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  step="0.5"
+                  placeholder="217.5"
+                  aria-label="Line"
+                  value={line}
+                  onChange={(e) => setLine(e.target.value)}
+                  className="num"
+                  required
+                />
+              </div>
+              {fe?.selection && <p className="mt-1 text-xs text-miss">{fe.selection[0]}</p>}
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="selection">Selection</Label>
+              <Input
+                id="selection"
+                name="selection"
+                required
+                placeholder="Dundee United +1.5"
+                className="mt-1.5"
+                aria-invalid={Boolean(fe?.selection)}
+              />
+              {fe?.selection && <p className="mt-1 text-xs text-miss">{fe.selection[0]}</p>}
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -231,7 +253,7 @@ export function PickComposer({
                 name="units"
                 type="number"
                 step="0.25"
-                min="0.1"
+                min="0.25"
                 max="10"
                 defaultValue="1"
                 className="mt-1.5 num"
@@ -263,11 +285,6 @@ export function PickComposer({
           </div>
 
           <div>
-            <Label htmlFor="book">Book (optional)</Label>
-            <Input id="book" name="book" placeholder="DraftKings" className="mt-1.5" />
-          </div>
-
-          <div>
             <Label htmlFor="reasoning">Reasoning (optional)</Label>
             <Textarea
               id="reasoning"
@@ -278,13 +295,13 @@ export function PickComposer({
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full" disabled={pending || pickCount >= PICKS_PER_SLATE}>
             {pending ? (
               <Loader2 className="animate-spin" aria-hidden="true" />
             ) : (
               <Plus aria-hidden="true" />
             )}
-            Add pick {rank}
+            Add pick
           </Button>
         </form>
       </CardContent>

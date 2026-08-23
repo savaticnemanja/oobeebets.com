@@ -8,11 +8,13 @@ import type { AuthContext } from "@/lib/auth";
 import { canManageRole, requireAdmin, requireOwner, revokeAllSessions } from "@/lib/auth";
 import {
   fieldErrorsFrom,
+  LEAGUE_SPORT,
   pickSchema,
   settleSchema,
   type ActionState,
 } from "@/lib/validation";
-import { isValidSlateDate } from "@/lib/slate-date";
+import { isValidSlateDate, zonedTimeToUtc } from "@/lib/slate-date";
+import { PICKS_PER_SLATE } from "@/lib/board";
 import { z } from "zod";
 
 async function audit(
@@ -54,11 +56,15 @@ export async function createPickAction(
   }
   const d = parsed.data;
 
-  const startsAt = new Date(d.startsAt);
+  const startsAt = zonedTimeToUtc(d.startsAt);
   if (Number.isNaN(startsAt.getTime())) {
     return { ok: false, error: "Invalid kick-off time", fieldErrors: { startsAt: ["Invalid date"] } };
   }
 
+  // Rank is never typed in — a new pick always lands on the lowest free rank
+  // (filling a gap left by a deleted pick, or appending after the last one).
+  // Reordering happens afterward by dragging rows in the list.
+  let nextRank = 0;
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -66,17 +72,30 @@ export async function createPickAction(
         .values({ date: d.slateDate })
         .onConflictDoNothing({ target: slates.date });
 
+      const free = await tx.execute<{ rank: number | null }>(sql`
+        select min(t.rank) as rank
+        from generate_series(1, ${PICKS_PER_SLATE}) as t(rank)
+        where not exists (
+          select 1 from ${picks} p
+          where p.slate_date = ${d.slateDate} and p.rank = t.rank
+        )
+      `);
+
+      if (free[0]?.rank == null) {
+        throw new Error(`Slate is full — ${PICKS_PER_SLATE} picks max`);
+      }
+      nextRank = free[0].rank;
+
       await tx.insert(picks).values({
         slateDate: d.slateDate,
-        rank: d.rank,
-        sport: d.sport,
+        rank: nextRank,
+        sport: LEAGUE_SPORT[d.league],
         league: d.league,
-        event: d.event,
+        event: `${d.awayTeam} vs ${d.homeTeam}`,
         startsAt,
         market: d.market,
         selection: d.selection,
         price: d.price,
-        book: d.book || null,
         units: String(d.units),
         confidence: d.confidence ?? null,
         evPct: d.evPct !== undefined ? String(d.evPct) : null,
@@ -85,19 +104,62 @@ export async function createPickAction(
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Slate is full")) {
+      return { ok: false, error: msg };
+    }
     if (msg.includes("picks_slate_rank_unique")) {
-      return {
-        ok: false,
-        error: `Rank ${d.rank} is already taken on ${d.slateDate}`,
-        fieldErrors: { rank: ["Already used"] },
-      };
+      return { ok: false, error: "Someone else just added a pick — try again." };
     }
     throw err;
   }
 
-  await audit(actor, "pick.created", "pick", undefined, { slateDate: d.slateDate, rank: d.rank });
+  await audit(actor, "pick.created", "pick", undefined, { slateDate: d.slateDate, rank: nextRank });
   revalidateSlate(d.slateDate);
-  return { ok: true, message: `Rank ${d.rank} added.` };
+  return { ok: true, message: `Rank ${nextRank} added.` };
+}
+
+/* ----------------------------------------------------------- reorder picks */
+
+export async function reorderPicksAction(
+  slateDate: string,
+  orderedIds: string[],
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+
+  if (!isValidSlateDate(slateDate) || orderedIds.some((id) => !z.string().uuid().safeParse(id).success)) {
+    return { ok: false, error: "Bad request" };
+  }
+
+  const [slate] = await db.select().from(slates).where(eq(slates.date, slateDate)).limit(1);
+  if (slate?.publishedAt) {
+    return { ok: false, error: "Slate is published — ranks are locked." };
+  }
+
+  const existing = await db
+    .select({ id: picks.id })
+    .from(picks)
+    .where(eq(picks.slateDate, slateDate));
+  const existingIds = new Set(existing.map((r) => r.id));
+
+  if (orderedIds.length !== existing.length || !orderedIds.every((id) => existingIds.has(id))) {
+    return { ok: false, error: "Pick list is out of date — refresh and try again." };
+  }
+
+  // picks_slate_rank_unique is DEFERRABLE INITIALLY DEFERRED (see schema.ts),
+  // so every row can be set to its final rank in one pass — Postgres only
+  // checks uniqueness once, at commit, instead of after each row.
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(picks)
+        .set({ rank: i + 1, updatedAt: new Date() })
+        .where(eq(picks.id, orderedIds[i]));
+    }
+  });
+
+  await audit(actor, "picks.reordered", "slate", slateDate, { count: orderedIds.length });
+  revalidateSlate(slateDate);
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------ delete pick */
