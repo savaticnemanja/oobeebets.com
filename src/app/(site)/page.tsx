@@ -2,15 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Eye, ListChecks, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatTile } from "@/components/stat-tile";
 import { Reveal, Stagger, StaggerItem, CountUp, PulseDot } from "@/components/ui/motion";
 import { getHeadlineStats } from "@/lib/stats";
-import { getSeatUsage, getSettings } from "@/lib/settings";
-import { PricingGrid } from "@/components/pricing-grid";
 import { SITE, appUrl } from "@/lib/site";
-import { TIERS } from "@/lib/tiers";
-import { getAuth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: `${SITE.name} — ${SITE.tagline}`,
@@ -23,12 +18,7 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [stats, seats, settings, auth] = await Promise.all([
-    getHeadlineStats(),
-    getSeatUsage(),
-    getSettings(),
-    getAuth(),
-  ]);
+  const stats = await getHeadlineStats();
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -38,14 +28,6 @@ export default async function HomePage() {
     description: SITE.description,
     logo: appUrl("/icons/icon-512.png"),
     sameAs: [`https://twitter.com/${SITE.twitter.replace("@", "")}`],
-    makesOffer: Object.values(TIERS).map((t) => ({
-      "@type": "Offer",
-      name: `${SITE.name} ${t.name}`,
-      description: t.tagline,
-      price: (settings.pricing[t.id] / 100).toFixed(2),
-      priceCurrency: "USD",
-      category: "Subscription",
-    })),
   };
 
   return (
@@ -62,7 +44,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-2">
             <PulseDot />
             <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
-              {seats.left > 0 ? `${seats.left} of ${seats.cap} seats left` : "At capacity"}
+              Beta — top 15 free for testers
             </span>
           </div>
         </Reveal>
@@ -76,17 +58,17 @@ export default async function HomePage() {
 
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
-            Thirty picks a day, ranked best to worst. You see the top of the board.
-            Every one is graded against the real final score — the losses stay on the
-            page next to the wins.
+            Thirty picks a day, ranked best to worst. The top 15 are free for everyone
+            during our beta. Every one is graded against the real final score — the
+            losses stay on the page next to the wins.
           </p>
         </Reveal>
 
         <Reveal delay={0.15}>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button size="lg" asChild>
-              <Link href={auth ? "/picks" : "/pricing"}>
-                {auth ? "Today's board" : "See the plans"}
+              <Link href="/picks">
+                Today&apos;s board
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
@@ -132,8 +114,8 @@ export default async function HomePage() {
             <StatTile
               label="Picks daily"
               tone="brand"
-              value="30"
-              sub="Ranked 1 to 30"
+              value="15"
+              sub="Free during the beta"
             />
           </dl>
         </Reveal>
@@ -160,7 +142,7 @@ export default async function HomePage() {
             {
               icon: Eye,
               title: "You see the top",
-              body: "Your plan decides how far down the board you go — 6, 15, or all 30. Every unlocked pick comes with the reasoning.",
+              body: "The top 15 are free for everyone during our beta trial. Every pick comes with the reasoning.",
             },
             {
               icon: ShieldCheck,
@@ -179,43 +161,6 @@ export default async function HomePage() {
             </StaggerItem>
           ))}
         </Stagger>
-      </section>
-
-      {/* ------------------------------------------------------------ pricing */}
-      <section
-        aria-labelledby="pricing-heading"
-        className="mx-auto max-w-6xl px-4 py-16 sm:px-6"
-      >
-        <Reveal>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2
-                id="pricing-heading"
-                className="text-2xl font-semibold tracking-tight sm:text-3xl"
-              >
-                Pick your depth
-              </h2>
-              <p className="mt-2 max-w-lg text-sm text-fg-muted">
-                We cap the room at {seats.cap} members and raise the price instead of
-                growing. Whatever you join at is what you keep paying.
-              </p>
-            </div>
-            {seats.left > 0 && (
-              <Badge variant="brand">{seats.left} seats left</Badge>
-            )}
-          </div>
-        </Reveal>
-
-        <div className="mt-8">
-          <PricingGrid
-            pricing={settings.pricing}
-            seatsLeft={seats.left}
-            trialsEnabled={settings.trialsEnabled}
-            currentTier={auth?.tier ?? null}
-            isAuthed={Boolean(auth)}
-            hasUsedTrial={auth?.user.hasUsedTrial ?? false}
-          />
-        </div>
       </section>
 
       {/* -------------------------------------------------------------- about */}

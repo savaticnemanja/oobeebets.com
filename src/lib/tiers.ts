@@ -69,8 +69,8 @@ export const TIER_ORDER: readonly Tier[] = ["base", "pro", "elite"];
 /** Total picks published per day. Also the elite unlock count. */
 export const PICKS_PER_SLATE = 30;
 
-/** Ranks a free (unsubscribed) visitor can see: the Top Pick of the Day only. */
-export const FREE_VISIBLE_RANKS = 1;
+/** Beta: a single free tier for every visitor — no paid plans. */
+export const FREE_VISIBLE_RANKS = 15;
 
 /** Hard ceiling on live subscriptions. Enforced server-side at checkout. */
 export const DEFAULT_SEAT_CAP = 1000;

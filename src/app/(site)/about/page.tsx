@@ -60,9 +60,8 @@ export default async function AboutPage() {
               worth the money.
             </p>
             <p className="mt-3">
-              Your plan decides how far down that list you go. It&apos;s the same board
-              for everyone; nobody gets a different rank 1. The Top Pick of the Day is
-              free to everyone, every day, subscribed or not.
+              During our beta, the top 15 are free for everyone — same board, same rank
+              1, no plan required.
             </p>
           </div>
 
@@ -75,18 +74,6 @@ export default async function AboutPage() {
               tripling up after a bad Saturday, no &ldquo;max play of the year&rdquo;.
               Flat staking is the only way a track record means anything — variable
               stakes let you hide a losing record behind one lucky big bet.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-fg">
-              Why we cap the room
-            </h2>
-            <p className="mt-2">
-              Lines move when enough money follows them. A pick published to ten thousand
-              people is a worse pick by the time half of them have placed it. We cap
-              membership at 1,000 and raise the price instead of the headcount — and your
-              price freezes the day you join.
             </p>
           </div>
 
@@ -128,7 +115,7 @@ export default async function AboutPage() {
             </Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/pricing">View plans</Link>
+            <Link href="/picks">See today&apos;s picks</Link>
           </Button>
         </div>
       </Reveal>

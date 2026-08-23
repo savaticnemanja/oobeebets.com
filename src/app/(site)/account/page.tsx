@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, CreditCard, Shield } from "lucide-react";
+import { AlertTriangle, Shield, Sparkles } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +65,7 @@ export default async function AccountPage() {
             <div>
               <CardTitle>Subscription</CardTitle>
               <CardDescription>
-                {tier ? tier.tagline : "You're on the free view — Top Pick of the Day only."}
+                {tier ? tier.tagline : "Free during the beta — the top 15 picks, every day."}
               </CardDescription>
             </div>
             {sub ? (
@@ -137,12 +137,13 @@ export default async function AccountPage() {
             </>
           ) : (
             <div className="text-center">
-              <CreditCard className="mx-auto size-8 text-fg-subtle" aria-hidden="true" />
+              <Sparkles className="mx-auto size-8 text-brand" aria-hidden="true" />
               <p className="mt-3 text-sm text-fg-muted">
-                Pick a plan to unlock the board.
+                You have full access to the top 15 picks — free during our beta. No plan
+                needed.
               </p>
               <Button className="mt-4" asChild>
-                <Link href="/pricing">See the plans</Link>
+                <Link href="/picks">See today&apos;s picks</Link>
               </Button>
             </div>
           )}

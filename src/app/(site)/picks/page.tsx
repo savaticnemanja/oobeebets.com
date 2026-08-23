@@ -1,25 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { asc, eq, sql } from "drizzle-orm";
-import { ArrowRight, CalendarDays, Lock } from "lucide-react";
+import { ArrowRight, CalendarDays } from "lucide-react";
 import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
-import { gatePicks, isLocked } from "@/lib/gating";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { SlateDatePicker } from "@/components/slate-date-picker";
-import { TIERS } from "@/lib/tiers";
+import { FREE_VISIBLE_RANKS } from "@/lib/tiers";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Today's picks",
-  description: "The ranked board for today.",
-  // The board is the paid product; keep it out of the index entirely.
+  description: "The top 15 picks for today — free during our beta.",
   robots: { index: false, follow: false },
 };
 
@@ -44,20 +42,18 @@ export default async function PicksPage({
   // Admins preview drafts; nobody else sees an unpublished slate exists.
   const visible = Boolean(slate?.publishedAt) || Boolean(auth?.isAdmin);
 
+  // Beta: one free tier for everyone — top 15, no locked/paid split.
   const rows: Pick[] = visible
     ? await db
         .select()
         .from(picksTable)
         .where(eq(picksTable.slateDate, date))
         .orderBy(asc(picksTable.rank))
+        .limit(FREE_VISIBLE_RANKS)
     : [];
 
-  // THE gate. Locked picks are stripped here, before anything is rendered.
-  const view = gatePicks(rows, auth?.tier ?? null, auth?.isAdmin ?? false);
+  const view = rows.map((p) => ({ ...p, locked: false as const }));
   const [top, ...rest] = view;
-
-  const unlockedCount = view.filter((p) => !isLocked(p)).length;
-  const lockedCount = view.length - unlockedCount;
 
   const availableDates = await db
     .select({ date: slates.date })
@@ -73,8 +69,7 @@ export default async function PicksPage({
           role="status"
           className="mb-6 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand"
         >
-          Account created. The Top Pick of the Day is free — pick a plan to see the rest
-          of the board.
+          Account created. The top 15 picks are free, every day, during our beta.
         </div>
       )}
 
@@ -90,9 +85,7 @@ export default async function PicksPage({
             {slate?.publishedAt ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>
-                  {unlockedCount} of {view.length} unlocked
-                </span>
+                <span>{view.length} picks, free</span>
               </>
             ) : null}
             {!slate?.publishedAt && rows.length > 0 && (
@@ -102,11 +95,6 @@ export default async function PicksPage({
         </div>
 
         <div className="flex items-center gap-2">
-          {auth?.tier ? (
-            <Badge variant="brand">{TIERS[auth.tier].name}</Badge>
-          ) : (
-            <Badge variant="outline">Free</Badge>
-          )}
           {(auth?.tier || auth?.isAdmin) && availableDates.length > 0 && (
             <SlateDatePicker dates={availableDates.map((d) => d.date)} current={date} />
           )}
@@ -144,17 +132,9 @@ export default async function PicksPage({
           {/* ----------------------------------------------------- the board */}
           {rest.length > 0 && (
             <section aria-labelledby="board-heading" className="mt-10">
-              <div className="flex items-center justify-between gap-4">
-                <h2 id="board-heading" className="text-sm font-semibold tracking-tight">
-                  The rest of the board
-                </h2>
-                {lockedCount > 0 && (
-                  <span className="flex items-center gap-1.5 text-xs text-fg-subtle">
-                    <Lock className="size-3" aria-hidden="true" />
-                    {lockedCount} locked
-                  </span>
-                )}
-              </div>
+              <h2 id="board-heading" className="text-sm font-semibold tracking-tight">
+                The rest of the board
+              </h2>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {rest.map((p, i) => (
@@ -164,28 +144,6 @@ export default async function PicksPage({
                 ))}
               </div>
             </section>
-          )}
-
-          {/* --------------------------------------------------- upgrade CTA */}
-          {lockedCount > 0 && (
-            <Reveal>
-              <div className="card-hairline mt-10 border-brand/25 p-6 text-center brand-glow">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  {lockedCount} more {lockedCount === 1 ? "pick" : "picks"} on the board
-                </h2>
-                <p className="mx-auto mt-2 max-w-md text-sm text-fg-muted">
-                  {auth?.tier
-                    ? `You're on ${TIERS[auth.tier].name}. Going up unlocks the rest of today's card and every card after it.`
-                    : "Every plan starts at the top of the board and works down. Pick how far you want to see."}
-                </p>
-                <Button className="mt-5" asChild>
-                  <Link href="/pricing">
-                    {auth?.tier ? "Upgrade plan" : "See the plans"}
-                    <ArrowRight aria-hidden="true" />
-                  </Link>
-                </Button>
-              </div>
-            </Reveal>
           )}
         </>
       )}

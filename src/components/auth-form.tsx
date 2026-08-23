@@ -89,7 +89,7 @@ export function LoginForm({ next }: { next?: string }) {
   );
 }
 
-export function SignupForm({ tier }: { tier?: string }) {
+export function SignupForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     signupAction,
     null,
@@ -106,8 +106,6 @@ export function SignupForm({ tier }: { tier?: string }) {
           {state.error}
         </p>
       )}
-
-      {tier && <input type="hidden" name="tier" value={tier} />}
 
       <div>
         <Label htmlFor="email">Email</Label>
