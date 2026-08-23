@@ -23,18 +23,15 @@ const browser = await chromium.launch();
 
 const SHOTS = [
   { name: "01-landing", path: "/", user: null, full: true },
-  { name: "02-track-record", path: "/track-record", user: null, full: true },
-  { name: "03-pricing", path: "/pricing", user: null, full: false },
-  { name: "04-picks-free", path: "/picks", user: "free@example.com", full: false },
-  { name: "05-picks-base", path: "/picks", user: "base@example.com", full: false },
-  { name: "06-picks-elite", path: "/picks", user: "elite@example.com", full: false },
-  { name: "07-account", path: "/account", user: "pro@example.com", full: false },
-  { name: "08-admin", path: "/admin", user: "owner@oobeebets.com", full: false },
-  { name: "09-admin-slate", path: "/admin/slate", user: "owner@oobeebets.com", full: false },
-  { name: "10-admin-settle", path: "/admin/settle", user: "owner@oobeebets.com", full: false },
-  { name: "11-admin-users", path: "/admin/users", user: "owner@oobeebets.com", full: false },
-  { name: "12-login", path: "/login", user: null, full: false },
-  { name: "13-picks-mobile", path: "/picks", user: "base@example.com", full: false, mobile: true },
+  { name: "02-top-picks", path: "/top-picks", user: null, full: true },
+  { name: "03-picks", path: "/picks", user: null, full: false },
+  { name: "04-account", path: "/account", user: "beta@example.com", full: false },
+  { name: "05-admin", path: "/admin", user: "owner@oobeebets.com", full: false },
+  { name: "06-admin-slate", path: "/admin/slate", user: "owner@oobeebets.com", full: false },
+  { name: "07-admin-settle", path: "/admin/settle", user: "owner@oobeebets.com", full: false },
+  { name: "08-admin-users", path: "/admin/users", user: "owner@oobeebets.com", full: false },
+  { name: "09-login", path: "/login", user: null, full: false },
+  { name: "10-picks-mobile", path: "/picks", user: "beta@example.com", full: false, mobile: true },
 ];
 
 for (const s of SHOTS) {

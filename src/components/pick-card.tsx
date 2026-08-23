@@ -1,13 +1,8 @@
-import Link from "next/link";
-import { Lock, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import type { LockedPick, UnlockedPick, ViewPick } from "@/lib/gating";
-import { isLocked } from "@/lib/gating";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
-import { TIERS } from "@/lib/tiers";
-import type { PickStatus, Sport } from "@/db/schema";
+import type { Pick, PickStatus, Sport } from "@/db/schema";
 import { formatKickoff, formatOdds, formatUnits, timeZoneLabel } from "@/lib/i18n/format";
 import { t } from "@/lib/i18n";
 
@@ -43,50 +38,9 @@ function KickoffTime({ at }: { at: Date }) {
   );
 }
 
-/* ------------------------------------------------------------------ locked */
+/* ------------------------------------------------------------------ export */
 
-function LockedCard({ pick }: { pick: LockedPick }) {
-  const tier = TIERS[pick.requiredTier];
-  return (
-    <article
-      className="card-hairline relative overflow-hidden p-4"
-      aria-label={`Pick ${pick.rank}, locked. Requires ${tier.name}.`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="num rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-[0.6875rem] text-fg-subtle">
-            #{pick.rank}
-          </span>
-          <span aria-hidden="true">{SPORT_EMOJI[pick.sport]}</span>
-          <span className="text-xs text-fg-muted">{pick.league}</span>
-        </div>
-        <Badge variant="outline">
-          <Lock className="size-3" aria-hidden="true" />
-          {tier.name}
-        </Badge>
-      </div>
-
-      {/* Placeholder only. The real selection is not in this payload. */}
-      <div className="mt-3 select-none" aria-hidden="true">
-        <div className="redacted text-lg font-semibold text-fg">Over 000.0 &minus;110</div>
-        <div className="redacted mt-1 text-xs text-fg-muted">
-          Hidden team vs Hidden team
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <KickoffTime at={pick.startsAt} />
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/pricing">Unlock with {tier.name}</Link>
-        </Button>
-      </div>
-    </article>
-  );
-}
-
-/* ---------------------------------------------------------------- unlocked */
-
-function UnlockedCard({ pick, featured }: { pick: UnlockedPick; featured?: boolean }) {
+export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean }) {
   const profit = pickProfit(pick);
   const settled = pick.status !== "pending";
 
@@ -179,18 +133,8 @@ function UnlockedCard({ pick, featured }: { pick: UnlockedPick; featured?: boole
   );
 }
 
-/* ------------------------------------------------------------------ export */
-
-export function PickCard({ pick, featured }: { pick: ViewPick; featured?: boolean }) {
-  return isLocked(pick) ? (
-    <LockedCard pick={pick} />
-  ) : (
-    <UnlockedCard pick={pick} featured={featured} />
-  );
-}
-
 /** Hero treatment for rank 1 — the shop window, free to everyone. */
-export function TopPickCard({ pick }: { pick: ViewPick }) {
+export function TopPickCard({ pick }: { pick: Pick }) {
   return (
     <section aria-labelledby="potd-heading" className="relative">
       <div className="mb-3 flex items-center gap-2">

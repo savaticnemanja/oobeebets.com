@@ -37,9 +37,6 @@ const ALWAYS_OPEN = new Set([
   // as a failure, the container never turns healthy, and compose's
   // `depends_on: service_healthy` never releases anything waiting on it.
   "/api/health",
-  // Stripe signs its requests and cannot answer a password prompt. Redirecting
-  // it would silently drop webhooks and retry them until they expire.
-  "/api/webhooks/stripe",
 ]);
 
 export async function middleware(request: NextRequest) {

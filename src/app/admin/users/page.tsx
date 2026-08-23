@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { subscriptions, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { UserTable } from "@/components/admin/user-table";
 import type { Metadata } from "next";
@@ -22,16 +22,8 @@ export default async function AdminUsersPage() {
       role: users.role,
       createdAt: users.createdAt,
       lastLoginAt: users.lastLoginAt,
-      hasUsedTrial: users.hasUsedTrial,
-      tier: subscriptions.tier,
-      status: subscriptions.status,
-      currentPeriodEnd: subscriptions.currentPeriodEnd,
     })
     .from(users)
-    .leftJoin(
-      subscriptions,
-      sql`${subscriptions.userId} = ${users.id} and ${subscriptions.status} in ('trialing','active','past_due')`,
-    )
     .orderBy(desc(users.createdAt))
     .limit(200);
 

@@ -7,16 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { deletePickAction } from "@/app/actions/admin";
 import type { Pick } from "@/db/schema";
-import { TIERS, tierForRank } from "@/lib/tiers";
+import { VISIBLE_PICKS } from "@/lib/board";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
 import { formatDateTime, formatOdds } from "@/lib/i18n/format";
-
-const TIER_TINT: Record<string, string> = {
-  base: "border-l-hit",
-  pro: "border-l-brand",
-  elite: "border-l-pending",
-};
 
 export function SlatePickList({
   picks,
@@ -45,13 +39,13 @@ export function SlatePickList({
   return (
     <div className="space-y-2">
       {picks.map((p) => {
-        const tier = tierForRank(p.rank);
+        const visible = p.rank <= VISIBLE_PICKS;
         return (
           <div
             key={p.id}
             className={cn(
               "card-hairline flex items-start gap-3 border-l-2 p-3",
-              TIER_TINT[tier],
+              visible ? "border-l-brand" : "border-l-border",
             )}
           >
             <span className="num mt-0.5 w-7 shrink-0 text-sm font-semibold text-fg-subtle">
@@ -64,7 +58,7 @@ export function SlatePickList({
                 <span className="font-medium text-fg">{p.selection}</span>
                 <span className="num text-sm text-fg-muted">{formatOdds(p.price)}</span>
                 <Badge variant={STATUS_VARIANT[p.status]}>{STATUS_LABEL[p.status]}</Badge>
-                <Badge variant="outline">{TIERS[tier].name}</Badge>
+                {!visible && <Badge variant="outline">admin only</Badge>}
               </div>
               <p className="mt-0.5 truncate text-xs text-fg-muted">
                 {p.league} · {p.event}

@@ -117,7 +117,7 @@ export default async function TopPicksPage({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {rows.map((p, i) => (
               <Reveal key={p.id} delay={Math.min(i * 0.02, 0.2)}>
-                <PickCard pick={{ ...p, locked: false }} />
+                <PickCard pick={p} />
               </Reveal>
             ))}
           </div>

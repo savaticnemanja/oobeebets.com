@@ -50,9 +50,8 @@ export const en = {
 
   account: {
     todaysPicks: "Today's picks",
-    billing: "Account & billing",
+    account: "Account",
     adminPanel: "Admin panel",
-    noPlan: "No plan",
   },
 } as const;
 

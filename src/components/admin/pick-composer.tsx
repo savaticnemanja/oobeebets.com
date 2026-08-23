@@ -17,7 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { createPickAction } from "@/app/actions/admin";
 import { marketValues, sportValues } from "@/lib/validation";
-import { PICKS_PER_SLATE, tierForRank, TIERS } from "@/lib/tiers";
+import { PICKS_PER_SLATE, VISIBLE_PICKS } from "@/lib/board";
 
 /**
  * Publishing 30 picks is a daily chore, so this form is built for speed:
@@ -75,7 +75,7 @@ export function PickComposer({
   }, [state]);
 
   const fe = state && !state.ok ? state.fieldErrors : undefined;
-  const tier = TIERS[tierForRank(rank)];
+  const visible = rank <= VISIBLE_PICKS;
 
   if (disabled) {
     return (
@@ -96,8 +96,8 @@ export function PickComposer({
       <CardHeader>
         <CardTitle>Add a pick</CardTitle>
         <CardDescription>
-          Rank {rank} unlocks at <span className="text-brand">{tier.name}</span>
-          {rank === 1 && " — and is free to everyone"}
+          Rank {rank} is{" "}
+          <span className="text-brand">{visible ? "visible to everyone" : "admin-only preview"}</span>
         </CardDescription>
       </CardHeader>
       <CardContent>

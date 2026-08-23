@@ -1,11 +1,9 @@
 /**
- * Browser-driven flow tests for the paths that mutate money or the public
- * record. These exercise real server actions, not just rendering.
+ * Browser-driven flow tests for the paths that mutate the public record.
+ * These exercise real server actions, not just rendering.
  *
- * Beta has no paid plans, so there is no subscribe flow to drive from the UI.
- * The subscription assertions that used to live in section 1 belong with the
- * pricing page and should come back with it — the billing backend is still
- * there, just unwired.
+ * There are no paid plans or billing backend — the whole tier/subscription
+ * system was removed. Every account gets the same free board.
  *
  *   npm run e2e
  *
@@ -15,14 +13,15 @@ import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { chromium } from "playwright";
 // Same rule as scripts/verify.mjs: how much a viewer should see is asked of
-// the app's gate, never restated here, so a product change to the tiers can
-// not leave a stale number behind. Run under tsx — see package.json.
-import { visibleRankLimit } from "../src/lib/gating.ts";
+// the app's own board logic, never restated here, so a product change to
+// VISIBLE_PICKS can not leave a stale number behind. Run under tsx — see
+// package.json.
+import { VISIBLE_PICKS } from "../src/lib/board.ts";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
-/** What a signed-out / unsubscribed visitor is entitled to on today's board. */
+/** What a signed-out visitor is entitled to on today's board. */
 const [{ date: latestRaw }] = await sql`select max(date) as date from slates`;
 // max() on a date column can come back as a Date; compare as YYYY-MM-DD so the
 // driver never re-interprets it in another timezone.
@@ -31,7 +30,7 @@ const latestSlate =
 const [{ n: slateSize }] = await sql`
   select count(*)::int as n from picks where slate_date = ${latestSlate}
 `;
-const freeBoard = Math.min(visibleRankLimit(null), slateSize);
+const freeBoard = Math.min(VISIBLE_PICKS, slateSize);
 
 let failures = 0;
 const check = (cond, name, extra = "") => {
@@ -115,11 +114,6 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   await page.waitForURL("**/picks**", { timeout: 15000 });
   check(page.url().includes("/picks"), "/pricing redirects to the board", page.url());
 
-  const [subs] = await sql`
-    select count(*)::int as n from subscriptions where user_id = ${created.id}
-  `;
-  check(subs.n === 0, "no subscription is created during beta", `subscriptions=${subs.n}`);
-
   await ctx.close();
 }
 
@@ -139,7 +133,7 @@ console.log("\nSettling a pick");
     check(false, "found a pending pick to settle");
   } else {
     const ctx = await browser.newContext();
-    await ctx.addCookies([await sessionCookie("admin@oobeebets.com")]);
+    await ctx.addCookies([await sessionCookie("owner@oobeebets.com")]);
     const page = await ctx.newPage();
 
     await page.goto(`${APP_URL}/admin/settle`);
@@ -163,7 +157,7 @@ console.log("\nSettling a pick");
     `;
     check(audit?.action === "pick.settled.won", "audit log written", `action=${audit?.action}`);
     check(
-      audit?.actor_email === "admin@oobeebets.com",
+      audit?.actor_email === "owner@oobeebets.com",
       "audit log names the actor",
       audit?.actor_email,
     );
@@ -197,12 +191,12 @@ console.log("\nAuthorisation on mutations");
 {
   const [target] = await sql`select id, status from picks where status='pending' limit 1`;
   const ctx = await browser.newContext();
-  await ctx.addCookies([await sessionCookie("elite@example.com")]);
+  await ctx.addCookies([await sessionCookie("beta@example.com")]);
   const page = await ctx.newPage();
 
-  // A subscriber cannot even load the settle page.
+  // A regular (non-admin) user cannot even load the settle page.
   const res = await page.goto(`${APP_URL}/admin/settle`);
-  check(res.status() === 404, "subscriber cannot open the settle page", `${res.status()}`);
+  check(res.status() === 404, "non-admin cannot open the settle page", `${res.status()}`);
 
   const [unchanged] = await sql`select status from picks where id = ${target.id}`;
   check(unchanged.status === "pending", "pick untouched by non-admin");

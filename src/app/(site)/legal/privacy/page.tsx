@@ -20,18 +20,10 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-fg">What we collect</h2>
           <p className="mt-2">
-            Your email address, a hashed version of your password, and your subscription
-            status. We keep basic session records (approximate IP and browser) so you can
-            stay signed in and so we can detect abuse.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-base font-semibold text-fg">Payment data</h2>
-          <p className="mt-2">
-            We never see or store card details. Payments are handled entirely by our
-            payment processor; we hold only the customer and subscription identifiers
-            they give us.
+            Your email address and a hashed version of your password. We keep basic
+            session records (approximate IP and browser) so you can stay signed in and so
+            we can detect abuse. We do not collect any payment information — the beta is
+            free.
           </p>
         </section>
 
@@ -47,9 +39,9 @@ export default function PrivacyPage() {
           <h2 className="text-base font-semibold text-fg">Your rights</h2>
           <p className="mt-2">
             You can request a copy of your data or ask us to delete your account at any
-            time. Deleting your account removes your personal data and cancels any active
-            subscription. Anonymised pick and result records remain, since they contain
-            nothing personal and form the public track record.
+            time. Deleting your account removes your personal data. Anonymised pick and
+            result records remain, since they contain nothing personal and form the
+            public record.
           </p>
         </section>
 

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { ArrowRight, CircleCheck, CirclePlus, Users } from "lucide-react";
+import { CircleCheck, CirclePlus } from "lucide-react";
 import { db } from "@/db";
-import { auditLog, picks, slates, subscriptions, users } from "@/db/schema";
+import { auditLog, picks, slates, users } from "@/db/schema";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSeatUsage } from "@/lib/settings";
 import { getTrackRecord } from "@/lib/stats";
 import { slateDateString } from "@/lib/slate-date";
 import type { Metadata } from "next";
@@ -20,26 +19,19 @@ export const dynamic = "force-dynamic";
 export default async function AdminOverviewPage() {
   const today = slateDateString();
 
-  const [seats, record, todaySlate, counts, awaiting, recentAudit, subCounts] =
-    await Promise.all([
-      getSeatUsage(),
-      getTrackRecord(),
-      db.select().from(slates).where(eq(slates.date, today)).limit(1),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(picks)
-        .where(eq(picks.slateDate, today)),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(picks)
-        .where(and(eq(picks.status, "pending"), sql`${picks.startsAt} < now()`)),
-      db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(8),
-      db
-        .select({ tier: subscriptions.tier, n: sql<number>`count(*)::int` })
-        .from(subscriptions)
-        .where(sql`${subscriptions.status} in ('trialing','active','past_due')`)
-        .groupBy(subscriptions.tier),
-    ]);
+  const [record, todaySlate, counts, awaiting, recentAudit] = await Promise.all([
+    getTrackRecord(),
+    db.select().from(slates).where(eq(slates.date, today)).limit(1),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(picks)
+      .where(eq(picks.slateDate, today)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(picks)
+      .where(and(eq(picks.status, "pending"), sql`${picks.startsAt} < now()`)),
+    db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(8),
+  ]);
 
   const [{ n: userCount }] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -117,13 +109,7 @@ export default async function AdminOverviewPage() {
       </div>
 
       {/* ------------------------------------------------------------ stats */}
-      <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile
-          label="Seats taken"
-          value={`${seats.taken}/${seats.cap}`}
-          tone={seats.left === 0 ? "miss" : "brand"}
-          sub={`${seats.left} left`}
-        />
+      <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatTile label="Registered users" value={userCount} />
         <StatTile
           label="Net units (all time)"
@@ -137,64 +123,34 @@ export default async function AdminOverviewPage() {
         />
       </dl>
 
-      {/* ------------------------------------------------------ tier split */}
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="size-4 text-fg-subtle" aria-hidden="true" />
-              Live subscriptions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {subCounts.length === 0 ? (
-              <p className="text-sm text-fg-muted">No live subscriptions yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {subCounts.map((s) => (
-                  <li key={s.tier} className="flex items-center justify-between text-sm">
-                    <span className="capitalize text-fg-muted">{s.tier}</span>
-                    <span className="num font-semibold text-fg">{s.n}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentAudit.length === 0 ? (
-              <p className="text-sm text-fg-muted">Nothing logged yet.</p>
-            ) : (
-              <ul className="space-y-2.5">
-                {recentAudit.map((a) => (
-                  <li key={a.id} className="flex items-baseline justify-between gap-3 text-xs">
-                    <span className="truncate text-fg-muted">
-                      <span className="text-fg">{a.action}</span>
-                      {a.actorEmail ? ` · ${a.actorEmail}` : ""}
-                    </span>
-                    <time
-                      dateTime={a.createdAt.toISOString()}
-                      className="num shrink-0 text-fg-subtle"
-                    >
-                      {formatDateTime(a.createdAt)}
-                    </time>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button variant="link" className="mt-4" asChild>
-              <Link href="/admin/settings">
-                Settings <ArrowRight aria-hidden="true" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      {/* ---------------------------------------------------- recent activity */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Recent activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentAudit.length === 0 ? (
+            <p className="text-sm text-fg-muted">Nothing logged yet.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {recentAudit.map((a) => (
+                <li key={a.id} className="flex items-baseline justify-between gap-3 text-xs">
+                  <span className="truncate text-fg-muted">
+                    <span className="text-fg">{a.action}</span>
+                    {a.actorEmail ? ` · ${a.actorEmail}` : ""}
+                  </span>
+                  <time
+                    dateTime={a.createdAt.toISOString()}
+                    className="num shrink-0 text-fg-subtle"
+                  >
+                    {formatDateTime(a.createdAt)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

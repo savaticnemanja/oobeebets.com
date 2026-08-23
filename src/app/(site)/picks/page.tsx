@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
-import { gatePicks, isLocked, type UnlockedPick } from "@/lib/gating";
+import { visiblePicks } from "@/lib/board";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
@@ -32,8 +32,8 @@ export default async function PicksPage({
   const today = slateDateString();
   const requested = params.date && isValidSlateDate(params.date) ? params.date : today;
 
-  // Non-subscribers can only look at today — history is part of what's sold.
-  const date = auth?.tier || auth?.isAdmin ? requested : today;
+  // Only admins can browse history — everyone else always sees today's board.
+  const date = auth?.isAdmin ? requested : today;
 
   const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
 
@@ -48,15 +48,8 @@ export default async function PicksPage({
         .orderBy(asc(picksTable.rank))
     : [];
 
-  // Still THE gate: the only path from the picks table to a response body.
-  // Beta collapses every tier to the same free limit inside visibleRankLimit,
-  // so routing through the gate costs nothing here and keeps its admin bypass
-  // — capping the query instead cost admins the rest of the board when
-  // previewing a draft slate. Locked picks are dropped rather than rendered:
-  // beta has no plan to upsell anyone to, and a stripped pick shows nothing.
-  const view = gatePicks(rows, auth?.tier ?? null, auth?.isAdmin ?? false).filter(
-    (p): p is UnlockedPick => !isLocked(p),
-  );
+  // Admins preview the whole slate; everyone else sees the top VISIBLE_PICKS.
+  const view = visiblePicks(rows, auth?.isAdmin ?? false);
   const [top, ...rest] = view;
 
   const availableDates = await db
@@ -99,7 +92,7 @@ export default async function PicksPage({
         </div>
 
         <div className="flex items-center gap-2">
-          {(auth?.tier || auth?.isAdmin) && availableDates.length > 0 && (
+          {auth?.isAdmin && availableDates.length > 0 && (
             <SlateDatePicker dates={availableDates.map((d) => d.date)} current={date} />
           )}
         </div>
