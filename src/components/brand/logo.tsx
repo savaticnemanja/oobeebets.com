@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export function Mark({ className }: { className?: string }) {
@@ -34,7 +33,9 @@ export function Logo({
       <span className="text-sm font-semibold tracking-[0.18em] lowercase">
         oobee<span className="text-brand">·</span>bets
       </span>
-      <Badge variant="info">Closed beta</Badge>
+      <span className="text-sm font-semibold tracking-[0.18em] lowercase text-blue-400">
+        closed beta
+      </span>
     </Link>
   );
 }
