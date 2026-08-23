@@ -3,12 +3,11 @@ import { FREE_VISIBLE_RANKS, TIERS } from "./tiers";
 
 /**
  * How many ranks a viewer can see.
- *   null tier (logged out / no subscription) -> the Top Pick of the Day only.
+ *   Beta: one free tier for everyone, no paid plans — see FREE_VISIBLE_RANKS.
  * Admins get everything; that is decided by the caller, not here.
  */
-export function visibleRankLimit(tier: Tier | null): number {
-  if (!tier) return FREE_VISIBLE_RANKS;
-  return TIERS[tier].picksPerDay;
+export function visibleRankLimit(_tier: Tier | null): number {
+  return FREE_VISIBLE_RANKS;
 }
 
 /**

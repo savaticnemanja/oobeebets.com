@@ -35,7 +35,6 @@ export const en = {
   nav: {
     topPicks: "Our Top Picks",
     trackRecord: "Track record",
-    pricing: "Pricing",
     about: "About",
     picks: "Picks",
     account: "Account",

@@ -24,7 +24,6 @@ export function appUrl(path = "/"): string {
 export const NAV_PUBLIC = [
   { href: "/top-picks", label: t().nav.topPicks },
   { href: "/track-record", label: t().nav.trackRecord },
-  { href: "/pricing", label: t().nav.pricing },
   { href: "/about", label: t().nav.about },
 ] as const;
 

@@ -49,7 +49,7 @@ export async function SiteHeader() {
                 <Link href="/login">{t().nav.signIn}</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/pricing">{t().nav.getPicks}</Link>
+                <Link href="/picks">{t().nav.getPicks}</Link>
               </Button>
             </>
           )}
