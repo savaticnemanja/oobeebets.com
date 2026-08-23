@@ -36,12 +36,6 @@ export default function manifest(): MetadataRoute.Manifest {
         url: "/picks",
         description: "Today's board",
       },
-      {
-        name: "Track record",
-        short_name: "Record",
-        url: "/track-record",
-        description: "Every settled pick",
-      },
     ],
   };
 }

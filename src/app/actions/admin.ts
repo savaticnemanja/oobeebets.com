@@ -35,7 +35,6 @@ async function audit(
 
 function revalidateSlate(date: string) {
   revalidatePath("/picks");
-  revalidatePath("/track-record");
   revalidatePath("/");
   revalidatePath(`/admin/slate`);
   revalidatePath(`/admin/settle`);

@@ -168,13 +168,19 @@ console.log("\nSettling a pick");
       audit?.actor_email,
     );
 
-    // The public record must reflect it without any further action.
+    // The board must reflect it without any further action. There is no
+    // separate public record page — settlement shows up on the same board
+    // the pick was published to.
+    const targetDate =
+      target.slate_date instanceof Date
+        ? target.slate_date.toISOString().slice(0, 10)
+        : target.slate_date;
     const pub = await ctx.newPage();
-    await pub.goto(`${APP_URL}/track-record`);
-    const trHtml = await pub.content();
+    await pub.goto(`${APP_URL}/picks?date=${targetDate}`);
+    const boardHtml = await pub.content();
     check(
-      trHtml.includes(target.selection),
-      "settled pick appears on the public track record",
+      boardHtml.includes(target.selection),
+      "settled pick appears on the picks board",
     );
 
     // Restore.

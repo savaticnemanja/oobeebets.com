@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { asc, eq, sql } from "drizzle-orm";
-import { ArrowRight, CalendarDays } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { gatePicks, isLocked, type UnlockedPick } from "@/lib/gating";
 import { PickCard, TopPickCard } from "@/components/pick-card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { SlateDatePicker } from "@/components/slate-date-picker";
@@ -115,14 +113,9 @@ export default async function PicksPage({
           </h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-fg-muted">
             {date === today
-              ? "Picks go out before the first kick-off. Check back shortly, or look at what we've done so far."
-              : "Try another date, or read the full record."}
+              ? "Picks go out before the first kick-off. Check back shortly."
+              : "Try another date."}
           </p>
-          <Button variant="outline" className="mt-6" asChild>
-            <Link href="/track-record">
-              See the track record <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
         </div>
       ) : (
         <>
