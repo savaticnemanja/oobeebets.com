@@ -14,7 +14,6 @@ const badgeVariants = cva(
         pending: "border-pending/30 bg-pending-dim text-pending",
         void: "border-border bg-surface-2 text-void line-through",
         outline: "border-border-strong bg-transparent text-fg-muted",
-        info: "border-blue-500/30 bg-blue-500/10 text-blue-400",
       },
     },
     defaultVariants: { variant: "default" },
