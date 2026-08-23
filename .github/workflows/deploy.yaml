@@ -26,7 +26,6 @@ jobs:
       DATABASE_URL: postgres://oobee:oobee@localhost:5432/oobeebets
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       NEXT_PUBLIC_SLATE_TZ: America/New_York
-      BILLING_PROVIDER: mock
       # BETA_GATE_PASSWORD is deliberately not set here. Unset means no gate, so
       # e2e drives the real pages instead of being redirected to a password
       # prompt — and the checks stay identical for both branches.

@@ -52,36 +52,24 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">4. Subscriptions and billing</h2>
+          <h2 className="text-base font-semibold text-fg">4. Beta access</h2>
           <p className="mt-2">
-            Subscriptions renew monthly until cancelled. Cancelling stops the next
-            renewal; access continues to the end of the period you have already paid for.
-            We do not offer partial refunds for unused time. The price you subscribe at
-            stays fixed for as long as your subscription remains continuously active;
-            price changes apply to new subscriptions and to any subscription restarted
-            after a lapse.
+            {SITE.name} is currently in a closed beta. Access is free — we do not take
+            payment, run subscriptions, or offer paid plans at this time. That may change
+            in the future, and this page will be updated before it does.
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">5. Free trials</h2>
-          <p className="mt-2">
-            Where offered, a free trial is limited to one per person and per account. A
-            payment method is required, and the subscription begins automatically at the
-            end of the trial unless cancelled first. We may withdraw trials at any time.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-base font-semibold text-fg">6. Your account</h2>
+          <h2 className="text-base font-semibold text-fg">5. Your account</h2>
           <p className="mt-2">
             Accounts are personal. Sharing credentials, redistributing picks, scraping
-            the site, or reselling access will result in termination without refund.
+            the site, or reselling access will result in termination.
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">7. Responsible gambling</h2>
+          <h2 className="text-base font-semibold text-fg">6. Responsible gambling</h2>
           <p className="mt-2">
             Only stake money you can afford to lose. Do not chase losses. If gambling is
             causing you harm, stop and seek help — links are in the footer of every page.
@@ -89,11 +77,10 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">8. Limitation of liability</h2>
+          <h2 className="text-base font-semibold text-fg">7. Limitation of liability</h2>
           <p className="mt-2">
-            To the fullest extent permitted by law, our total liability to you is limited
-            to the amount you paid us in the twelve months before the claim. We are not
-            liable for gambling losses, missed bets, closed lines, or bookmaker disputes.
+            To the fullest extent permitted by law, we are not liable for gambling
+            losses, missed bets, closed lines, or bookmaker disputes.
           </p>
         </section>
       </div>

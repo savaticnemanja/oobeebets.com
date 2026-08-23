@@ -37,11 +37,7 @@ export async function SiteHeader() {
               <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
                 <Link href="/picks">{t().nav.picks}</Link>
               </Button>
-              <UserMenu
-                email={auth.user.email}
-                isAdmin={auth.isAdmin}
-                tier={auth.tier}
-              />
+              <UserMenu email={auth.user.email} isAdmin={auth.isAdmin} />
             </>
           ) : (
             <>

@@ -1,10 +1,10 @@
 /**
- * Seeds a demo-ready database: two admins, three subscribers on different
- * tiers, and 14 days of published slates with realistic settled results.
+ * Seeds a demo-ready database: one owner and one beta-tester account, plus 14
+ * days of published slates with realistic settled results.
  *
- * Idempotent-ish: it clears picks/slates/subscriptions/users first, so running
- * it twice gives the same state rather than duplicates. Never run against a
- * database that has real customers.
+ * Idempotent-ish: it clears picks/slates/users first, so running it twice
+ * gives the same state rather than duplicates. Never run against a database
+ * that has real users.
  */
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -14,11 +14,8 @@ import {
   picks,
   rateLimits,
   sessions,
-  settings,
   slates,
-  subscriptions,
   users,
-  waitlist,
   type Market,
   type NewPick,
   type Sport,
@@ -73,7 +70,7 @@ requireSeedOptIn(connectionString);
 
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client, {
-  schema: { users, sessions, subscriptions, slates, picks, settings, waitlist, auditLog, rateLimits },
+  schema: { users, sessions, slates, picks, auditLog, rateLimits },
 });
 
 /* --------------------------------------------------------- demo fixtures */
@@ -151,13 +148,10 @@ async function main() {
   console.log("[seed] clearing existing data...");
   await db.delete(auditLog);
   await db.delete(rateLimits);
-  await db.delete(waitlist);
   await db.delete(picks);
   await db.delete(slates);
-  await db.delete(subscriptions);
   await db.delete(sessions);
   await db.delete(users);
-  await db.delete(settings);
 
   /* ------------------------------------------------------------- users */
 
@@ -168,34 +162,12 @@ async function main() {
     .insert(users)
     .values([
       { email: "owner@oobeebets.com", passwordHash: password, role: "owner", emailVerifiedAt: new Date() },
-      { email: "admin@oobeebets.com", passwordHash: password, role: "admin", emailVerifiedAt: new Date() },
-      { email: "elite@example.com", passwordHash: password, role: "user", emailVerifiedAt: new Date() },
-      { email: "pro@example.com", passwordHash: password, role: "user", emailVerifiedAt: new Date() },
-      { email: "base@example.com", passwordHash: password, role: "user", emailVerifiedAt: new Date() },
-      { email: "free@example.com", passwordHash: password, role: "user" },
+      { email: "beta@example.com", passwordHash: password, role: "user", emailVerifiedAt: new Date() },
     ])
     .returning({ id: users.id, email: users.email });
 
   const byEmail = new Map(created.map((u) => [u.email, u.id]));
   const ownerId = byEmail.get("owner@oobeebets.com")!;
-
-  const periodEnd = new Date();
-  periodEnd.setDate(periodEnd.getDate() + 21);
-
-  await db.insert(subscriptions).values([
-    { userId: byEmail.get("elite@example.com")!, tier: "elite", status: "active", priceCents: 19900, currentPeriodEnd: periodEnd, stripeSubscriptionId: "seed_sub_elite" },
-    { userId: byEmail.get("pro@example.com")!, tier: "pro", status: "active", priceCents: 7900, currentPeriodEnd: periodEnd, stripeSubscriptionId: "seed_sub_pro" },
-    { userId: byEmail.get("base@example.com")!, tier: "base", status: "active", priceCents: 4900, currentPeriodEnd: periodEnd, stripeSubscriptionId: "seed_sub_base" },
-  ]);
-
-  /* ---------------------------------------------------------- settings */
-
-  await db.insert(settings).values([
-    { key: "trialsEnabled", value: true, updatedBy: ownerId },
-    { key: "seatCap", value: 1000, updatedBy: ownerId },
-    { key: "pricing", value: { base: 4900, pro: 9900, elite: 19900 }, updatedBy: ownerId },
-    { key: "nextPriceRiseAt", value: dateStr(-14), updatedBy: ownerId },
-  ]);
 
   /* ------------------------------------------------------------ slates */
 
@@ -314,12 +286,8 @@ async function main() {
   console.log(`[seed] done — ${created.length} users, ${DAYS} slates, ${totalPicks} picks`);
   console.log("");
   console.log("  Sign in with any of these (password: password123)");
-  console.log("    owner@oobeebets.com   owner  — full admin incl. user roles");
-  console.log("    admin@oobeebets.com   admin  — publish + settle, no role management");
-  console.log("    elite@example.com     elite  — all 30 picks");
-  console.log("    pro@example.com       pro    — top 15");
-  console.log("    base@example.com      base   — top 6");
-  console.log("    free@example.com      free   — top pick only");
+  console.log("    owner@oobeebets.com   owner — full admin, publish + settle + user roles");
+  console.log("    beta@example.com      user  — the single beta tier: top 15, free");
   console.log("");
 
   await client.end();

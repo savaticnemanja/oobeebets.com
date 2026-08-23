@@ -5,8 +5,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { sessions, users, subscriptions, rateLimits } from "@/db/schema";
-import type { Role, Subscription, Tier, User } from "@/db/schema";
+import { sessions, users, rateLimits } from "@/db/schema";
+import type { Role, User } from "@/db/schema";
 
 export const SESSION_COOKIE = "oobee_session";
 /** 30 days, sliding — every authenticated request extends it. */
@@ -88,9 +88,6 @@ export async function revokeAllSessions(userId: string): Promise<void> {
 
 export interface AuthContext {
   user: User;
-  subscription: Subscription | null;
-  /** Effective tier for gating: null when there is no live subscription. */
-  tier: Tier | null;
   isAdmin: boolean;
   isOwner: boolean;
 }
@@ -125,36 +122,12 @@ export const getAuth = cache(async (): Promise<AuthContext | null> => {
       .where(eq(sessions.id, row.session.id));
   }
 
-  const subscription = await getLiveSubscription(row.user.id);
-
   return {
     user: row.user,
-    subscription,
-    tier: subscription ? subscription.tier : null,
     isAdmin: row.user.role === "admin" || row.user.role === "owner",
     isOwner: row.user.role === "owner",
   };
 });
-
-/**
- * The one definition of "is this user entitled right now".
- * `past_due` deliberately keeps access: Stripe is still retrying the card, and
- * cutting a paying customer off mid-dunning is worse than a few free days.
- */
-export async function getLiveSubscription(userId: string): Promise<Subscription | null> {
-  const rows = await db
-    .select()
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.userId, userId),
-        sql`${subscriptions.status} in ('trialing','active','past_due')`,
-        gt(subscriptions.currentPeriodEnd, new Date()),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
-}
 
 /* ------------------------------------------------------------- guards */
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PICKS_PER_SLATE } from "./tiers";
+import { PICKS_PER_SLATE } from "./board";
 
 /** Rejects the handful of passwords that make up most credential-stuffing hits. */
 const COMMON_PASSWORDS = new Set([
@@ -70,10 +70,6 @@ export const settleSchema = z.object({
   finalScore: z.string().trim().max(60).optional().or(z.literal("")),
   voidReason: z.string().trim().max(300).optional().or(z.literal("")),
 });
-
-export const tierSchema = z.enum(["base", "pro", "elite"]);
-
-export const waitlistSchema = z.object({ email: emailSchema });
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

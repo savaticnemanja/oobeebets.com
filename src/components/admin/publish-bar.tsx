@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { publishSlateAction, unpublishSlateAction } from "@/app/actions/admin";
-import { PICKS_PER_SLATE } from "@/lib/tiers";
+import { PICKS_PER_SLATE } from "@/lib/board";
 
 export function PublishBar({
   date,

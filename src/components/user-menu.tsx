@@ -11,19 +11,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { logoutAction } from "@/app/actions/auth";
-import type { Tier } from "@/db/schema";
 import { t } from "@/lib/i18n";
 
 export function UserMenu({
   email,
   isAdmin,
-  tier,
 }: {
   email: string;
   isAdmin: boolean;
-  tier: Tier | null;
 }) {
   const initial = email.charAt(0).toUpperCase();
   const [signingOut, startSignOut] = useTransition();
@@ -39,13 +35,6 @@ export function UserMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="truncate text-sm text-fg">{email}</span>
-          <span>
-            {tier ? (
-              <Badge variant="brand">{tier}</Badge>
-            ) : (
-              <Badge variant="outline">{t().account.noPlan}</Badge>
-            )}
-          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -57,7 +46,7 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/account">
             <Settings aria-hidden="true" />
-            {t().account.billing}
+            {t().account.account}
           </Link>
         </DropdownMenuItem>
         {isAdmin && (

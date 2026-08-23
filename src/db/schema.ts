@@ -4,7 +4,6 @@ import {
   uuid,
   text,
   integer,
-  boolean,
   timestamp,
   date,
   numeric,
@@ -17,24 +16,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 
 /* ------------------------------------------------------------------ enums */
-
-export const tierEnum = pgEnum("tier", ["base", "pro", "elite"]);
-
-/**
- * Mirrors Stripe's subscription status values exactly. The app never invents a
- * status of its own — when Stripe is wired up, webhook payloads write straight
- * into this column with no translation layer.
- */
-export const subscriptionStatusEnum = pgEnum("subscription_status", [
-  "trialing",
-  "active",
-  "past_due",
-  "canceled",
-  "incomplete",
-  "incomplete_expired",
-  "unpaid",
-  "paused",
-]);
 
 export const sportEnum = pgEnum("sport", [
   "soccer",
@@ -73,9 +54,6 @@ export const users = pgTable(
      */
     role: roleEnum("role").notNull().default("user"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
-    /** Set once, never reset. The whole free-trial abuse control. */
-    hasUsedTrial: boolean("has_used_trial").notNull().default(false),
-    stripeCustomerId: text("stripe_customer_id"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
@@ -86,7 +64,6 @@ export const users = pgTable(
     // Emails are stored lowercased by the app; the unique index enforces it.
     uniqueIndex("users_email_unique").on(t.email),
     index("users_role_idx").on(t.role),
-    index("users_stripe_customer_idx").on(t.stripeCustomerId),
   ],
 );
 
@@ -119,43 +96,6 @@ export const sessions = pgTable(
   ],
 );
 
-/* ---------------------------------------------------------- subscriptions */
-
-/**
- * Shaped to be a mirror of a Stripe Subscription object. Nothing here is
- * authored by the app in production — the mock billing provider writes the
- * same fields so the swap to real Stripe changes no queries.
- */
-export const subscriptions = pgTable(
-  "subscriptions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    tier: tierEnum("tier").notNull(),
-    status: subscriptionStatusEnum("status").notNull(),
-    stripeSubscriptionId: text("stripe_subscription_id"),
-    stripePriceId: text("stripe_price_id"),
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
-    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
-    /** Price paid in cents, frozen at signup — this is the grandfathering. */
-    priceCents: integer("price_cents").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    // One live subscription per user. Partial unique index: cancelled rows are
-    // kept for history and are exempt.
-    uniqueIndex("subscriptions_one_live_per_user")
-      .on(t.userId)
-      .where(sql`${t.status} in ('trialing','active','past_due')`),
-    uniqueIndex("subscriptions_stripe_id_unique").on(t.stripeSubscriptionId),
-    index("subscriptions_status_idx").on(t.status),
-  ],
-);
-
 /* ----------------------------------------------------------------- slates */
 
 export const slates = pgTable("slates", {
@@ -176,7 +116,7 @@ export const picks = pgTable(
     slateDate: date("slate_date")
       .notNull()
       .references(() => slates.date, { onDelete: "cascade" }),
-    /** 1 = best pick of the day. Drives tier gating; see lib/gating.ts. */
+    /** 1 = best pick of the day. Drives board visibility; see lib/board.ts. */
     rank: integer("rank").notNull(),
 
     sport: sportEnum("sport").notNull(),
@@ -216,28 +156,6 @@ export const picks = pgTable(
   ],
 );
 
-/* --------------------------------------------------------------- settings */
-
-/** Single-row-per-key app settings: trial kill switch, seat cap, prices. */
-export const settings = pgTable("settings", {
-  key: text("key").primaryKey(),
-  value: jsonb("value").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
-});
-
-/* --------------------------------------------------------------- waitlist */
-
-export const waitlist = pgTable(
-  "waitlist",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [uniqueIndex("waitlist_email_unique").on(t.email)],
-);
-
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -275,15 +193,10 @@ export const rateLimits = pgTable(
 
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
-  subscriptions: many(subscriptions),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
-}));
-
-export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-  user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
 }));
 
 export const slatesRelations = relations(slates, ({ many }) => ({
@@ -299,13 +212,10 @@ export const picksRelations = relations(picks, ({ one }) => ({
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
-export type Subscription = typeof subscriptions.$inferSelect;
 export type Pick = typeof picks.$inferSelect;
 export type NewPick = typeof picks.$inferInsert;
 export type Slate = typeof slates.$inferSelect;
-export type Tier = (typeof tierEnum.enumValues)[number];
 export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];
 export type Market = (typeof marketEnum.enumValues)[number];
-export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];

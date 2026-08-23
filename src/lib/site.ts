@@ -36,5 +36,4 @@ export const NAV_ADMIN = [
   { href: "/admin/slate", label: "Publish slate" },
   { href: "/admin/settle", label: "Settle" },
   { href: "/admin/users", label: "Users" },
-  { href: "/admin/settings", label: "Settings" },
 ] as const;

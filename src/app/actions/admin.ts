@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog, picks, slates, users, subscriptions } from "@/db/schema";
+import { auditLog, picks, slates, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { canManageRole, requireAdmin, requireOwner, revokeAllSessions } from "@/lib/auth";
-import { setSetting } from "@/lib/settings";
 import {
   fieldErrorsFrom,
   pickSchema,
@@ -308,87 +307,3 @@ export async function setUserRoleAction(
   return { ok: true, message: `${target.email} is now ${parsed.data.role}.` };
 }
 
-export async function grantSubscriptionAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const actor = await requireAdmin();
-
-  const parsed = z
-    .object({ userId: z.string().uuid(), tier: z.enum(["base", "pro", "elite"]) })
-    .safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { ok: false, error: "Bad request" };
-
-  const end = new Date();
-  end.setDate(end.getDate() + 30);
-
-  await db
-    .insert(subscriptions)
-    .values({
-      userId: parsed.data.userId,
-      tier: parsed.data.tier,
-      status: "active",
-      priceCents: 0,
-      currentPeriodEnd: end,
-      stripeSubscriptionId: `comp_${crypto.randomUUID()}`,
-    })
-    .onConflictDoNothing();
-
-  await audit(actor, "subscription.granted", "user", parsed.data.userId, {
-    tier: parsed.data.tier,
-  });
-
-  revalidatePath("/admin/users");
-  return { ok: true, message: "Comped 30 days." };
-}
-
-/* ------------------------------------------------------------- settings */
-
-export async function updateSettingsAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const actor = await requireAdmin();
-
-  const parsed = z
-    .object({
-      trialsEnabled: z.coerce.boolean(),
-      seatCap: z.coerce.number().int().min(1).max(100000),
-      basePrice: z.coerce.number().int().min(0),
-      proPrice: z.coerce.number().int().min(0),
-      elitePrice: z.coerce.number().int().min(0),
-      nextPriceRiseAt: z.string().optional(),
-    })
-    .safeParse({
-      trialsEnabled: formData.get("trialsEnabled") === "on",
-      seatCap: formData.get("seatCap"),
-      basePrice: formData.get("basePrice"),
-      proPrice: formData.get("proPrice"),
-      elitePrice: formData.get("elitePrice"),
-      nextPriceRiseAt: formData.get("nextPriceRiseAt") ?? "",
-    });
-
-  if (!parsed.success) {
-    return { ok: false, error: "Check the fields", fieldErrors: fieldErrorsFrom(parsed.error) };
-  }
-  const d = parsed.data;
-
-  await setSetting("trialsEnabled", d.trialsEnabled, actor.user.id);
-  await setSetting("seatCap", d.seatCap, actor.user.id);
-  await setSetting(
-    "pricing",
-    { base: d.basePrice * 100, pro: d.proPrice * 100, elite: d.elitePrice * 100 },
-    actor.user.id,
-  );
-  await setSetting(
-    "nextPriceRiseAt",
-    d.nextPriceRiseAt && isValidSlateDate(d.nextPriceRiseAt) ? d.nextPriceRiseAt : null,
-    actor.user.id,
-  );
-
-  await audit(actor, "settings.updated", "settings", undefined, d);
-
-  revalidatePath("/pricing");
-  revalidatePath("/admin/settings");
-  return { ok: true, message: "Settings saved." };
-}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Gift, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -12,7 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,8 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { grantSubscriptionAction, setUserRoleAction } from "@/app/actions/admin";
-import type { Role, SubscriptionStatus, Tier } from "@/db/schema";
+import { setUserRoleAction } from "@/app/actions/admin";
+import type { Role } from "@/db/schema";
 import { formatDate } from "@/lib/i18n/format";
 
 interface Row {
@@ -31,10 +30,6 @@ interface Row {
   role: Role;
   createdAt: Date;
   lastLoginAt: Date | null;
-  hasUsedTrial: boolean;
-  tier: Tier | null;
-  status: SubscriptionStatus | null;
-  currentPeriodEnd: Date | null;
 }
 
 export function UserTable({
@@ -45,14 +40,12 @@ export function UserTable({
   currentUserId: string;
 }) {
   const [roleState, roleAction] = useActionState(setUserRoleAction, null);
-  const [grantState, grantAction] = useActionState(grantSubscriptionAction, null);
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    const s = roleState ?? grantState;
-    if (s?.ok) toast.success(s.message ?? "Updated");
-    else if (s && !s.ok) toast.error(s.error);
-  }, [roleState, grantState]);
+    if (roleState?.ok) toast.success(roleState.message ?? "Updated");
+    else if (roleState && !roleState.ok) toast.error(roleState.error);
+  }, [roleState]);
 
   const filtered = q
     ? users.filter((u) => u.email.toLowerCase().includes(q.toLowerCase()))
@@ -79,10 +72,8 @@ export function UserTable({
           <TableHeader>
             <TableRow>
               <TableHead scope="col">Email</TableHead>
-              <TableHead scope="col">Plan</TableHead>
               <TableHead scope="col">Joined</TableHead>
               <TableHead scope="col">Role</TableHead>
-              <TableHead scope="col" className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,23 +84,6 @@ export function UserTable({
                   <TableCell>
                     <span className="text-fg">{u.email}</span>
                     {isSelf && <span className="ml-2 text-xs text-fg-subtle">(you)</span>}
-                    {u.hasUsedTrial && (
-                      <span className="ml-2 text-[0.6875rem] text-fg-subtle">
-                        trial used
-                      </span>
-                    )}
-                  </TableCell>
-
-                  <TableCell>
-                    {u.tier ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Badge variant="brand">{u.tier}</Badge>
-                        {u.status === "trialing" && <Badge variant="pending">trial</Badge>}
-                        {u.status === "past_due" && <Badge variant="miss">past due</Badge>}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-fg-subtle">—</span>
-                    )}
                   </TableCell>
 
                   <TableCell className="num text-xs text-fg-subtle">
@@ -144,24 +118,6 @@ export function UserTable({
                             <SelectItem value="owner">owner</SelectItem>
                           </SelectContent>
                         </Select>
-                      </form>
-                    )}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    {!u.tier && (
-                      <form action={grantAction} className="inline-flex items-center gap-1">
-                        <input type="hidden" name="userId" value={u.id} />
-                        <input type="hidden" name="tier" value="elite" />
-                        <Button
-                          type="submit"
-                          variant="ghost"
-                          size="sm"
-                          className="text-fg-subtle"
-                        >
-                          <Gift aria-hidden="true" />
-                          Comp 30d
-                        </Button>
                       </form>
                     )}
                   </TableCell>
