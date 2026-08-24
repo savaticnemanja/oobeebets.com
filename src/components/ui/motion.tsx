@@ -82,63 +82,6 @@ export function StaggerItem({
   );
 }
 
-/**
- * Counts up to a number when it scrolls into view. Used for the headline
- * stats. Falls back to the final value immediately under reduced motion, and
- * renders the final value on the server so it is present for crawlers.
- */
-export function CountUp({
-  value,
-  decimals = 0,
-  prefix = "",
-  suffix = "",
-  className,
-  duration = 1100,
-}: {
-  value: number;
-  decimals?: number;
-  prefix?: string;
-  suffix?: string;
-  className?: string;
-  duration?: number;
-}) {
-  const ref = React.useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-  const reduced = useReducedMotion();
-  const [display, setDisplay] = React.useState(value);
-
-  React.useEffect(() => {
-    // Initial state is already `value`, so the reduced-motion and not-yet-seen
-    // cases need no write at all — they render the final number as-is. That
-    // also means the server-rendered HTML carries the real figure for crawlers.
-    if (!inView || reduced) return;
-
-    let raf = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      // easeOutExpo
-      const eased = t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
-      setDisplay(value * eased);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    // The first frame lands at t≈0, which sets the counter to ~0 and starts the
-    // run-up. No synchronous setState in the effect body is needed to reset it.
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [inView, reduced, value, duration]);
-
-  const sign = prefix === "+" && display < 0 ? "" : prefix;
-
-  return (
-    <span ref={ref} className={cn("num", className)}>
-      {sign}
-      {display.toFixed(decimals)}
-      {suffix}
-    </span>
-  );
-}
-
 /** Small live "pulse" dot used next to the sidebar's Live indicator. */
 export function PulseDot({ className }: { className?: string }) {
   return (

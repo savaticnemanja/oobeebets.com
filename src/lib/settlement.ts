@@ -1,4 +1,4 @@
-import type { Pick, PickStatus } from "@/db/schema";
+import type { PickStatus } from "@/db/schema";
 
 /**
  * Profit in units for a settled pick, using American odds.
@@ -29,30 +29,20 @@ export function profitUnits(
   }
 }
 
-/** Convenience wrapper over a pick row (units arrives as a numeric string). */
-export function pickProfit(p: Pick): number {
+/**
+ * Convenience wrapper over a pick row (units arrives as a numeric string).
+ *
+ * Typed by the three columns it reads rather than by `Pick`, so a caller that
+ * selected only those columns can use it without widening its query back out
+ * to the whole row.
+ */
+export function pickProfit(p: {
+  price: number;
+  units: string;
+  status: PickStatus;
+}): number {
   return profitUnits(p.price, Number(p.units), p.status);
 }
-
-/**
- * Break-even win probability implied by the price, before vig. Used to show
- * "the book priced this at 43%" on the track record.
- */
-export function impliedProbability(price: number): number {
-  return price > 0 ? 100 / (price + 100) : Math.abs(price) / (Math.abs(price) + 100);
-}
-
-/** American odds -> decimal, for payout display. */
-export function toDecimalOdds(price: number): number {
-  return price > 0 ? price / 100 + 1 : 100 / Math.abs(price) + 1;
-}
-
-/** A pick counts toward win rate only if it actually resolved W/L. */
-export function countsTowardRate(status: PickStatus): boolean {
-  return status === "won" || status === "lost";
-}
-
-export const SETTLED_STATUSES: PickStatus[] = ["won", "lost", "push", "void"];
 
 /**
  * Below this many settled picks, a percentage is noise. The UI must label
