@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrackRecord } from "@/lib/stats";
+import { PICKS_PER_SLATE } from "@/lib/board";
 import { slateDateString } from "@/lib/slate-date";
 import type { Metadata } from "next";
 import { formatDateTime, formatSlateDate, formatUnits } from "@/lib/i18n/format";
@@ -62,7 +63,10 @@ export default async function AdminOverviewPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="num text-3xl font-semibold">{pickCount}<span className="text-base text-fg-subtle">/30</span></p>
+            <p className="num text-3xl font-semibold">
+              {pickCount}
+              <span className="text-base text-fg-subtle">/{PICKS_PER_SLATE}</span>
+            </p>
             <p className="mt-1 text-sm text-fg-muted">
               {slate?.publishedAt
                 ? "Live to everyone."

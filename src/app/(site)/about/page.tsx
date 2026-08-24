@@ -48,14 +48,14 @@ export default function AboutPage() {
               How the board works
             </h2>
             <p className="mt-2">
-              We put out thirty plays a day across soccer, basketball, baseball, tennis,
-              hockey and football. They&apos;re ranked 1 to 30 — rank 1 is the bet
-              we&apos;d make if we could only make one, rank 30 is the last one still
-              worth the money.
+              We put out fifteen plays a day across soccer, basketball, baseball,
+              tennis, hockey and football. They&apos;re ranked 1 to 15 — rank 1 is the
+              bet we&apos;d make if we could only make one, rank 15 is the last one
+              still worth the money.
             </p>
             <p className="mt-3">
-              During our beta, the top 15 are free for everyone — same board, same rank
-              1, no plan required.
+              During our beta the whole board is free, for everyone — same fifteen
+              picks, same rank 1, no plan required.
             </p>
           </div>
 

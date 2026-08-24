@@ -5,7 +5,7 @@ import { PickComposer } from "@/components/admin/pick-composer";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
-import { VISIBLE_PICKS } from "@/lib/board";
+import { PICKS_PER_SLATE } from "@/lib/board";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Publish slate" };
@@ -34,7 +34,8 @@ export default async function AdminSlatePage({
       <h1 className="text-2xl font-semibold tracking-tight">Publish slate</h1>
       <p className="mt-1.5 text-sm text-fg-muted">
         Rank 1 is the best play of the day. Add picks in any order, then drag rows
-        below to set the final rank — the top {VISIBLE_PICKS} are free to everyone.
+        below to set the final rank. All {PICKS_PER_SLATE} go out free to every
+        tester.
       </p>
 
       <PublishBar

@@ -90,7 +90,7 @@ function summarise(rows: RecordRow[]): TrackRecord {
 /**
  * The published record, all time.
  *
- * One query, summed in memory. At the stated ceiling (30 picks/day, ~11k
+ * One query, summed in memory. At the stated ceiling (15 picks/day, ~5.5k
  * rows/year) that is cheaper than asking Postgres for each figure separately,
  * and every number here comes off one consistent snapshot. If the pick table
  * ever outgrows it, move to a materialised view keyed by slate_date — the
