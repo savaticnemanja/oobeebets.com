@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import type { Sport } from "@/db/schema";
 
 /** Rejects the handful of passwords that make up most credential-stuffing hits. */
@@ -29,12 +30,22 @@ export const loginSchema = z.object({
 
 export const nameSchema = z.string().trim().min(1, "Enter your name").max(120);
 
+/**
+ * The onboarding form posts E.164 (`+381641234567`), but this parses anything
+ * that carries its own country code, and normalises to E.164 so every stored
+ * number has one shape. Validation is the same libphonenumber pass the client
+ * runs, so the two can't disagree about what's acceptable.
+ */
 export const phoneSchema = z
   .string()
   .trim()
-  .min(7, "Enter a phone number")
-  .max(20, "That's too long")
-  .regex(/^[0-9+()\-.\s]+$/, "Digits, spaces, and + - ( ) only");
+  .min(1, "Enter a phone number")
+  .max(30, "That's too long")
+  .refine(
+    (v) => parsePhoneNumberFromString(v)?.isValid() ?? false,
+    "That doesn't look like a valid phone number",
+  )
+  .transform((v) => parsePhoneNumberFromString(v)!.number as string);
 
 export const spendBandValues = [
   "under_50", "50_200", "200_500", "500_1000", "over_1000",

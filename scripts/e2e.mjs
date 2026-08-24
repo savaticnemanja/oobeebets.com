@@ -109,9 +109,16 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   await page.fill("#confirm", "correct-horse-battery");
   await page.click('button:has-text("Continue")');
 
-  // Step 3 — name and phone.
+  // Step 3 — name and phone. The field formats as it's typed and the country
+  // select defaults to the US, so typing bare digits should come back out as
+  // a national-format number and get stored as E.164.
   await page.fill("#name", "Taylor Tester");
-  await page.fill("#phone", "555-123-4567");
+  await page.type("#phone-local", "6502530000");
+  check(
+    (await page.inputValue("#phone-local")) === "(650) 253-0000",
+    "phone formats as you type",
+    `value=${await page.inputValue("#phone-local")}`,
+  );
   await page.click('button:has-text("Continue")');
 
   // Step 4 — spend band, then the real submit.
@@ -127,7 +134,7 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   `;
   check(Boolean(created), "user row created");
   check(created?.role === "user", "new users are not admins", `role=${created?.role}`);
-  check(created?.phone === "555-123-4567", "phone stored", `phone=${created?.phone}`);
+  check(created?.phone === "+16502530000", "phone stored as E.164", `phone=${created?.phone}`);
   check(created?.display_name === "Taylor Tester", "display name stored", `name=${created?.display_name}`);
   check(
     created?.monthly_spend_band === "under_50",
