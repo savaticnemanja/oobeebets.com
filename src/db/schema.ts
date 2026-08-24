@@ -36,7 +36,13 @@ export const pickStatusEnum = pgEnum("pick_status", [
   "void",
 ]);
 
-export const roleEnum = pgEnum("role", ["user", "admin", "owner"]);
+/**
+ * Two roles, not three. `owner` used to sit above `admin` and was the only
+ * role that could manage other roles — which made whoever held it a single
+ * point of failure for the whole panel. Collapsed in migration 0004: every
+ * admin now has the full panel, and there can be as many as you like.
+ */
+export const roleEnum = pgEnum("role", ["user", "admin"]);
 
 /** Self-reported monthly betting spend, collected during onboarding. */
 export const spendBandEnum = pgEnum("spend_band", [
@@ -68,9 +74,9 @@ export const users = pgTable(
      * the DB, enforces this for anyone who came through the invite flow. */
     monthlySpendBand: spendBandEnum("monthly_spend_band"),
     /**
-     * Three roles rather than a boolean: `owner` can promote/demote admins,
-     * `admin` can publish and settle. Keeps multi-admin safe — an admin cannot
-     * remove the owner or escalate a peer.
+     * `admin` holds the whole panel: publish, settle, invite, change roles and
+     * announce. The only thing an admin cannot do is change their own role, so
+     * nobody can lock themselves out (see canManageRole in lib/auth.ts).
      */
     role: roleEnum("role").notNull().default("user"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),

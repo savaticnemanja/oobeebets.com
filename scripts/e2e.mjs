@@ -17,19 +17,32 @@ import { chromium } from "playwright";
 // VISIBLE_PICKS can not leave a stale number behind. Run under tsx — see
 // package.json.
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
+import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
-/** What a signed-out visitor is entitled to on today's board. */
-const [{ date: latestRaw }] = await sql`select max(date) as date from slates`;
-// max() on a date column can come back as a Date; compare as YYYY-MM-DD so the
-// driver never re-interprets it in another timezone.
-const latestSlate =
-  latestRaw instanceof Date ? latestRaw.toISOString().slice(0, 10) : latestRaw;
-const [{ n: slateSize }] = await sql`
-  select count(*)::int as n from picks where slate_date = ${latestSlate}
-`;
+/** The seeded accounts. `db:seed` creates these two and no picks at all. */
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
+const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+
+// This suite builds the board it acts on and drops it at the end — `db:seed`
+// creates accounts only, deliberately.
+const [seedAdmin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+if (!seedAdmin) {
+  console.error(`\n✗ No ${ADMIN_EMAIL} account. Run: npm run db:seed\n`);
+  await sql.end();
+  process.exit(1);
+}
+
+const latestSlate = slateDateString();
+await dropSlate(sql, latestSlate);
+const { count: slateSize } = await createSlate(sql, {
+  date: latestSlate,
+  publishedBy: seedAdmin.id,
+});
+
+/** What a signed-in tester is entitled to on today's board. */
 const freeBoard = Math.min(VISIBLE_PICKS, slateSize);
 
 let failures = 0;
@@ -187,7 +200,7 @@ console.log("\nSettling a pick");
     check(false, "found a pending pick to settle");
   } else {
     const ctx = await browser.newContext();
-    await ctx.addCookies([await sessionCookie("owner@oobeebets.com")]);
+    await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
     const page = await ctx.newPage();
 
     await page.goto(`${APP_URL}/admin/settle`);
@@ -211,7 +224,7 @@ console.log("\nSettling a pick");
     `;
     check(audit?.action === "pick.settled.won", "audit log written", `action=${audit?.action}`);
     check(
-      audit?.actor_email === "owner@oobeebets.com",
+      audit?.actor_email === ADMIN_EMAIL,
       "audit log names the actor",
       audit?.actor_email,
     );
@@ -245,7 +258,7 @@ console.log("\nAuthorisation on mutations");
 {
   const [target] = await sql`select id, status from picks where status='pending' limit 1`;
   const ctx = await browser.newContext();
-  await ctx.addCookies([await sessionCookie("beta@example.com")]);
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
 
   // A regular (non-admin) user cannot even load the settle page.
@@ -288,13 +301,40 @@ console.log("\nFirst-visit stability");
   await ctx.close();
 }
 
+/* ------------------------------------------- 5. a second admin is a real admin */
+
+console.log("\nMultiple admins");
+
+const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
+{
+  // Promoting a second account has to grant the whole panel, not a subset —
+  // there is no tier above admin to withhold anything any more.
+  await sql`insert into users (email, password_hash, role)
+            values (${secondAdmin}, ${"x"}, 'admin')`;
+
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(secondAdmin)]);
+  const page = await ctx.newPage();
+
+  for (const route of ["/admin", "/admin/users", "/admin/announce"]) {
+    const res = await page.goto(`${APP_URL}${route}`);
+    check(res.status() === 200, `second admin opens ${route}`, `${res.status()}`);
+  }
+
+  // Both admins are listed, and the promoted one is not a special case.
+  const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
+  check(n === 2, "two admins coexist", `admins=${n}`);
+  await ctx.close();
+}
+
 /* ------------------------------------------------------------- teardown */
 
-// The test user's own session cascades with the row; only the ones minted
+// The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
-await sql`delete from users where email = ${testEmail}`;
+await sql`delete from users where email in (${testEmail}, ${secondAdmin})`;
 await sql`delete from invitations where email = ${testEmail}`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;
+await dropSlate(sql, latestSlate);
 await browser.close();
 
 console.log(failures === 0 ? "\n✓ All flow tests passed.\n" : `\n✗ ${failures} failed.\n`);

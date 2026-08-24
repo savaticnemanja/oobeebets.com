@@ -13,8 +13,6 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
   const auth = await getAuth();
-  // Any admin can invite; only an owner can change roles (enforced below and
-  // at the action layer).
   if (!auth?.isAdmin) notFound();
 
   const rows = await db
@@ -32,7 +30,7 @@ export default async function AdminUsersPage() {
   const [{ n: adminCount }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(users)
-    .where(sql`${users.role} in ('admin','owner')`);
+    .where(eq(users.role, "admin"));
 
   const inviteRows = await db
     .select({
@@ -52,10 +50,8 @@ export default async function AdminUsersPage() {
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
       <p className="mt-1.5 text-sm text-fg-muted">
-        {rows.length} accounts · {adminCount} with admin access.
-        {auth.isOwner
-          ? " Only an owner can change roles, and the last owner can't be demoted."
-          : " Ask an owner to change a role."}
+        {rows.length} accounts · {adminCount} with admin access. Any admin can
+        change roles, but not their own — and the last admin can&apos;t be demoted.
       </p>
 
       <div className="mt-8">
@@ -69,7 +65,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <div className="mt-10">
-        <UserTable users={rows} currentUserId={auth.user.id} viewerIsOwner={auth.isOwner} />
+        <UserTable users={rows} currentUserId={auth.user.id} />
       </div>
     </div>
   );

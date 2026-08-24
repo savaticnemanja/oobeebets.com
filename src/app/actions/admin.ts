@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog, picks, slates, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
-import { canManageRole, requireAdmin, requireOwner, revokeAllSessions } from "@/lib/auth";
+import { canManageRole, requireAdmin, revokeAllSessions } from "@/lib/auth";
 import {
   fieldErrorsFrom,
   LEAGUE_SPORT,
@@ -324,12 +324,12 @@ export async function setUserRoleAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const actor = await requireOwner();
+  const actor = await requireAdmin();
 
   const parsed = z
     .object({
       userId: z.string().uuid(),
-      role: z.enum(["user", "admin", "owner"]),
+      role: z.enum(["user", "admin"]),
     })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: "Bad request" };
@@ -345,14 +345,16 @@ export async function setUserRoleAction(
     return { ok: false, error: "You can't change your own role." };
   }
 
-  // Never let the last owner be demoted — that would lock everyone out of role
-  // management permanently, with no recovery path short of a SQL console.
-  if (target.role === "owner" && parsed.data.role !== "owner") {
+  // Never let the last admin be demoted — that locks everyone out of the panel
+  // permanently, with no recovery path short of a SQL console. Admins being
+  // plural makes this less likely to come up, not less important: the check is
+  // the only thing standing between "we have two admins" and nobody at all.
+  if (target.role === "admin" && parsed.data.role !== "admin") {
     const [{ n }] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(users)
-      .where(eq(users.role, "owner"));
-    if (n <= 1) return { ok: false, error: "There must be at least one owner." };
+      .where(eq(users.role, "admin"));
+    if (n <= 1) return { ok: false, error: "There must be at least one admin." };
   }
 
   await db
@@ -361,7 +363,7 @@ export async function setUserRoleAction(
     .where(eq(users.id, target.id));
 
   // A demoted admin must lose admin pages immediately, not at session expiry.
-  if (target.role !== "user" && parsed.data.role === "user") {
+  if (target.role === "admin" && parsed.data.role === "user") {
     await revokeAllSessions(target.id);
   }
 

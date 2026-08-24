@@ -35,11 +35,9 @@ interface Row {
 export function UserTable({
   users,
   currentUserId,
-  viewerIsOwner,
 }: {
   users: Row[];
   currentUserId: string;
-  viewerIsOwner: boolean;
 }) {
   const [roleState, roleAction] = useActionState(setUserRoleAction, null);
   const [q, setQ] = useState("");
@@ -93,7 +91,9 @@ export function UserTable({
                   </TableCell>
 
                   <TableCell>
-                    {isSelf || !viewerIsOwner ? (
+                    {/* Only your own row is fixed — an admin can change anyone
+                        else's role, but never their own. */}
+                    {isSelf ? (
                       <Badge variant="outline">{u.role}</Badge>
                     ) : (
                       <form action={roleAction}>
@@ -117,7 +117,6 @@ export function UserTable({
                           <SelectContent>
                             <SelectItem value="user">user</SelectItem>
                             <SelectItem value="admin">admin</SelectItem>
-                            <SelectItem value="owner">owner</SelectItem>
                           </SelectContent>
                         </Select>
                       </form>

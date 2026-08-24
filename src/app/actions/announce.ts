@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
-import { clientIp, rateLimit, requireOwner } from "@/lib/auth";
+import { clientIp, rateLimit, requireAdmin } from "@/lib/auth";
 import { resolveAudience } from "@/lib/announcements";
 import { sendBulkEmail, sendEmail } from "@/lib/email/resend-client";
 import { announcementEmail } from "@/lib/email/templates";
@@ -37,7 +37,7 @@ async function audit(
 }
 
 /**
- * Sends the composed email to the owner's own address and nobody else.
+ * Sends the composed email to the sending admin's own address and nobody else.
  *
  * The audience is ignored entirely rather than trusted-and-overridden: this
  * path cannot reach another person's inbox no matter what is posted to it,
@@ -47,7 +47,7 @@ export async function sendTestAnnouncementAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const actor = await requireOwner();
+  const actor = await requireAdmin();
 
   const parsed = announcementSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -80,7 +80,7 @@ export async function sendAnnouncementAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const actor = await requireOwner();
+  const actor = await requireAdmin();
 
   const parsed = announcementSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
