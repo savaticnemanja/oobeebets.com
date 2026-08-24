@@ -68,7 +68,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     dates.filter((d): d is Date => d !== null).sort((a, b) => b.getTime() - a.getTime())[0] ?? built;
 
   return [
-    // Headline stats come off settled picks, and the seat count off the board.
+    // The homepage points at today's board, which changes on every publish
+    // and every settlement.
     { url: SITE.url, lastModified: newest(settledAt, publishedAt), changeFrequency: "daily", priority: 1 },
     { url: `${SITE.url}/about`, lastModified: built, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE.url}/legal/terms`, lastModified: built, changeFrequency: "yearly", priority: 0.2 },

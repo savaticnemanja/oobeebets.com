@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { picks } from "@/db/schema";
 import type { Pick } from "@/db/schema";
-import { and, gte, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { pickProfit, countsTowardRate, MIN_SAMPLE_FOR_RATE } from "./settlement";
 import { startOfSlateDay, slateDateString } from "./slate-date";
 
@@ -185,41 +185,4 @@ export async function getTrackRecord(): Promise<TrackRecord> {
   }
 
   return record;
-}
-
-/** Headline numbers for the landing page strip. Cheap aggregate query. */
-export async function getHeadlineStats() {
-  const [row] = await db
-    .select({
-      wins: sql<number>`count(*) filter (where ${picks.status} = 'won')::int`,
-      losses: sql<number>`count(*) filter (where ${picks.status} = 'lost')::int`,
-      settled: sql<number>`count(*) filter (where ${picks.status} in ('won','lost','push'))::int`,
-      netUnits: sql<number>`coalesce(sum(
-        case
-          when ${picks.status} = 'won' and ${picks.price} > 0
-            then ${picks.units} * (${picks.price}::numeric / 100)
-          when ${picks.status} = 'won' and ${picks.price} < 0
-            then ${picks.units} * (100 / abs(${picks.price})::numeric)
-          when ${picks.status} = 'lost' then -${picks.units}
-          else 0
-        end
-      ), 0)::float`,
-    })
-    .from(picks)
-    .where(
-      and(
-        gte(picks.slateDate, "1970-01-01"),
-        publishedSlate,
-      ),
-    );
-
-  const rateable = (row?.wins ?? 0) + (row?.losses ?? 0);
-  return {
-    wins: row?.wins ?? 0,
-    losses: row?.losses ?? 0,
-    settled: row?.settled ?? 0,
-    netUnits: row?.netUnits ?? 0,
-    winRate: rateable > 0 ? (row?.wins ?? 0) / rateable : null,
-    sampleTooSmall: rateable < MIN_SAMPLE_FOR_RATE,
-  };
 }

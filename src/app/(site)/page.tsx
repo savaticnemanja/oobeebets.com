@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Eye, ListChecks, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatTile } from "@/components/stat-tile";
-import { Reveal, Stagger, StaggerItem, CountUp, PulseDot } from "@/components/ui/motion";
-import { getHeadlineStats } from "@/lib/stats";
+import { Reveal, Stagger, StaggerItem, PulseDot } from "@/components/ui/motion";
 import { SITE, appUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -13,13 +11,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-// Numbers change when a pick settles; a short window keeps the landing page
-// cheap without ever being meaningfully stale.
-export const revalidate = 60;
-
-export default async function HomePage() {
-  const stats = await getHeadlineStats();
-
+export default function HomePage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -74,48 +66,6 @@ export default async function HomePage() {
             </Button>
           </div>
         </Reveal>
-
-        {/* ------------------------------------------------------ stat strip */}
-        <Reveal delay={0.2}>
-          <dl className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile
-              label="Net units"
-              tone={stats.netUnits >= 0 ? "hit" : "miss"}
-              value={
-                <CountUp
-                  value={stats.netUnits}
-                  decimals={2}
-                  prefix={stats.netUnits > 0 ? "+" : ""}
-                  suffix="u"
-                />
-              }
-              sub="1 unit staked per pick"
-            />
-            <StatTile
-              label="Record"
-              value={`${stats.wins}–${stats.losses}`}
-              sub={`${stats.settled} settled`}
-            />
-            <StatTile
-              label="Win rate"
-              tone={stats.sampleTooSmall ? "neutral" : "brand"}
-              value={
-                stats.sampleTooSmall ? (
-                  <span className="text-fg-muted">—</span>
-                ) : (
-                  <CountUp value={(stats.winRate ?? 0) * 100} decimals={1} suffix="%" />
-                )
-              }
-              sub={stats.sampleTooSmall ? "Too few to be a rate" : "On settled picks"}
-            />
-            <StatTile
-              label="Picks daily"
-              tone="brand"
-              value="15"
-              sub="Free during the beta"
-            />
-          </dl>
-        </Reveal>
       </section>
 
       {/* ------------------------------------------------------ how it works */}
@@ -139,7 +89,7 @@ export default async function HomePage() {
             {
               icon: Eye,
               title: "You see the top",
-              body: "The top 15 are free for everyone during our beta trial. Every pick comes with the reasoning.",
+              body: "The top 15 are free for everyone during our beta. Every pick comes with the reasoning.",
             },
             {
               icon: ShieldCheck,
@@ -195,8 +145,6 @@ export default async function HomePage() {
                   "Every pick logged before the game starts",
                   "Losses stay on the record, permanently",
                   "One unit staked per pick — no chasing",
-                  "Capped membership, no volume growth",
-                  "Cancel any time, no lock-in",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3 text-sm text-fg-muted">
                     <CheckCircle2
