@@ -10,7 +10,8 @@
  *   2. Board visibility — picks past the free limit must not be in the
  *      response at all, and the board's own contract, called directly.
  *   3. Access control — /admin must not be reachable by a normal user.
- *   4. Session handling — an expired cookie drops to the free view.
+ *   4. Session handling — /picks is gated: no session, or a dead one, sends
+ *      the request to /login instead of rendering anything.
  */
 import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
@@ -30,6 +31,13 @@ const fail = (name, extra = "") => {
   console.log(`  FAIL  ${name}${extra ? "  " + extra : ""}`);
 };
 const check = (cond, name, extra) => (cond ? pass(name, extra) : fail(name, extra));
+
+/** /picks redirects here for anyone without a live session — see the guard
+ * at the top of src/app/(site)/picks/page.tsx. */
+function redirectsToLogin(res) {
+  const location = res.headers.get("location") ?? "";
+  return { ok: res.status >= 300 && res.status < 400 && location.startsWith("/login"), location };
+}
 
 /* ------------------------------------------------------ 1. settlement maths */
 
@@ -162,8 +170,9 @@ for (const viewer of viewers) {
 }
 
 {
-  const html = await (await fetch(`${APP_URL}/picks`)).text();
-  reportRanks("(anonymous)", servedRanks(html), Math.min(VISIBLE_PICKS, total));
+  const res = await fetch(`${APP_URL}/picks`, { redirect: "manual" });
+  const { ok, location } = redirectsToLogin(res);
+  check(ok, "(anonymous) is gated".padEnd(22), `-> ${res.status} ${location}`);
 }
 
 /* --------------------------------------------------- 2b. the board's own contract */
@@ -240,22 +249,20 @@ console.log("\nSession handling");
     insert into sessions (user_id, token_hash, expires_at)
     values (${user.id}, ${tokenHash}, ${new Date(Date.now() - 1000)})
   `;
-  const html = await (
-    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
-  ).text();
-  const anonLimit = Math.min(VISIBLE_PICKS, total);
-  const served = servedRanks(html);
-  check(
-    rankDiff(served, anonLimit).ok,
-    "expired session falls back to free",
-    `unlocked=${served.size}/${anonLimit}`,
-  );
+  const expired = await fetch(`${APP_URL}/picks`, {
+    headers: { cookie: `oobee_session=${token}` },
+    redirect: "manual",
+  });
+  const expiredResult = redirectsToLogin(expired);
+  check(expiredResult.ok, "expired session is gated", `-> ${expired.status} ${expiredResult.location}`);
   await sql`delete from sessions where token_hash = ${tokenHash}`;
 
   const garbage = await fetch(`${APP_URL}/picks`, {
     headers: { cookie: "oobee_session=not-a-real-token" },
+    redirect: "manual",
   });
-  check(garbage.status === 200, "forged cookie is rejected, page still renders");
+  const garbageResult = redirectsToLogin(garbage);
+  check(garbageResult.ok, "forged cookie is rejected, gated", `-> ${garbage.status} ${garbageResult.location}`);
 }
 
 /* ------------------------------------------------------------------ result */

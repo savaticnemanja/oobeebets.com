@@ -69,32 +69,62 @@ async function hydrated(page, selector = "form") {
 
 const browser = await chromium.launch();
 
-/* -------------------------------------------------- 1. signup -> the board */
+/* ---------------------------------------------- 1. invite -> onboarding -> board */
 
-console.log("\nSignup and the free board");
+console.log("\nInvite onboarding and the free board");
 
 const testEmail = `e2e-${Date.now()}@example.com`;
 {
-  // Signup is capped at 3 accounts per IP per day (FR-A9). Every run of this
-  // script burns one, so without this the suite bricks itself on the 4th run.
-  await sql`delete from rate_limits where bucket = 'signup'`;
+  // The token is minted the same way the app does: a random base64url token,
+  // only its sha256 hash stored — see lib/auth.ts hashToken.
+  const inviteToken = randomBytes(32).toString("base64url");
+  const inviteTokenHash = createHash("sha256").update(inviteToken).digest("hex");
+  await sql`insert into invitations (email, token_hash, status, expires_at)
+            values (${testEmail}, ${inviteTokenHash}, 'pending', ${new Date(Date.now() + 3600_000)})`;
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
 
-  await page.goto(`${APP_URL}/signup`);
+  await page.goto(`${APP_URL}/invite/${inviteToken}`);
   await hydrated(page);
-  await page.fill("#email", testEmail);
+
+  // Step 1 — "You're in": nothing to fill, the invited email is read-only.
+  await page.click('button:has-text("Continue")');
+
+  // Step 2 — set a password.
   await page.fill("#password", "correct-horse-battery");
   await page.fill("#confirm", "correct-horse-battery");
-  await page.click('button[type="submit"]');
+  await page.click('button:has-text("Continue")');
+
+  // Step 3 — name and phone.
+  await page.fill("#name", "Taylor Tester");
+  await page.fill("#phone", "555-123-4567");
+  await page.click('button:has-text("Continue")');
+
+  // Step 4 — spend band, then the real submit.
+  await page.click('label:has-text("Under $50")');
+  await page.click('button:has-text("Finish")');
   await page.waitForURL("**/picks**", { timeout: 15000 });
 
-  check(page.url().includes("/picks"), "signup redirects to the board");
+  check(page.url().includes("/picks"), "onboarding redirects to the board");
 
-  const [created] = await sql`select id, role from users where email = ${testEmail}`;
+  const [created] = await sql`
+    select id, role, phone, display_name, monthly_spend_band
+    from users where email = ${testEmail}
+  `;
   check(Boolean(created), "user row created");
   check(created?.role === "user", "new users are not admins", `role=${created?.role}`);
+  check(created?.phone === "555-123-4567", "phone stored", `phone=${created?.phone}`);
+  check(created?.display_name === "Taylor Tester", "display name stored", `name=${created?.display_name}`);
+  check(
+    created?.monthly_spend_band === "under_50",
+    "spend band stored",
+    `band=${created?.monthly_spend_band}`,
+  );
+
+  const [invite] = await sql`select status, accepted_user_id from invitations where email = ${testEmail}`;
+  check(invite?.status === "accepted", "invitation marked accepted", `status=${invite?.status}`);
+  check(invite?.accepted_user_id === created?.id, "invitation links to the new user");
 
   // A brand-new account gets the whole free board immediately — no plan step.
   const html = await page.content();
@@ -114,6 +144,19 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   await page.waitForURL("**/picks**", { timeout: 15000 });
   check(page.url().includes("/picks"), "/pricing redirects to the board", page.url());
 
+  await ctx.close();
+}
+
+/* ---------------------------------------------- 1b. /picks is gated */
+
+console.log("\nSigned-out visitors are gated");
+
+{
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/picks`);
+  await page.waitForURL("**/login**", { timeout: 15000 });
+  check(page.url().includes("/login"), "signed-out /picks bounces to /login", page.url());
   await ctx.close();
 }
 
@@ -216,7 +259,7 @@ console.log("\nFirst-visit stability");
   const page = await ctx.newPage();
   const typed = "typed-before-the-worker@example.com";
 
-  await page.goto(`${APP_URL}/signup`);
+  await page.goto(`${APP_URL}/login`);
   await hydrated(page);
   await page.fill("#email", typed);
 
@@ -239,8 +282,8 @@ console.log("\nFirst-visit stability");
 // The test user's own session cascades with the row; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
 await sql`delete from users where email = ${testEmail}`;
+await sql`delete from invitations where email = ${testEmail}`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;
-await sql`delete from rate_limits where bucket = 'signup'`;
 await browser.close();
 
 console.log(failures === 0 ? "\n✓ All flow tests passed.\n" : `\n✗ ${failures} failed.\n`);

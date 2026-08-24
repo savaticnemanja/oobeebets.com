@@ -69,7 +69,7 @@ jobs:
       # Settlement maths, tier gating, admin access control.
       - run: npm run verify
 
-      # Signup -> the free board, settle -> public record, first-visit stability.
+      # Invite -> onboarding -> the free board, settle -> public record, first-visit stability.
       # Runs even when verify failed, as long as there is a server to drive it:
       # both suites read the same product rules, so a product change tends to
       # break both, and learning that one round-trip at a time is what made the

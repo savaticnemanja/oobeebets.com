@@ -35,9 +35,11 @@ interface Row {
 export function UserTable({
   users,
   currentUserId,
+  viewerIsOwner,
 }: {
   users: Row[];
   currentUserId: string;
+  viewerIsOwner: boolean;
 }) {
   const [roleState, roleAction] = useActionState(setUserRoleAction, null);
   const [q, setQ] = useState("");
@@ -91,7 +93,7 @@ export function UserTable({
                   </TableCell>
 
                   <TableCell>
-                    {isSelf ? (
+                    {isSelf || !viewerIsOwner ? (
                       <Badge variant="outline">{u.role}</Badge>
                     ) : (
                       <form action={roleAction}>

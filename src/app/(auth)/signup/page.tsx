@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { SignupForm } from "@/components/auth-form";
+import Link from "next/link";
 import { getAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
-  title: "Create an account",
-  description: "Create your oobee bets account.",
+  title: "Closed beta",
+  description: "oobee bets is invite-only during the closed beta.",
   robots: { index: false, follow: false },
 };
 
@@ -16,16 +16,20 @@ export default async function SignupPage() {
 
   return (
     <>
-      <Badge variant="brand">Beta — free for testers</Badge>
+      <Badge variant="brand">Closed beta</Badge>
 
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">Create your account</h1>
+      <h1 className="mt-4 text-2xl font-semibold tracking-tight">Invite only, for now</h1>
       <p className="mt-2 text-sm text-fg-muted">
-        Free to make. You&apos;ll have the top 15 picks, unlocked, right away.
+        We&apos;re not open for signups yet — accounts are created by invitation
+        while we&apos;re in closed beta.
       </p>
 
-      <div className="mt-8">
-        <SignupForm />
-      </div>
+      <p className="mt-8 text-sm text-fg-muted">
+        Already have an account?{" "}
+        <Link href="/login" className="text-brand hover:underline">
+          Sign in
+        </Link>
+      </p>
     </>
   );
 }

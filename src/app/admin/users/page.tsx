@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { invitations, users } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { UserTable } from "@/components/admin/user-table";
+import { InvitePanel } from "@/components/admin/invite-panel";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Users" };
@@ -12,8 +13,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
   const auth = await getAuth();
-  // Role management is owner-only, matching the action layer.
-  if (!auth?.isOwner) notFound();
+  // Any admin can invite; only an owner can change roles (enforced below and
+  // at the action layer).
+  if (!auth?.isAdmin) notFound();
 
   const rows = await db
     .select({
@@ -32,16 +34,42 @@ export default async function AdminUsersPage() {
     .from(users)
     .where(sql`${users.role} in ('admin','owner')`);
 
+  const inviteRows = await db
+    .select({
+      id: invitations.id,
+      email: invitations.email,
+      status: invitations.status,
+      invitedByEmail: users.email,
+      createdAt: invitations.createdAt,
+      expiresAt: invitations.expiresAt,
+    })
+    .from(invitations)
+    .leftJoin(users, eq(users.id, invitations.invitedBy))
+    .orderBy(desc(invitations.createdAt))
+    .limit(200);
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
       <p className="mt-1.5 text-sm text-fg-muted">
-        {rows.length} accounts · {adminCount} with admin access. Only an owner can change
-        roles, and the last owner can&apos;t be demoted.
+        {rows.length} accounts · {adminCount} with admin access.
+        {auth.isOwner
+          ? " Only an owner can change roles, and the last owner can't be demoted."
+          : " Ask an owner to change a role."}
       </p>
 
       <div className="mt-8">
-        <UserTable users={rows} currentUserId={auth.user.id} />
+        <h2 className="text-sm font-semibold tracking-tight">Invite a tester</h2>
+        <p className="mt-1 text-sm text-fg-muted">
+          Signup is invite-only — this is the only way a new account gets created.
+        </p>
+        <div className="mt-4">
+          <InvitePanel invitations={inviteRows} />
+        </div>
+      </div>
+
+      <div className="mt-10">
+        <UserTable users={rows} currentUserId={auth.user.id} viewerIsOwner={auth.isOwner} />
       </div>
     </div>
   );
