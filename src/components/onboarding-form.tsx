@@ -3,16 +3,19 @@
 import * as React from "react";
 import { useActionState } from "react";
 import { Loader2 } from "lucide-react";
+import { isValidPhoneNumber, type CountryCode } from "libphonenumber-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneField, toE164 } from "@/components/phone-field";
 import { Reveal } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { acceptInviteAction } from "@/app/actions/invite";
-import { SPEND_BAND_LABELS, spendBandValues } from "@/lib/validation";
+import { nameSchema, passwordSchema, SPEND_BAND_LABELS, spendBandValues } from "@/lib/validation";
 import type { ActionState } from "@/lib/validation";
 
 type Step = 1 | 2 | 3 | 4;
+type Field = "password" | "confirm" | "name" | "phone" | "spendBand";
 
 const STEP_TITLES: Record<Step, string> = {
   1: "You're in",
@@ -31,6 +34,58 @@ const FIELD_STEP: Record<string, Step> = {
   spendBand: 4,
 };
 
+const STEP_FIELDS: Record<Step, Field[]> = {
+  1: [],
+  2: ["password", "confirm"],
+  3: ["name", "phone"],
+  4: ["spendBand"],
+};
+
+type Values = {
+  password: string;
+  confirm: string;
+  name: string;
+  country: CountryCode;
+  phone: string;
+  spendBand: string;
+};
+
+const EMPTY: Values = {
+  password: "",
+  confirm: "",
+  name: "",
+  country: "US",
+  phone: "",
+  spendBand: "",
+};
+
+/** The number is validated against the selected country's own numbering
+ * plan, so a plausible-looking but impossible number is caught here rather
+ * than becoming an unreachable contact. */
+function validate(field: Field, v: Values): string | undefined {
+  switch (field) {
+    case "password": {
+      const parsed = passwordSchema.safeParse(v.password);
+      return parsed.success ? undefined : parsed.error.issues[0]?.message;
+    }
+    case "confirm":
+      if (!v.confirm) return "Confirm your password";
+      return v.confirm === v.password ? undefined : "Passwords don't match";
+    case "name": {
+      const parsed = nameSchema.safeParse(v.name);
+      return parsed.success ? undefined : parsed.error.issues[0]?.message;
+    }
+    case "phone": {
+      if (!v.phone.trim()) return "Enter a phone number";
+      return isValidPhoneNumber(v.phone, v.country)
+        ? undefined
+        : "That doesn't look like a valid number for that country";
+    }
+    case "spendBand":
+      return v.spendBand ? undefined : "Pick a range";
+  }
+}
+
 function FieldError({ message, id }: { message?: string; id: string }) {
   if (!message) return null;
   return (
@@ -43,8 +98,14 @@ function FieldError({ message, id }: { message?: string; id: string }) {
 export function OnboardingForm({ email, token }: { email: string; token: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(acceptInviteAction, null);
   const [step, setStep] = React.useState<Step>(1);
-  const [clientError, setClientError] = React.useState<{ field: string; message: string } | null>(null);
-  const formRef = React.useRef<HTMLFormElement>(null);
+
+  // Every field is controlled, so a failed submit can't take the answers with
+  // it — React resets an uncontrolled form once its action settles, which is
+  // what used to wipe the steps the tester had already filled in.
+  const [values, setValues] = React.useState<Values>(EMPTY);
+  // A field's error only shows once it's been blurred or a step was
+  // advanced past it; after that it re-validates on every keystroke.
+  const [touched, setTouched] = React.useState<Partial<Record<Field, boolean>>>({});
   const headingRef = React.useRef<HTMLHeadingElement>(null);
 
   const serverFieldErrors = state && !state.ok ? state.fieldErrors : undefined;
@@ -64,48 +125,43 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
     headingRef.current?.focus();
   }, [step]);
 
-  function fieldValue(name: string): string {
-    const el = formRef.current?.elements.namedItem(name);
-    return el instanceof HTMLInputElement ? el.value : "";
+  function setField<K extends keyof Values>(field: K, value: Values[K]) {
+    setValues((v) => ({ ...v, [field]: value }));
   }
 
-  function errorFor(field: string): string | undefined {
-    if (clientError?.field === field) return clientError.message;
+  function markTouched(field: Field) {
+    setTouched((t) => ({ ...t, [field]: true }));
+  }
+
+  function errorFor(field: Field): string | undefined {
+    if (touched[field]) {
+      const message = validate(field, values);
+      if (message) return message;
+      // A live-valid field shouldn't keep showing the server's complaint.
+      return undefined;
+    }
     return serverFieldErrors?.[field]?.[0];
   }
 
   function handleContinue() {
-    if (step === 2) {
-      const password = fieldValue("password");
-      const confirm = fieldValue("confirm");
-      if (password.length < 8) {
-        setClientError({ field: "password", message: "At least 8 characters" });
-        return;
-      }
-      if (password !== confirm) {
-        setClientError({ field: "confirm", message: "Passwords don't match" });
-        return;
-      }
-    }
-    if (step === 3) {
-      const name = fieldValue("name").trim();
-      const phone = fieldValue("phone").trim();
-      if (!name) {
-        setClientError({ field: "name", message: "Enter your name" });
-        return;
-      }
-      if (!phone) {
-        setClientError({ field: "phone", message: "Enter a phone number" });
-        return;
-      }
-    }
-    setClientError(null);
+    const fields = STEP_FIELDS[step];
+    setTouched((t) => ({ ...t, ...Object.fromEntries(fields.map((f) => [f, true])) }));
+    if (fields.some((f) => validate(f, values))) return;
     setStep((s) => (s < 4 ? ((s + 1) as Step) : s));
   }
 
   function handleBack() {
-    setClientError(null);
     setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const fields: Field[] = ["password", "confirm", "name", "phone", "spendBand"];
+    setTouched(Object.fromEntries(fields.map((f) => [f, true])));
+    const firstBad = fields.find((f) => validate(f, values));
+    if (firstBad) {
+      e.preventDefault();
+      setStep(FIELD_STEP[firstBad]);
+    }
   }
 
   return (
@@ -136,9 +192,13 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
         </p>
       )}
 
-      <form ref={formRef} action={action} className="mt-6">
+      <form action={action} onSubmit={handleSubmit} className="mt-6">
         <input type="hidden" name="email" value={email} />
         <input type="hidden" name="token" value={token} />
+        {/* E.164 is what the server stores; the formatted national number is
+            only ever a display concern. */}
+        <input type="hidden" name="phone" value={toE164(values.country, values.phone) ?? values.phone.trim()} />
+        <input type="hidden" name="spendBand" value={values.spendBand} />
 
         {/* --------------------------------------------------------- step 1 */}
         <div className={step === 1 ? "space-y-4" : "hidden"}>
@@ -162,7 +222,9 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
               name="password"
               type="password"
               autoComplete="new-password"
-              minLength={8}
+              value={values.password}
+              onChange={(e) => setField("password", e.target.value)}
+              onBlur={() => markTouched("password")}
               className="mt-1.5"
               aria-invalid={Boolean(errorFor("password"))}
               aria-describedby={errorFor("password") ? "password-error" : "password-hint"}
@@ -182,6 +244,9 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
               name="confirm"
               type="password"
               autoComplete="new-password"
+              value={values.confirm}
+              onChange={(e) => setField("confirm", e.target.value)}
+              onBlur={() => markTouched("confirm")}
               className="mt-1.5"
               aria-invalid={Boolean(errorFor("confirm"))}
               aria-describedby={errorFor("confirm") ? "confirm-error" : undefined}
@@ -198,6 +263,9 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
               id="name"
               name="name"
               autoComplete="name"
+              value={values.name}
+              onChange={(e) => setField("name", e.target.value)}
+              onBlur={() => markTouched("name")}
               className="mt-1.5"
               aria-invalid={Boolean(errorFor("name"))}
               aria-describedby={errorFor("name") ? "name-error" : undefined}
@@ -205,16 +273,19 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
             <FieldError id="name-error" message={errorFor("name")} />
           </div>
           <div>
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              className="mt-1.5"
-              aria-invalid={Boolean(errorFor("phone"))}
-              aria-describedby={errorFor("phone") ? "phone-error" : undefined}
-            />
+            <Label htmlFor="phone-local">Phone</Label>
+            <div className="mt-1.5">
+              <PhoneField
+                id="phone-local"
+                country={values.country}
+                onCountryChange={(c) => setField("country", c)}
+                value={values.phone}
+                onValueChange={(v) => setField("phone", v)}
+                onBlur={() => markTouched("phone")}
+                invalid={Boolean(errorFor("phone"))}
+                describedBy={errorFor("phone") ? "phone-error" : undefined}
+              />
+            </div>
             <FieldError id="phone-error" message={errorFor("phone")} />
           </div>
         </div>
@@ -233,9 +304,13 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
                 >
                   <input
                     type="radio"
-                    name="spendBand"
+                    name="spendBandChoice"
                     value={value}
-                    required
+                    checked={values.spendBand === value}
+                    onChange={() => {
+                      setField("spendBand", value);
+                      markTouched("spendBand");
+                    }}
                     className="peer sr-only"
                   />
                   <span>{SPEND_BAND_LABELS[value]}</span>

@@ -53,6 +53,17 @@ export function PickComposer({
     if (state?.ok) setLine("");
   }
 
+  // Submitting through `onSubmit` rather than `action={action}` on purpose:
+  // React resets an uncontrolled form once its action settles, which wiped
+  // everything the admin had typed whenever the submit came back invalid.
+  // Driving the action by hand keeps the fields, and the success path below
+  // clears them explicitly.
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    React.startTransition(() => action(formData));
+  }
+
   React.useEffect(() => {
     if (state?.ok) {
       toast.success(state.message ?? "Pick added");
@@ -107,7 +118,7 @@ export function PickComposer({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={action} className="space-y-3">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
           <input type="hidden" name="slateDate" value={date} />
           <input type="hidden" name="market" value={market} />
           {isTotal && <input type="hidden" name="selection" value={ouSelection} />}
