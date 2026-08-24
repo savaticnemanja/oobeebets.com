@@ -99,6 +99,47 @@ export const pickSchema = z.object({
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
+/* --------------------------------------------------------- announcements */
+
+export const audienceValues = ["all", "testers", "custom"] as const;
+
+export type Audience = (typeof audienceValues)[number];
+
+export const AUDIENCE_LABELS: Record<Audience, string> = {
+  all: "Every account",
+  testers: "Testers only",
+  custom: "Custom list",
+};
+
+/**
+ * A hard ceiling on one send. Not a Resend limit — a blast radius. The beta is
+ * a room deliberately kept small, so a send addressing more than this many
+ * people means something has gone wrong with the audience, and stopping is a
+ * better answer than delivering it.
+ */
+export const MAX_ANNOUNCEMENT_RECIPIENTS = 500;
+
+/**
+ * Addresses typed into the custom list, one per line or comma-separated.
+ * Parsed leniently (people paste from spreadsheets) and validated strictly.
+ */
+export function parseAddressList(raw: string): string[] {
+  const seen = new Set<string>();
+  for (const part of raw.split(/[\s,;]+/)) {
+    const trimmed = part.trim().toLowerCase();
+    if (trimmed) seen.add(trimmed);
+  }
+  return [...seen];
+}
+
+export const announcementSchema = z.object({
+  heading: z.string().trim().min(1, "The email needs a heading").max(120, "That's too long"),
+  body: z.string().trim().min(1, "The email needs some content").max(5000, "That's too long"),
+  audience: z.enum(audienceValues),
+  /** Only read when audience is "custom". */
+  recipients: z.string().optional().default(""),
+});
+
 export const settleSchema = z.object({
   pickId: z.string().uuid(),
   status: z.enum(["won", "lost", "push", "void"]),
