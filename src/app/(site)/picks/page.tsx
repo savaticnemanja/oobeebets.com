@@ -36,12 +36,12 @@ export default async function PicksPage({
   const requested = params.date && isValidSlateDate(params.date) ? params.date : today;
 
   // Only admins can browse history — everyone else always sees today's board.
-  const date = auth?.isAdmin ? requested : today;
+  const date = auth.isAdmin ? requested : today;
 
   const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
 
   // Admins preview drafts; nobody else sees an unpublished slate exists.
-  const visible = Boolean(slate?.publishedAt) || Boolean(auth?.isAdmin);
+  const visible = Boolean(slate?.publishedAt) || auth.isAdmin;
 
   const rows: Pick[] = visible
     ? await db
@@ -52,15 +52,19 @@ export default async function PicksPage({
     : [];
 
   // Admins preview the whole slate; everyone else sees the top VISIBLE_PICKS.
-  const view = visiblePicks(rows, auth?.isAdmin ?? false);
+  const view = visiblePicks(rows, auth.isAdmin);
   const [top, ...rest] = view;
 
-  const availableDates = await db
-    .select({ date: slates.date })
-    .from(slates)
-    .where(sql`${slates.publishedAt} is not null`)
-    .orderBy(sql`${slates.date} desc`)
-    .limit(30);
+  // Only the admin date picker consumes this, and only admins can browse to
+  // another date at all — so a tester's board does not pay for the query.
+  const availableDates = auth.isAdmin
+    ? await db
+        .select({ date: slates.date })
+        .from(slates)
+        .where(sql`${slates.publishedAt} is not null`)
+        .orderBy(sql`${slates.date} desc`)
+        .limit(30)
+    : [];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -95,7 +99,7 @@ export default async function PicksPage({
         </div>
 
         <div className="flex items-center gap-2">
-          {auth?.isAdmin && availableDates.length > 0 && (
+          {auth.isAdmin && availableDates.length > 0 && (
             <SlateDatePicker dates={availableDates.map((d) => d.date)} current={date} />
           )}
         </div>

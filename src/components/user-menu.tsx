@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
-import { LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, Shield, Sparkles, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,14 @@ export function UserMenu({
           <Link href="/picks">
             <UserIcon aria-hidden="true" />
             {t().account.todaysPicks}
+          </Link>
+        </DropdownMenuItem>
+        {/* The header's own nav only carries links a signed-out visitor can
+            open, so this menu is where a tester reaches /top-picks. */}
+        <DropdownMenuItem asChild>
+          <Link href="/top-picks">
+            <Sparkles aria-hidden="true" />
+            {t().nav.topPicks}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

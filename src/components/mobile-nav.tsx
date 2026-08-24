@@ -10,7 +10,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { NAV_PUBLIC } from "@/lib/site";
+import { NAV_APP, NAV_PUBLIC } from "@/lib/site";
 import { t } from "@/lib/i18n";
 
 export function MobileNav({
@@ -23,13 +23,8 @@ export function MobileNav({
   const [open, setOpen] = React.useState(false);
 
   const links = [
+    ...(isAuthed ? NAV_APP : ([{ href: "/login", label: t().nav.signIn }] as const)),
     ...NAV_PUBLIC,
-    ...(isAuthed
-      ? ([
-          { href: "/picks", label: t().nav.picks },
-          { href: "/account", label: t().nav.account },
-        ] as const)
-      : ([{ href: "/login", label: t().nav.signIn }] as const)),
     ...(isAdmin ? ([{ href: "/admin", label: t().nav.admin }] as const) : []),
   ];
 

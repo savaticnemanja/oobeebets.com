@@ -21,13 +21,19 @@ export function appUrl(path = "/"): string {
   return new URL(path, SITE.url).toString();
 }
 
+/**
+ * Shown to every visitor, so everything here has to open without a session.
+ * /picks and /top-picks are both gated now — advertising them to a signed-out
+ * visitor just bounces them to /login — so they live in NAV_APP.
+ */
 export const NAV_PUBLIC = [
-  { href: "/top-picks", label: t().nav.topPicks },
   { href: "/about", label: t().nav.about },
 ] as const;
 
+/** The signed-in surfaces. */
 export const NAV_APP = [
   { href: "/picks", label: t().nav.picks },
+  { href: "/top-picks", label: t().nav.topPicks },
   { href: "/account", label: t().nav.account },
 ] as const;
 

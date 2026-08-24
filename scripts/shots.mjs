@@ -21,10 +21,12 @@ async function cookieFor(email) {
 
 const browser = await chromium.launch();
 
+// Both boards are gated now, so a signed-out shot of either captures the login
+// page rather than the surface it is named after.
 const SHOTS = [
   { name: "01-landing", path: "/", user: null, full: true },
-  { name: "02-top-picks", path: "/top-picks", user: null, full: true },
-  { name: "03-picks", path: "/picks", user: null, full: false },
+  { name: "02-top-picks", path: "/top-picks", user: "beta@example.com", full: true },
+  { name: "03-picks", path: "/picks", user: "beta@example.com", full: false },
   { name: "04-account", path: "/account", user: "beta@example.com", full: false },
   { name: "05-admin", path: "/admin", user: "owner@oobeebets.com", full: false },
   { name: "06-admin-slate", path: "/admin/slate", user: "owner@oobeebets.com", full: false },
