@@ -3,13 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import type { Pick, PickStatus, Sport } from "@/db/schema";
-import { formatKickoff, formatOdds, formatUnits, timeZoneLabel } from "@/lib/i18n/format";
+import {
+  formatKickoff,
+  formatOdds,
+  formatSignedPct,
+  formatUnits,
+  timeZoneLabel,
+} from "@/lib/i18n/format";
 import { t } from "@/lib/i18n";
 
-// Words come from the catalogue; the emoji below does not, because a picture
-// of a ball is the same picture in every language.
-const SPORT_LABEL: Record<Sport, string> = t().sport;
-
+// The emoji does not come from the catalogue, because a picture of a ball is
+// the same picture in every language.
 const SPORT_EMOJI: Record<Sport, string> = {
   soccer: "⚽",
   basketball: "🏀",
@@ -93,8 +97,19 @@ export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean })
         {pick.evPct !== null && (
           <div className="flex items-baseline gap-1">
             <dt className="text-fg-subtle">EV</dt>
-            <dd className="num font-medium text-hit">
-              +{Number(pick.evPct).toFixed(1)}%
+            {/* The schema allows a negative edge, so the sign is read off the
+                value — hardcoding "+" printed "+-3.2%" in green. */}
+            <dd
+              className={cn(
+                "num font-medium",
+                Number(pick.evPct) > 0
+                  ? "text-hit"
+                  : Number(pick.evPct) < 0
+                    ? "text-miss"
+                    : "text-fg-muted",
+              )}
+            >
+              {formatSignedPct(Number(pick.evPct))}
             </dd>
           </div>
         )}
@@ -151,4 +166,4 @@ export function TopPickCard({ pick }: { pick: Pick }) {
   );
 }
 
-export { SPORT_LABEL, SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT };
+export { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT };

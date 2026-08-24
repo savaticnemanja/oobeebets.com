@@ -3,11 +3,10 @@ import { DEFAULT_LOCALE, localeConfig, type Locale } from "./config";
 /**
  * Every Intl call in the app goes through here.
  *
- * Before this, money formatted as en-US, dates as en-GB, and four components
- * each passed `timeZone: "UTC"` by hand — so the product had two locales and no
- * way to change either. The output of all of these is byte-identical to what
- * those literals produced; the only thing that changed is that the locale is
- * now an argument.
+ * Before this, four components each passed `timeZone: "UTC"` by hand and the
+ * formatting locale was written out at each call site — so the product had no
+ * way to change either. The output is byte-identical to what those literals
+ * produced; the only thing that changed is that the locale is now an argument.
  *
  * Every function takes the locale last and defaults it, so call sites that do
  * not have one yet keep working, and threading a per-account locale through
@@ -15,33 +14,14 @@ import { DEFAULT_LOCALE, localeConfig, type Locale } from "./config";
  */
 
 /** Formatters are expensive to construct and pure, so build each one once. */
-const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
+const cache = new Map<string, Intl.DateTimeFormat>();
 
-function memo<T extends Intl.NumberFormat | Intl.DateTimeFormat>(key: string, make: () => T): T {
+function memo(key: string, make: () => Intl.DateTimeFormat): Intl.DateTimeFormat {
   const hit = cache.get(key);
-  if (hit) return hit as T;
+  if (hit) return hit;
   const made = make();
   cache.set(key, made);
   return made;
-}
-
-/* ------------------------------------------------------------------ money */
-
-/**
- * `narrowSymbol` matters: the formatting locale is en-GB, and without it USD
- * renders as "US$29" rather than "$29".
- */
-export function formatMoney(cents: number, locale: Locale = DEFAULT_LOCALE): string {
-  const { formats, currency } = localeConfig(locale);
-  const whole = cents % 100 === 0;
-  return memo(`money:${formats}:${currency}:${whole}`, () =>
-    new Intl.NumberFormat(formats, {
-      style: "currency",
-      currency,
-      currencyDisplay: "narrowSymbol",
-      minimumFractionDigits: whole ? 0 : 2,
-    }),
-  ).format(cents / 100);
 }
 
 /* ------------------------------------------------------------- quantities */
@@ -53,12 +33,17 @@ export function formatOdds(price: number): string {
 
 /** Units -> display string, always signed, 2dp, e.g. "+1.35u" / "-1.00u". */
 export function formatUnits(units: number): string {
-  const sign = units > 0 ? "+" : units < 0 ? "" : "";
-  return `${sign}${units.toFixed(2)}u`;
+  // Only the positive case needs a sign added; a negative number already
+  // carries its own, and zero takes none.
+  return `${units > 0 ? "+" : ""}${units.toFixed(2)}u`;
 }
 
-export function formatPct(value: number, digits = 0): string {
-  return `${(value * 100).toFixed(digits)}%`;
+/**
+ * A value already expressed in percentage points -> a signed percentage, e.g.
+ * 3.2 -> "+3.2%", -1.4 -> "-1.4%". For edges, where the sign is the point.
+ */
+export function formatSignedPct(value: number, digits = 1): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
 /* ------------------------------------------------------------------ dates */
