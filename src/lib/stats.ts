@@ -1,10 +1,9 @@
 import "server-only";
 import { db } from "@/db";
 import { picks } from "@/db/schema";
-import type { Pick } from "@/db/schema";
+import type { PickStatus } from "@/db/schema";
 import { sql } from "drizzle-orm";
-import { pickProfit, countsTowardRate, MIN_SAMPLE_FOR_RATE } from "./settlement";
-import { startOfSlateDay, slateDateString } from "./slate-date";
+import { pickProfit, MIN_SAMPLE_FOR_RATE } from "./settlement";
 
 /**
  * Restricts any picks query to slates that have actually been published.
@@ -15,8 +14,14 @@ const publishedSlate = sql`exists (
   where s.date = ${picks.slateDate} and s.published_at is not null
 )`;
 
-export interface WindowStats {
-  label: string;
+/** The three columns the record is arithmetic over, and nothing else. */
+interface RecordRow {
+  price: number;
+  units: string;
+  status: PickStatus;
+}
+
+export interface TrackRecord {
   wins: number;
   losses: number;
   pushes: number;
@@ -30,8 +35,7 @@ export interface WindowStats {
   roi: number | null;
 }
 
-const EMPTY = (label: string): WindowStats => ({
-  label,
+const EMPTY = (): TrackRecord => ({
   wins: 0,
   losses: 0,
   pushes: 0,
@@ -44,8 +48,8 @@ const EMPTY = (label: string): WindowStats => ({
   roi: null,
 });
 
-export function summarise(label: string, rows: Pick[]): WindowStats {
-  const s = EMPTY(label);
+function summarise(rows: RecordRow[]): TrackRecord {
+  const s = EMPTY();
   let stakedOnSettled = 0;
 
   for (const p of rows) {
@@ -83,106 +87,26 @@ export function summarise(label: string, rows: Pick[]): WindowStats {
   return s;
 }
 
-/** Confidence buckets, for the "how each confidence tier has done" bar. */
-export interface ConfidenceBucket {
-  label: string;
-  min: number;
-  max: number;
-  wins: number;
-  losses: number;
-  hitRate: number | null;
-  sample: number;
-  sampleTooSmall: boolean;
-}
-
-const BUCKETS: Array<{ label: string; min: number; max: number }> = [
-  { label: "50–60%", min: 50, max: 60 },
-  { label: "60–70%", min: 60, max: 70 },
-  { label: "70–80%", min: 70, max: 80 },
-  { label: "80%+", min: 80, max: 101 },
-];
-
-export function bucketByConfidence(rows: Pick[]): ConfidenceBucket[] {
-  return BUCKETS.map((b) => {
-    const inBucket = rows.filter(
-      (p) =>
-        p.confidence !== null &&
-        p.confidence >= b.min &&
-        p.confidence < b.max &&
-        countsTowardRate(p.status),
-    );
-    const wins = inBucket.filter((p) => p.status === "won").length;
-    const sample = inBucket.length;
-    return {
-      ...b,
-      wins,
-      losses: sample - wins,
-      sample,
-      hitRate: sample > 0 ? wins / sample : null,
-      sampleTooSmall: sample < MIN_SAMPLE_FOR_RATE,
-    };
-  });
-}
-
-export interface TrackRecord {
-  today: WindowStats;
-  week: WindowStats;
-  month: WindowStats;
-  overall: WindowStats;
-  buckets: ConfidenceBucket[];
-  /** Book-implied win rate vs actual, over rateable picks. */
-  vsMarket: { impliedRate: number; actualRate: number; edge: number; sample: number } | null;
-}
-
 /**
- * One query, aggregated in memory. At the stated ceiling (30 picks/day, ~11k
- * rows/year) this is far cheaper than four round trips, and lets every window
- * share one consistent snapshot. If the pick table ever outgrows this, move to
- * a materialised view keyed by slate_date — the shape here stays identical.
+ * The published record, all time.
+ *
+ * One query, summed in memory. At the stated ceiling (30 picks/day, ~11k
+ * rows/year) that is cheaper than asking Postgres for each figure separately,
+ * and every number here comes off one consistent snapshot. If the pick table
+ * ever outgrows it, move to a materialised view keyed by slate_date — the
+ * shape this returns stays identical.
+ *
+ * Only the three columns the maths reads are selected. Windowed slices (today,
+ * this week, confidence buckets, book-implied vs actual) lived here until the
+ * public statistics page was dropped; they are in git if that page returns,
+ * rather than sitting here being computed for nobody.
  */
 export async function getTrackRecord(): Promise<TrackRecord> {
   // Only published slates count toward the public record. Drafts are invisible.
-  const rows = await db.select().from(picks).where(publishedSlate);
+  const rows = await db
+    .select({ price: picks.price, units: picks.units, status: picks.status })
+    .from(picks)
+    .where(publishedSlate);
 
-  const now = new Date();
-  const todayStart = startOfSlateDay(now);
-  const weekStart = new Date(todayStart);
-  weekStart.setUTCDate(weekStart.getUTCDate() - 6);
-  const monthStart = new Date(todayStart);
-  monthStart.setUTCDate(1);
-
-  const todayStr = slateDateString(now);
-  const inWindow = (p: Pick, from: Date) => new Date(`${p.slateDate}T12:00:00Z`) >= from;
-
-  const overall = summarise("Overall", rows);
-  const record: TrackRecord = {
-    today: summarise("Today", rows.filter((p) => p.slateDate === todayStr)),
-    week: summarise("This week", rows.filter((p) => inWindow(p, weekStart))),
-    month: summarise("This month", rows.filter((p) => inWindow(p, monthStart))),
-    overall,
-    buckets: bucketByConfidence(rows),
-    vsMarket: null,
-  };
-
-  const rateable = rows.filter((p) => countsTowardRate(p.status));
-  if (rateable.length > 0) {
-    const implied =
-      rateable.reduce(
-        (acc, p) =>
-          acc +
-          (p.price > 0
-            ? 100 / (p.price + 100)
-            : Math.abs(p.price) / (Math.abs(p.price) + 100)),
-        0,
-      ) / rateable.length;
-    const actual = rateable.filter((p) => p.status === "won").length / rateable.length;
-    record.vsMarket = {
-      impliedRate: implied,
-      actualRate: actual,
-      edge: actual - implied,
-      sample: rateable.length,
-    };
-  }
-
-  return record;
+  return summarise(rows);
 }

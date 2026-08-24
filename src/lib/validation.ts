@@ -69,10 +69,6 @@ export const onboardingSchema = z
     path: ["confirm"],
   });
 
-export const sportValues = [
-  "soccer", "basketball", "baseball", "tennis", "hockey", "football",
-] as const;
-
 export const marketValues = ["moneyline", "spread", "total", "prop"] as const;
 
 /** The only leagues the composer publishes to right now. */

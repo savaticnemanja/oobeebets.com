@@ -113,13 +113,13 @@ export default async function AdminOverviewPage() {
         <StatTile label="Registered users" value={userCount} />
         <StatTile
           label="Net units (all time)"
-          tone={record.overall.netUnits >= 0 ? "hit" : "miss"}
-          value={formatUnits(record.overall.netUnits)}
+          tone={record.netUnits >= 0 ? "hit" : "miss"}
+          value={formatUnits(record.netUnits)}
         />
         <StatTile
           label="Record"
-          value={`${record.overall.wins}–${record.overall.losses}`}
-          sub={record.overall.sampleTooSmall ? "Too few for a rate" : undefined}
+          value={`${record.wins}–${record.losses}`}
+          sub={record.sampleTooSmall ? "Too few for a rate" : undefined}
         />
       </dl>
 
