@@ -38,6 +38,22 @@ export const pickStatusEnum = pgEnum("pick_status", [
 
 export const roleEnum = pgEnum("role", ["user", "admin", "owner"]);
 
+/** Self-reported monthly betting spend, collected during onboarding. */
+export const spendBandEnum = pgEnum("spend_band", [
+  "under_50",
+  "50_200",
+  "200_500",
+  "500_1000",
+  "over_1000",
+]);
+
+export const inviteStatusEnum = pgEnum("invite_status", [
+  "pending",
+  "accepted",
+  "revoked",
+  "expired",
+]);
+
 /* ------------------------------------------------------------------ users */
 
 export const users = pgTable(
@@ -47,6 +63,10 @@ export const users = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name"),
+    phone: text("phone"),
+    /** Nullable: legacy/seeded users predate onboarding; the app layer, not
+     * the DB, enforces this for anyone who came through the invite flow. */
+    monthlySpendBand: spendBandEnum("monthly_spend_band"),
     /**
      * Three roles rather than a boolean: `owner` can promote/demote admins,
      * `admin` can publish and settle. Keeps multi-admin safe — an admin cannot
@@ -93,6 +113,36 @@ export const sessions = pgTable(
     uniqueIndex("sessions_token_hash_unique").on(t.tokenHash),
     index("sessions_user_idx").on(t.userId),
     index("sessions_expires_idx").on(t.expiresAt),
+  ],
+);
+
+/* -------------------------------------------------------------- invitations */
+
+/**
+ * The only way a new account gets created — closed beta, no open signup.
+ * `tokenHash` follows the same "random token, store only its hash" pattern as
+ * sessions (see lib/auth.ts hashToken). One live invite per email: sending a
+ * second invite to the same address updates this row in place rather than
+ * creating a new one, which is what makes "resend" and "invite again" the
+ * same code path.
+ */
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    status: inviteStatusEnum("status").notNull().default("pending"),
+    invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+    acceptedUserId: uuid("accepted_user_id").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("invitations_email_unique").on(t.email),
+    uniqueIndex("invitations_token_hash_unique").on(t.tokenHash),
   ],
 );
 
@@ -222,7 +272,11 @@ export type Session = typeof sessions.$inferSelect;
 export type Pick = typeof picks.$inferSelect;
 export type NewPick = typeof picks.$inferInsert;
 export type Slate = typeof slates.$inferSelect;
+export type Invitation = typeof invitations.$inferSelect;
+export type NewInvitation = typeof invitations.$inferInsert;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];
 export type Market = (typeof marketEnum.enumValues)[number];
+export type SpendBand = (typeof spendBandEnum.enumValues)[number];
+export type InviteStatus = (typeof inviteStatusEnum.enumValues)[number];

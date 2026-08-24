@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { asc, eq, sql } from "drizzle-orm";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/db";
@@ -28,6 +29,7 @@ export default async function PicksPage({
   searchParams: Promise<{ date?: string; welcome?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
+  if (!auth) redirect("/login?next=/picks");
 
   const today = slateDateString();
   const requested = params.date && isValidSlateDate(params.date) ? params.date : today;

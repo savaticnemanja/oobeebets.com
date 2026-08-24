@@ -11,6 +11,7 @@ import postgres from "postgres";
 import bcrypt from "bcryptjs";
 import {
   auditLog,
+  invitations,
   picks,
   rateLimits,
   sessions,
@@ -70,7 +71,7 @@ requireSeedOptIn(connectionString);
 
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client, {
-  schema: { users, sessions, slates, picks, auditLog, rateLimits },
+  schema: { users, sessions, slates, picks, auditLog, rateLimits, invitations },
 });
 
 /* --------------------------------------------------------- demo fixtures */
@@ -151,6 +152,7 @@ async function main() {
   await db.delete(picks);
   await db.delete(slates);
   await db.delete(sessions);
+  await db.delete(invitations);
   await db.delete(users);
 
   /* ------------------------------------------------------------- users */

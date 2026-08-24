@@ -41,7 +41,9 @@ export async function fakeVerify(plain: string): Promise<void> {
 
 /* -------------------------------------------------------------- sessions */
 
-function hashToken(token: string): string {
+/** Shared with invitations (see lib/invitations.ts) — same "hash the random
+ * token, store only the hash" pattern as sessions. */
+export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 

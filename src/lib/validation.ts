@@ -22,21 +22,52 @@ export const passwordSchema = z
   .max(200, "That's too long")
   .refine((p) => !COMMON_PASSWORDS.has(p.toLowerCase()), "That password is too common");
 
-export const signupSchema = z
+export const loginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, "Enter your password"),
+});
+
+export const nameSchema = z.string().trim().min(1, "Enter your name").max(120);
+
+export const phoneSchema = z
+  .string()
+  .trim()
+  .min(7, "Enter a phone number")
+  .max(20, "That's too long")
+  .regex(/^[0-9+()\-.\s]+$/, "Digits, spaces, and + - ( ) only");
+
+export const spendBandValues = [
+  "under_50", "50_200", "200_500", "500_1000", "over_1000",
+] as const;
+
+export const SPEND_BAND_LABELS: Record<(typeof spendBandValues)[number], string> = {
+  under_50: "Under $50",
+  "50_200": "$50 – $200",
+  "200_500": "$200 – $500",
+  "500_1000": "$500 – $1,000",
+  over_1000: "Over $1,000",
+};
+
+/**
+ * Posted once, at the end of the invite-accept wizard. `token` and `email`
+ * come back as hidden fields mirroring what the server already resolved from
+ * the invite link — the action re-derives the real values from the token
+ * itself rather than trusting either.
+ */
+export const onboardingSchema = z
   .object({
     email: emailSchema,
+    token: z.string().min(1, "Missing invite token"),
     password: passwordSchema,
     confirm: z.string(),
+    name: nameSchema,
+    phone: phoneSchema,
+    spendBand: z.enum(spendBandValues),
   })
   .refine((d) => d.password === d.confirm, {
     message: "Passwords don't match",
     path: ["confirm"],
   });
-
-export const loginSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1, "Enter your password"),
-});
 
 export const sportValues = [
   "soccer", "basketball", "baseball", "tennis", "hockey", "football",
@@ -79,9 +110,9 @@ export const settleSchema = z.object({
   voidReason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
-export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type PickInput = z.infer<typeof pickSchema>;
+export type OnboardingInput = z.infer<typeof onboardingSchema>;
 
 /** Shape every server action returns, so forms can render errors uniformly. */
 export type ActionState =
