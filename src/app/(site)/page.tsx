@@ -36,7 +36,7 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <PulseDot />
             <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
-              Beta — top 15 free for testers
+              Beta — all 15 picks free for testers
             </span>
           </div>
         </Reveal>
@@ -50,9 +50,9 @@ export default function HomePage() {
 
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
-            Thirty picks a day, ranked best to worst. The top 15 are free for everyone
-            during our beta. Every one is graded against the real final score — the
-            losses stay on the page next to the wins.
+            Fifteen picks a day, ranked best to worst — the whole board free for
+            everyone during our beta. Every one is graded against the real final
+            score, and the losses stay on the page next to the wins.
           </p>
         </Reveal>
 
@@ -84,12 +84,12 @@ export default function HomePage() {
             {
               icon: ListChecks,
               title: "We rank the board",
-              body: "Thirty plays a day, ordered 1 to 30 by how much we like them. Rank 1 is the pick we'd make if we could only make one.",
+              body: "Fifteen plays a day, ordered 1 to 15 by how much we like them. Rank 1 is the pick we'd make if we could only make one.",
             },
             {
               icon: Eye,
-              title: "You see the top",
-              body: "The top 15 are free for everyone during our beta. Every pick comes with the reasoning.",
+              title: "You see all of it",
+              body: "Every one of the fifteen is free during our beta — nothing held back behind a plan. Each comes with the reasoning.",
             },
             {
               icon: ShieldCheck,

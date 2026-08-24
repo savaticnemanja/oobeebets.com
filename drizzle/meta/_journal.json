@@ -36,6 +36,13 @@
       "when": 1787582844940,
       "tag": "0004_collapse_owner_into_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787583685405,
+      "tag": "0005_fifteen_picks_per_slate",
+      "breakpoints": true
     }
   ]
 }

@@ -39,13 +39,13 @@ export default async function AccountPage() {
       <Card className="mt-8">
         <CardHeader>
           <CardTitle>Access</CardTitle>
-          <CardDescription>Free during the beta — the top 15 picks, every day.</CardDescription>
+          <CardDescription>Free during the beta — all 15 picks, every day.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center">
             <Sparkles className="mx-auto size-8 text-brand" aria-hidden="true" />
             <p className="mt-3 text-sm text-fg-muted">
-              You have full access to the top 15 picks — free during our beta. No plan
+              You have the whole board — all 15 picks, free during our beta. No plan
               needed.
             </p>
             <Button className="mt-4" asChild>

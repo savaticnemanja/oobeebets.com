@@ -6,11 +6,16 @@
  * fabricated one, even as a dev convenience. So the picks each suite needs are
  * built here, at the start of the run, and dropped at the end of it.
  *
- * The shape is not arbitrary. Both the board-visibility checks and the
- * per-sport /top-picks checks are only meaningful if the slate is longer than
- * the free limit *and* each sport holds ranks on both sides of it — otherwise
- * a truncation bug passes because there was nothing to truncate.
+ * The slate is sized from PICKS_PER_SLATE, so it tracks the product rather
+ * than a number written down twice — and it has to, since picks_rank_range
+ * rejects anything above that bound at the database.
+ *
+ * Note that while PICKS_PER_SLATE equals VISIBLE_PICKS, no fixture can put a
+ * rank past the free limit, so the truncation checks in verify.mjs cannot bite
+ * on a real board. The synthetic visiblePicks() contract test covers that
+ * logic directly; these fixtures cover everything else.
  */
+import { PICKS_PER_SLATE } from "../src/lib/board.ts";
 
 /** Odds spread across favourites and dogs so the maths has something to chew. */
 const PRICES = [-110, -125, +105, -150, +140, -200, +175, -105];
@@ -42,11 +47,15 @@ const OUTCOMES = ["won", "lost", "won", "push", "lost", "won", "void", "won"];
 /**
  * Creates a published slate of `count` picks on `date`.
  *
- * Odd ranks are MLB, even are NFL, so each sport straddles the free limit.
- * Ranks 1..SETTLED started three hours ago and carry a result; the rest start
- * in the future and stay pending, which is what the settle flow needs to find.
+ * Odd ranks are MLB, even are NFL, so both /top-picks tabs have something in
+ * them. Ranks 1..settled started three hours ago and carry a result; the rest
+ * start in the future and stay pending, which is what the settle flow needs to
+ * find.
  */
-export async function createSlate(sql, { date, publishedBy, count = 24, settled = 12 }) {
+export async function createSlate(
+  sql,
+  { date, publishedBy, count = PICKS_PER_SLATE, settled = Math.floor(PICKS_PER_SLATE / 2) },
+) {
   await sql`
     insert into slates (date, published_at, published_by)
     values (${date}, now(), ${publishedBy})

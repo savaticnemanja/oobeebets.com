@@ -16,7 +16,7 @@ import { formatSlateDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Today's picks",
-  description: "The top 15 picks for today — free during our beta.",
+  description: "All 15 picks for today — free during our beta.",
   robots: { index: false, follow: false },
 };
 
@@ -73,7 +73,7 @@ export default async function PicksPage({
           role="status"
           className="mb-6 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand"
         >
-          Account created. The top 15 picks are free, every day, during our beta.
+          Account created. All 15 picks are free, every day, during our beta.
         </div>
       )}
 
