@@ -21,9 +21,29 @@ import postgres from "postgres";
 // to VISIBLE_PICKS can never leave a stale number behind in here. Run under
 // tsx — see package.json.
 import { VISIBLE_PICKS, visiblePicks } from "../src/lib/board.ts";
+import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+
+/** The seeded accounts. `db:seed` creates these two and no picks at all. */
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
+const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+
+/* -------------------------------------------------------------- fixtures */
+
+// The suite builds the board it asserts on, then removes it. Nothing in the
+// database is assumed beyond the two accounts.
+const [admin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+if (!admin) {
+  console.error(`\n✗ No ${ADMIN_EMAIL} account. Run: npm run db:seed\n`);
+  await sql.end();
+  process.exit(1);
+}
+
+const today = slateDateString();
+await dropSlate(sql, today);
+await createSlate(sql, { date: today, publishedBy: admin.id });
 
 let failures = 0;
 const pass = (name, extra = "") => console.log(`  PASS  ${name}${extra ? "  " + extra : ""}`);
@@ -101,8 +121,6 @@ check(
 
 console.log("\nBoard visibility (picks past the free limit must be absent from the payload)");
 
-const [{ date: todayRaw }] = await sql`select max(date) as date from slates`;
-const today = todayRaw instanceof Date ? todayRaw.toISOString().slice(0, 10) : todayRaw;
 const [{ n: total }] = await sql`
   select count(*)::int as n from picks where slate_date = ${today}
 `;
@@ -120,7 +138,7 @@ async function sessionFor(email) {
 
 /**
  * Rank comes from the rendered aria-label, not from matching selection text:
- * the seed reuses selections across ranks, so text matching false-positives.
+ * the fixture reuses selections across ranks, so text matching false-positives.
  */
 const servedRanks = (html) =>
   new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
@@ -144,8 +162,8 @@ const reportRanks = (name, served, expected) => {
   );
 };
 
-/** Beta's whole seed: one owner and one regular beta-tier user. */
-const DEMO_EMAILS = ["beta@example.com", "owner@oobeebets.com"];
+/** The whole seed: one admin and one tester. There is no third role. */
+const DEMO_EMAILS = [ADMIN_EMAIL, TESTER_EMAIL];
 
 const viewers = await sql`
   select email, role from users where email = any(${DEMO_EMAILS}) order by email
@@ -159,7 +177,7 @@ check(
 
 /** Mirrors visiblePicks' admin bypass; the limit itself is asked of the app. */
 const expectedFor = ({ role }) =>
-  role === "admin" || role === "owner" ? total : Math.min(VISIBLE_PICKS, total);
+  role === "admin" ? total : Math.min(VISIBLE_PICKS, total);
 
 for (const viewer of viewers) {
   const { token, cleanup } = await sessionFor(viewer.email);
@@ -196,7 +214,7 @@ for (const viewer of viewers) {
 console.log("\nBoard visibility on /top-picks (per-sport tabs share one rank cut)");
 
 for (const sport of ["mlb", "nfl"]) {
-  const { token, cleanup } = await sessionFor("beta@example.com");
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
   const html = await (
     await fetch(`${APP_URL}/top-picks?sport=${sport}`, {
       headers: { cookie: `oobee_session=${token}` },
@@ -206,7 +224,7 @@ for (const sport of ["mlb", "nfl"]) {
   const over = served.filter((r) => r > VISIBLE_PICKS);
   check(
     over.length === 0,
-    `beta tier /top-picks?sport=${sport}`.padEnd(30),
+    `tester /top-picks?sport=${sport}`.padEnd(30),
     `served=${served.length}` + (over.length ? ` OVER-SERVED:${over.join(",")}` : ""),
   );
   await cleanup();
@@ -242,7 +260,7 @@ console.log("\nBoard contract (visiblePicks, called directly)");
 
 console.log("\nAccess control");
 
-const adminRoutes = ["/admin", "/admin/slate", "/admin/settle"];
+const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/announce"];
 
 {
   for (const route of adminRoutes) {
@@ -251,27 +269,55 @@ const adminRoutes = ["/admin", "/admin/slate", "/admin/settle"];
     check(res.status === 404, `anonymous ${route}`, `-> ${res.status}`);
   }
 
-  const { token, cleanup } = await sessionFor("beta@example.com");
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
   for (const route of adminRoutes) {
     const res = await fetch(`${APP_URL}${route}`, {
       headers: { cookie: `oobee_session=${token}` },
       redirect: "manual",
     });
-    check(res.status === 404, `beta tier ${route}`, `-> ${res.status}`);
+    check(res.status === 404, `tester ${route}`, `-> ${res.status}`);
   }
   await cleanup();
 
-  const owner = await sessionFor("owner@oobeebets.com");
-  const res = await fetch(`${APP_URL}/admin`, {
-    headers: { cookie: `oobee_session=${owner.token}` },
-  });
-  check(res.status === 200, "owner /admin", `-> ${res.status}`);
+  // One admin role, and it opens everything — including the two surfaces that
+  // used to be owner-only.
+  const admin = await sessionFor(ADMIN_EMAIL);
+  const cookie = { cookie: `oobee_session=${admin.token}` };
 
-  const usersRes = await fetch(`${APP_URL}/admin/users`, {
-    headers: { cookie: `oobee_session=${owner.token}` },
-  });
-  check(usersRes.status === 200, "owner /admin/users", `-> ${usersRes.status}`);
-  await owner.cleanup();
+  for (const route of adminRoutes) {
+    const res = await fetch(`${APP_URL}${route}`, { headers: cookie });
+    check(res.status === 200, `admin ${route}`.padEnd(24), `-> ${res.status}`);
+  }
+  await admin.cleanup();
+}
+
+/* ------------------------------------------------------ 3b. the role model */
+
+console.log("\nRole model");
+
+{
+  const roles = await sql`
+    select enumlabel from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'role' order by e.enumsortorder
+  `;
+  const labels = roles.map((r) => r.enumlabel);
+  check(
+    labels.length === 2 && labels.includes("user") && labels.includes("admin"),
+    "role enum is exactly user + admin",
+    labels.join(","),
+  );
+  check(!labels.includes("owner"), "owner is gone from the enum");
+
+  // Plural admins are the point of the change, so prove the model allows it
+  // rather than trusting that dropping the enum value was enough.
+  const [{ id: extraId }] = await sql`
+    insert into users (email, password_hash, role)
+    values (${"second-admin@example.com"}, ${"x"}, 'admin') returning id
+  `;
+  const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
+  check(n >= 2, "more than one admin can exist at once", `admins=${n}`);
+  await sql`delete from users where id = ${extraId}`;
 }
 
 /* ---------------------------------------------------------- 4. expired session */
@@ -279,7 +325,7 @@ const adminRoutes = ["/admin", "/admin/slate", "/admin/settle"];
 console.log("\nSession handling");
 
 {
-  const [user] = await sql`select id from users where email = ${"beta@example.com"}`;
+  const [user] = await sql`select id from users where email = ${TESTER_EMAIL}`;
   const token = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   await sql`
@@ -301,6 +347,12 @@ console.log("\nSession handling");
   const garbageResult = redirectsToLogin(garbage);
   check(garbageResult.ok, "forged cookie is rejected, gated", `-> ${garbage.status} ${garbageResult.location}`);
 }
+
+/* ---------------------------------------------------------------- teardown */
+
+// The fixture slate is removed whether the run passed or failed — leaving a
+// board of invented picks behind is exactly what dropping the seed avoided.
+await dropSlate(sql, today);
 
 /* ------------------------------------------------------------------ result */
 

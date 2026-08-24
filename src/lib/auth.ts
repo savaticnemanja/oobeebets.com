@@ -91,7 +91,6 @@ export async function revokeAllSessions(userId: string): Promise<void> {
 export interface AuthContext {
   user: User;
   isAdmin: boolean;
-  isOwner: boolean;
 }
 
 /**
@@ -126,8 +125,7 @@ export const getAuth = cache(async (): Promise<AuthContext | null> => {
 
   return {
     user: row.user,
-    isAdmin: row.user.role === "admin" || row.user.role === "owner",
-    isOwner: row.user.role === "owner",
+    isAdmin: row.user.role === "admin",
   };
 });
 
@@ -154,16 +152,12 @@ export async function requireAdmin(): Promise<AuthContext> {
   return auth;
 }
 
-export async function requireOwner(): Promise<AuthContext> {
-  const auth = await requireAuth();
-  if (!auth.isOwner) throw new AuthError("Owner only", "forbidden");
-  return auth;
-}
-
 export function canManageRole(actor: AuthContext, target: User): boolean {
-  // Only the owner touches roles, and never their own — prevents an org
-  // locking itself out by demoting the last owner.
-  return actor.isOwner && actor.user.id !== target.id;
+  // Any admin can promote or demote any other account, but never their own.
+  // Self-demotion is the one move with no undo — it removes the very access
+  // needed to reverse it — so it stays blocked even now that admins are
+  // plural and another one could put it back.
+  return actor.isAdmin && actor.user.id !== target.id;
 }
 
 /* --------------------------------------------------------- rate limiting */

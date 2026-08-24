@@ -6,10 +6,8 @@ import { cn } from "@/lib/utils";
 
 export function AdminNav({
   items,
-  isOwner,
 }: {
-  items: readonly { href: string; label: string; ownerOnly?: boolean }[];
-  isOwner: boolean;
+  items: readonly { href: string; label: string }[];
 }) {
   const pathname = usePathname();
 
@@ -28,11 +26,6 @@ export function AdminNav({
     >
       <ul className="flex items-center gap-1">
         {items.map((item) => {
-          // Hiding an owner-only tab keeps the UI honest about what the action
-          // layer will allow. It is presentation, not the guard: /admin/users
-          // still renders for any admin (only role changes are owner-only),
-          // while /admin/announce 404s for one.
-          if (item.ownerOnly && !isOwner) return null;
           const active =
             item.href === "/admin"
               ? pathname === "/admin"

@@ -21,8 +21,8 @@ interface SentMeta {
 
 export default async function AdminAnnouncePage() {
   const auth = await getAuth();
-  // Owner-only, and 404 rather than 403 — same posture as the rest of /admin.
-  if (!auth?.isOwner) notFound();
+  // 404 rather than 403 — same posture as the rest of /admin.
+  if (!auth?.isAdmin) notFound();
 
   const [accounts, history] = await Promise.all([
     selectableRecipients(),

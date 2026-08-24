@@ -12,7 +12,7 @@ import {
  * Turns a chosen audience into the addresses that will actually be mailed.
  *
  * Always re-derived here from the database rather than taken from the form.
- * The composer shows the owner a count before they confirm, but that count is
+ * The composer shows a count before the send is confirmed, but that count is
  * a *display*; if the client could also supply the list, a stale page (or a
  * forged post) would decide who receives a broadcast.
  */
@@ -36,7 +36,7 @@ export async function resolveAudience(
   const rows = await db
     .select({ email: users.email })
     .from(users)
-    // "Testers" is everyone the beta is *for* — admins and the owner run it.
+    // "Testers" is everyone the beta is *for* — admins are the ones running it.
     .where(audience === "testers" ? sql`${users.role} = 'user'` : sql`true`)
     .orderBy(asc(users.email));
 

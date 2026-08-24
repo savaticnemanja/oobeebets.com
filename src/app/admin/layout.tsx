@@ -48,7 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </form>
           </div>
         </div>
-        <AdminNav items={NAV_ADMIN} isOwner={auth.isOwner} />
+        <AdminNav items={NAV_ADMIN} />
       </header>
 
       <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">

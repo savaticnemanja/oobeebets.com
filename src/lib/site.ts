@@ -37,15 +37,11 @@ export const NAV_APP = [
   { href: "/account", label: t().nav.account },
 ] as const;
 
-/**
- * `ownerOnly` mirrors what the page and the action layer already enforce —
- * hiding a tab is presentation, not access control, but showing an admin a tab
- * that 404s for them is worse than not showing it.
- */
+/** Every admin sees every tab — there is one admin role and it holds the lot. */
 export const NAV_ADMIN = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/slate", label: "Publish slate" },
   { href: "/admin/settle", label: "Settle" },
-  { href: "/admin/users", label: "Users", ownerOnly: true },
-  { href: "/admin/announce", label: "Announce", ownerOnly: true },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/announce", label: "Announce" },
 ] as const;

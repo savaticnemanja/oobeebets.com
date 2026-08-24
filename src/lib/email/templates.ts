@@ -184,13 +184,13 @@ function paragraphs(body: string): string[] {
 }
 
 /**
- * A broadcast to testers — the owner writes the heading and the body, and this
+ * A broadcast to testers — an admin writes the heading and the body, and this
  * puts them in the same envelope the invite uses so an announcement doesn't
  * arrive looking like it came from somewhere else.
  *
  * The body is escaped and split into paragraphs rather than passed through as
  * markup. That is not (only) about trusting the author: hand-written HTML in an
- * email body is where layouts break, and the owner writing plain text into a
+ * email body is where layouts break, and an admin writing plain text into a
  * textarea cannot accidentally produce an unclosed tag that swallows the
  * footer. Blank lines separate paragraphs, single newlines become <br>.
  */

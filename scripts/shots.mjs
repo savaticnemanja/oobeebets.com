@@ -3,12 +3,28 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import postgres from "postgres";
 import { chromium } from "playwright";
+import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const OUT = process.env.SHOT_DIR ?? "./.shots";
 mkdirSync(OUT, { recursive: true });
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
+const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+
+// `db:seed` creates accounts and no picks, so a board to photograph has to be
+// built here — otherwise every board shot is of an empty state.
+const [admin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+if (!admin) {
+  console.error(`No ${ADMIN_EMAIL} account. Run: npm run db:seed`);
+  await sql.end();
+  process.exit(1);
+}
+const slateDate = slateDateString();
+await dropSlate(sql, slateDate);
+await createSlate(sql, { date: slateDate, publishedBy: admin.id });
 
 async function cookieFor(email) {
   const [user] = await sql`select id from users where email = ${email}`;
@@ -25,15 +41,16 @@ const browser = await chromium.launch();
 // page rather than the surface it is named after.
 const SHOTS = [
   { name: "01-landing", path: "/", user: null, full: true },
-  { name: "02-top-picks", path: "/top-picks", user: "beta@example.com", full: true },
-  { name: "03-picks", path: "/picks", user: "beta@example.com", full: false },
-  { name: "04-account", path: "/account", user: "beta@example.com", full: false },
-  { name: "05-admin", path: "/admin", user: "owner@oobeebets.com", full: false },
-  { name: "06-admin-slate", path: "/admin/slate", user: "owner@oobeebets.com", full: false },
-  { name: "07-admin-settle", path: "/admin/settle", user: "owner@oobeebets.com", full: false },
-  { name: "08-admin-users", path: "/admin/users", user: "owner@oobeebets.com", full: false },
-  { name: "09-login", path: "/login", user: null, full: false },
-  { name: "10-picks-mobile", path: "/picks", user: "beta@example.com", full: false, mobile: true },
+  { name: "02-top-picks", path: "/top-picks", user: TESTER_EMAIL, full: true },
+  { name: "03-picks", path: "/picks", user: TESTER_EMAIL, full: false },
+  { name: "04-account", path: "/account", user: TESTER_EMAIL, full: false },
+  { name: "05-admin", path: "/admin", user: ADMIN_EMAIL, full: false },
+  { name: "06-admin-slate", path: "/admin/slate", user: ADMIN_EMAIL, full: false },
+  { name: "07-admin-settle", path: "/admin/settle", user: ADMIN_EMAIL, full: false },
+  { name: "08-admin-users", path: "/admin/users", user: ADMIN_EMAIL, full: false },
+  { name: "09-admin-announce", path: "/admin/announce", user: ADMIN_EMAIL, full: false },
+  { name: "10-login", path: "/login", user: null, full: false },
+  { name: "11-picks-mobile", path: "/picks", user: TESTER_EMAIL, full: false, mobile: true },
 ];
 
 for (const s of SHOTS) {
@@ -74,5 +91,6 @@ for (const s of SHOTS) {
 
 await browser.close();
 await sql`delete from sessions where expires_at > now()`;
+await dropSlate(sql, slateDate);
 await sql.end();
 console.log(`\nWrote screenshots to ${OUT}`);
