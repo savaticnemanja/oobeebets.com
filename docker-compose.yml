@@ -32,17 +32,36 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # NEXT_PUBLIC_* is substituted into the client bundle by `next build`, so
+      # it has to reach the *build*, not just the container. The Dockerfile
+      # declares the matching ARGs; without these lines they arrive empty and
+      # every client-side use of them is baked as "".
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SLATE_TZ: ${NEXT_PUBLIC_SLATE_TZ:-America/New_York}
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+    # Everything in .env reaches the container. Listing variables one by one is
+    # how BETA_GATE_PASSWORD and RESEND_API_KEY came to be set on the host and
+    # absent in the process that reads them — and the gate fails *open*, so that
+    # mistake is silent. `environment:` below still wins where a value has to be
+    # computed rather than copied.
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
+      # Points at the compose network, not the host port in .env.
       DATABASE_URL: postgres://${POSTGRES_USER:-oobee}:${POSTGRES_PASSWORD:-oobee}@db:5432/${POSTGRES_DB:-oobeebets}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
       NEXT_PUBLIC_SLATE_TZ: ${NEXT_PUBLIC_SLATE_TZ:-America/New_York}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       RUN_MIGRATIONS: "1"
+      # Seeding is opt-in and wipes the database — see docker/entrypoint.sh.
+      # Stated here as well as in .env so the default is visible where the
+      # service is defined.
+      RUN_SEED: ${RUN_SEED:-0}
     ports:
       - "${APP_PORT:-3000}:3000"
     # Horizontal scaling: `docker compose up --scale app=3` behind a proxy.

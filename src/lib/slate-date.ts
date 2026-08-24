@@ -7,7 +7,9 @@
  * game on the correct date. This is FSD open question O2 — the boundary is one
  * constant, so changing it is a one-line change.
  */
-export const SLATE_TIMEZONE = process.env.NEXT_PUBLIC_SLATE_TZ ?? "America/New_York";
+// `||` rather than `??` — see the note in lib/site.ts: an unset build arg
+// leaves an empty string, and Intl rejects "" as a time zone.
+export const SLATE_TIMEZONE = process.env.NEXT_PUBLIC_SLATE_TZ || "America/New_York";
 export const SLATE_DAY_BOUNDARY_HOUR = 4;
 
 /** Offset of a timezone from UTC, in minutes, at a given instant. */

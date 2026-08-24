@@ -1,10 +1,11 @@
 /**
  * Test fixtures: a published slate the suites can assert against.
  *
- * `npm run db:seed` deliberately creates accounts and nothing else — a product
- * whose whole claim is that its record is real has no business shipping a
- * fabricated one, even as a dev convenience. So the picks each suite needs are
- * built here, at the start of the run, and dropped at the end of it.
+ * `npm run db:seed` deliberately creates one admin account and nothing else — a
+ * product whose whole claim is that its record is real has no business shipping
+ * a fabricated one, even as a dev convenience. So the picks each suite needs,
+ * and the plain user that views them, are built here at the start of the run
+ * and dropped at the end of it.
  *
  * The slate is sized from PICKS_PER_SLATE, so it tracks the product rather
  * than a number written down twice — and it has to, since picks_rank_range
@@ -15,7 +16,35 @@
  * on a real board. The synthetic visiblePicks() contract test covers that
  * logic directly; these fixtures cover everything else.
  */
+import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { PICKS_PER_SLATE } from "../src/lib/board.ts";
+
+/**
+ * The non-admin viewer the suites need. The seed creates one admin and nothing
+ * else, so a plain user is a fixture like any other: made at the start of a
+ * run, dropped at the end of it, and never a standing login.
+ *
+ * Its password is a hash of random bytes nobody keeps, so the account exists
+ * for session-cookie tests only — it cannot be signed into.
+ */
+export const TESTER_EMAIL = "fixture-tester@oobeebets.test";
+
+export async function ensureTester(sql, email = TESTER_EMAIL) {
+  const passwordHash = await bcrypt.hash(randomBytes(24).toString("base64url"), 10);
+  const [user] = await sql`
+    insert into users (email, password_hash, role, email_verified_at)
+    values (${email}, ${passwordHash}, 'user', now())
+    on conflict (email) do update set password_hash = ${passwordHash}
+    returning id, email
+  `;
+  return user;
+}
+
+/** Sessions cascade with the row, so this signs out anything minted for it. */
+export async function dropTester(sql, email = TESTER_EMAIL) {
+  await sql`delete from users where email = ${email}`;
+}
 
 /** Odds spread across favourites and dogs so the maths has something to chew. */
 const PRICES = [-110, -125, +105, -150, +140, -200, +175, -105];
