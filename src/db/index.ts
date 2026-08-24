@@ -19,10 +19,17 @@ const globalForDb = globalThis as unknown as {
   __oobeeSql?: ReturnType<typeof postgres>;
 };
 
+/** Empty or non-numeric falls back to 10: `Number("")` is 0, which would cap
+ * the pool at nothing, and `??` does not catch an empty environment value. */
+function poolMax(): number {
+  const parsed = Number(process.env.DB_POOL_MAX);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+}
+
 const client =
   globalForDb.__oobeeSql ??
   postgres(connectionString, {
-    max: Number(process.env.DB_POOL_MAX ?? 10),
+    max: poolMax(),
     idle_timeout: 20,
     connect_timeout: 10,
     // Vertical scaling knob: raise DB_POOL_MAX per instance, but keep

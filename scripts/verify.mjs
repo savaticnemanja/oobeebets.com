@@ -21,25 +21,26 @@ import postgres from "postgres";
 // to VISIBLE_PICKS can never leave a stale number behind in here. Run under
 // tsx — see package.json.
 import { VISIBLE_PICKS, visiblePicks } from "../src/lib/board.ts";
-import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
+import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
-/** The seeded accounts. `db:seed` creates these two and no picks at all. */
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
-const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+/** The seeded account. `db:seed` creates this one admin and no picks at all. */
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "nemanjas@oobeebets.com";
 
 /* -------------------------------------------------------------- fixtures */
 
-// The suite builds the board it asserts on, then removes it. Nothing in the
-// database is assumed beyond the two accounts.
+// The suite builds the board it asserts on and the plain user that views it,
+// then removes both. Nothing in the database is assumed beyond the admin.
 const [admin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
 if (!admin) {
   console.error(`\n✗ No ${ADMIN_EMAIL} account. Run: npm run db:seed\n`);
   await sql.end();
   process.exit(1);
 }
+
+const TESTER_EMAIL = (await ensureTester(sql)).email;
 
 const today = slateDateString();
 await dropSlate(sql, today);
@@ -162,7 +163,7 @@ const reportRanks = (name, served, expected) => {
   );
 };
 
-/** The whole seed: one admin and one tester. There is no third role. */
+/** One of each role: the seeded admin and the fixture tester. There is no third. */
 const DEMO_EMAILS = [ADMIN_EMAIL, TESTER_EMAIL];
 
 const viewers = await sql`
@@ -171,7 +172,7 @@ const viewers = await sql`
 
 check(
   viewers.length === DEMO_EMAILS.length,
-  "every demo account exists",
+  "both viewer roles exist",
   `${viewers.length}/${DEMO_EMAILS.length}`,
 );
 
@@ -353,6 +354,7 @@ console.log("\nSession handling");
 // The fixture slate is removed whether the run passed or failed — leaving a
 // board of invented picks behind is exactly what dropping the seed avoided.
 await dropSlate(sql, today);
+await dropTester(sql, TESTER_EMAIL);
 
 /* ------------------------------------------------------------------ result */
 

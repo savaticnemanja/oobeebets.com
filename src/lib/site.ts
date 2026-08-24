@@ -5,7 +5,10 @@ import { t } from "@/lib/i18n";
 export const SITE = {
   name: "oobee bets",
   domain: "oobeebets.com",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://oobeebets.com",
+  // `||`, not `??`: NEXT_PUBLIC_* is inlined at build time, and an image built
+  // without the build arg carries an empty string here rather than nothing at
+  // all. `??` would keep that empty string, and `new URL(path, "")` throws.
+  url: process.env.NEXT_PUBLIC_SITE_URL || "https://oobeebets.com",
   tagline: "Every pick, settled in public.",
   description:
     "Daily sports betting picks with a public, unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",

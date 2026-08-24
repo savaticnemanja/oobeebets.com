@@ -11,6 +11,25 @@ import { Resend } from "resend";
 const apiKey = process.env.RESEND_API_KEY;
 const from = process.env.EMAIL_FROM;
 
+/**
+ * Optional. The sender is a noreply address, so without this a tester who hits
+ * reply on their invite is writing to nobody — the one mail in the product that
+ * most invites a reply.
+ */
+const replyTo = process.env.EMAIL_REPLY_TO?.trim() || undefined;
+
+/**
+ * Namespaces idempotency keys per deployment. Beta and production share one
+ * Resend key by deliberate choice, and a key means "this exact send already
+ * happened" to the account, not to the environment.
+ */
+const idempotencyPrefix = process.env.EMAIL_IDEMPOTENCY_PREFIX?.trim() || "oobeebets";
+
+/** Resend caps the key at 256 characters and scopes it to a 24-hour window. */
+export function idempotencyKey(...parts: string[]): string {
+  return `${idempotencyPrefix}:${parts.join(":")}`.slice(0, 256);
+}
+
 let client: Resend | null = null;
 
 function resend(): Resend {
@@ -28,14 +47,30 @@ export interface SendEmailArgs {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Makes a retry safe. Resend drops a second send carrying a key it has
+   * already seen in the last 24 hours, so this must identify the *send*, not
+   * the recipient: keyed on an address alone, a deliberate resend to the same
+   * person would be swallowed. See issueInvite, which keys on the token.
+   */
+  idempotencyKey?: string;
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailArgs): Promise<void> {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  idempotencyKey: key,
+}: SendEmailArgs): Promise<void> {
   if (!from) {
     throw new Error("EMAIL_FROM is not set — see .env.example.");
   }
 
-  const { error } = await resend().emails.send({ from, to, subject, html, text });
+  const { error } = await resend().emails.send(
+    { from, to, subject, html, text, replyTo },
+    key ? { idempotencyKey: key } : undefined,
+  );
   if (error) {
     throw new Error(`Resend rejected the email: ${error.name} — ${error.message}`);
   }
@@ -75,7 +110,7 @@ export async function sendBulkEmail(
 
   for (let i = 0; i < recipients.length; i += BATCH_LIMIT) {
     const chunk = recipients.slice(i, i + BATCH_LIMIT);
-    const payload = chunk.map((to) => ({ from: from!, to, subject, html, text }));
+    const payload = chunk.map((to) => ({ from: from!, to, subject, html, text, replyTo }));
 
     try {
       const { error } = await client.batch.send(payload);

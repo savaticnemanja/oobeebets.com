@@ -10,7 +10,7 @@ import { auditLog, invitations, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { clientIp, createSession, hashPassword, hashToken, rateLimit, requireAdmin } from "@/lib/auth";
 import { createInviteToken, INVITE_TTL_MS, isInviteUsable, lookupInvite } from "@/lib/invitations";
-import { sendEmail } from "@/lib/email/resend-client";
+import { idempotencyKey, sendEmail } from "@/lib/email/resend-client";
 import { inviteEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
 import { emailSchema, fieldErrorsFrom, onboardingSchema, type ActionState } from "@/lib/validation";
@@ -65,7 +65,15 @@ async function issueInvite(email: string, invitedBy: string): Promise<string> {
     inviteUrl: appUrl(`/invite/${token}`),
     expiresAt,
   });
-  await sendEmail({ to: email, subject, html, text });
+  // Keyed on the token hash, so a retried send of *this* invite is dropped
+  // while a resend — which mints a new token above — always goes out.
+  await sendEmail({
+    to: email,
+    subject,
+    html,
+    text,
+    idempotencyKey: idempotencyKey("invite", tokenHash.slice(0, 32)),
+  });
 
   return invite.id;
 }

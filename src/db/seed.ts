@@ -1,5 +1,5 @@
 /**
- * Resets the database to two empty accounts: one admin, one tester.
+ * Resets the database to a single empty admin account.
  *
  * It seeds *accounts only*. There is deliberately no invented betting history
  * here — this product's entire claim is that its record is real, and fourteen
@@ -8,9 +8,14 @@
  * its own; see scripts/verify.mjs and scripts/e2e.mjs, which each create and
  * tear down the picks they assert on.
  *
+ * There is no seeded tester either: a second account existed only for the test
+ * suites, and they now build and drop their own (see ensureTester in
+ * scripts/fixtures.mjs), so no login the seed creates outlives a run.
+ *
  * Idempotent: it clears every table first, so running it twice gives the same
  * state rather than duplicates. Never run against a database with real users.
  */
+import { randomBytes } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import bcrypt from "bcryptjs";
@@ -75,10 +80,15 @@ const db = drizzle(client, {
   schema: { users, sessions, slates, picks, auditLog, rateLimits, invitations },
 });
 
-/** Overridable so a real first admin can be created without editing this file. */
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
-const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
-const PASSWORD = process.env.SEED_PASSWORD ?? "password123";
+/** Overridable so a different first admin can be created without editing this
+ * file. Every later admin is promoted from /admin/users by an existing one. */
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "nemanjas@oobeebets.com";
+
+// No fixed default: a password written down here is one that every copy of the
+// repo knows, and this account is a full admin. Unset, the seed mints a random
+// one and prints it below — usable, and impossible to guess ahead of time.
+const PASSWORD = process.env.SEED_PASSWORD ?? randomBytes(9).toString("base64url");
+const PASSWORD_IS_GENERATED = !process.env.SEED_PASSWORD;
 
 async function main() {
   console.log(`[seed] clearing ${describeTarget(connectionString)}...`);
@@ -92,19 +102,17 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(PASSWORD, 12);
 
-  const created = await db
+  const [created] = await db
     .insert(users)
-    .values([
-      { email: ADMIN_EMAIL, passwordHash, role: "admin", emailVerifiedAt: new Date() },
-      { email: TESTER_EMAIL, passwordHash, role: "user", emailVerifiedAt: new Date() },
-    ])
+    .values({ email: ADMIN_EMAIL, passwordHash, role: "admin", emailVerifiedAt: new Date() })
     .returning({ id: users.id, email: users.email, role: users.role });
 
-  console.log(`[seed] done — ${created.length} accounts, no slates, no picks.`);
+  console.log("[seed] done — 1 account, no slates, no picks.");
   console.log("");
-  console.log(`  Sign in with either (password: ${PASSWORD})`);
-  for (const u of created) {
-    console.log(`    ${u.email.padEnd(24)} ${u.role}`);
+  console.log("  Sign in as");
+  console.log(`    ${created.email}  (${created.role}, password: ${PASSWORD})`);
+  if (PASSWORD_IS_GENERATED) {
+    console.log("    ^ generated for this run only — set SEED_PASSWORD in .env to pin it.");
   }
   console.log("");
   console.log("  The board is empty. Build today's slate at /admin/slate.");

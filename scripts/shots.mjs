@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import postgres from "postgres";
 import { chromium } from "playwright";
-import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
+import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const OUT = process.env.SHOT_DIR ?? "./.shots";
@@ -11,8 +11,7 @@ mkdirSync(OUT, { recursive: true });
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
-const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "nemanjas@oobeebets.com";
 
 // `db:seed` creates accounts and no picks, so a board to photograph has to be
 // built here — otherwise every board shot is of an empty state.
@@ -22,6 +21,10 @@ if (!admin) {
   await sql.end();
   process.exit(1);
 }
+// Every signed-in shot that isn't of the admin panel needs a plain user, and
+// the seed no longer ships one; it is created here and removed at the end.
+const TESTER_EMAIL = (await ensureTester(sql)).email;
+
 const slateDate = slateDateString();
 await dropSlate(sql, slateDate);
 await createSlate(sql, { date: slateDate, publishedBy: admin.id });
@@ -92,5 +95,6 @@ for (const s of SHOTS) {
 await browser.close();
 await sql`delete from sessions where expires_at > now()`;
 await dropSlate(sql, slateDate);
+await dropTester(sql, TESTER_EMAIL);
 await sql.end();
 console.log(`\nWrote screenshots to ${OUT}`);

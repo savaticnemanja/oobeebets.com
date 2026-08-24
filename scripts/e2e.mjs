@@ -17,14 +17,16 @@ import { chromium } from "playwright";
 // VISIBLE_PICKS can not leave a stale number behind. Run under tsx — see
 // package.json.
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
-import { createSlate, dropSlate, slateDateString } from "./fixtures.mjs";
+import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
 /** The seeded accounts. `db:seed` creates these two and no picks at all. */
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "admin@oobeebets.com";
-const TESTER_EMAIL = process.env.SEED_TESTER_EMAIL ?? "tester@example.com";
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "nemanjas@oobeebets.com";
+// The seed creates the admin and nobody else; the plain user this suite needs
+// to prove the admin routes are closed is built here and dropped at teardown.
+const TESTER_EMAIL = (await ensureTester(sql)).email;
 
 // This suite builds the board it acts on and drops it at the end — `db:seed`
 // creates accounts only, deliberately.
@@ -339,6 +341,7 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
 // The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
 await sql`delete from users where email in (${testEmail}, ${secondAdmin})`;
+await dropTester(sql, TESTER_EMAIL);
 await sql`delete from invitations where email = ${testEmail}`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;
 await dropSlate(sql, latestSlate);
