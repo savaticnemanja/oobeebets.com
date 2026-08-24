@@ -34,12 +34,18 @@ async function audit(
   });
 }
 
-function revalidateSlate(date: string) {
-  revalidatePath("/picks");
+/**
+ * Every surface a slate change is visible on. It takes no date because none of
+ * these are per-date routes — the board and the admin screens all read the
+ * slate from a query string or from today's date, so there is nothing to
+ * interpolate.
+ */
+function revalidateSlate() {
   revalidatePath("/");
-  revalidatePath(`/admin/slate`);
-  revalidatePath(`/admin/settle`);
-  void date;
+  revalidatePath("/picks");
+  revalidatePath("/top-picks");
+  revalidatePath("/admin/slate");
+  revalidatePath("/admin/settle");
 }
 
 /* ------------------------------------------------------------ create pick */
@@ -114,7 +120,7 @@ export async function createPickAction(
   }
 
   await audit(actor, "pick.created", "pick", undefined, { slateDate: d.slateDate, rank: nextRank });
-  revalidateSlate(d.slateDate);
+  revalidateSlate();
   return { ok: true, message: `Rank ${nextRank} added.` };
 }
 
@@ -158,7 +164,7 @@ export async function reorderPicksAction(
   });
 
   await audit(actor, "picks.reordered", "slate", slateDate, { count: orderedIds.length });
-  revalidateSlate(slateDate);
+  revalidateSlate();
   return { ok: true };
 }
 
@@ -189,7 +195,7 @@ export async function deletePickAction(
 
   await db.delete(picks).where(eq(picks.id, id.data));
   await audit(actor, "pick.deleted", "pick", id.data, { rank: existing.rank });
-  revalidateSlate(existing.slateDate);
+  revalidateSlate();
   return { ok: true, message: "Pick removed." };
 }
 
@@ -216,7 +222,7 @@ export async function publishSlateAction(
     .where(and(eq(slates.date, date), sql`${slates.publishedAt} is null`));
 
   await audit(actor, "slate.published", "slate", date, { pickCount: n });
-  revalidateSlate(date);
+  revalidateSlate();
   return { ok: true, message: `Slate published — ${n} picks live.` };
 }
 
@@ -241,7 +247,7 @@ export async function unpublishSlateAction(
 
   await db.update(slates).set({ publishedAt: null, publishedBy: null }).where(eq(slates.date, date));
   await audit(actor, "slate.unpublished", "slate", date);
-  revalidateSlate(date);
+  revalidateSlate();
   return { ok: true, message: "Slate pulled back to draft." };
 }
 
@@ -285,7 +291,7 @@ export async function settlePickAction(
     voidReason,
   });
 
-  revalidateSlate(existing.slateDate);
+  revalidateSlate();
   return { ok: true, message: `Settled as ${status}.` };
 }
 
@@ -308,7 +314,7 @@ export async function unsettlePickAction(
   // Correcting a mis-settle is legitimate, but it changes published numbers,
   // so it is logged loudly rather than silently allowed.
   await audit(actor, "pick.unsettled", "pick", id.data, { was: existing.status });
-  revalidateSlate(existing.slateDate);
+  revalidateSlate();
   return { ok: true, message: "Reset to pending." };
 }
 
