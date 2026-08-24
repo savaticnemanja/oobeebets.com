@@ -1,12 +1,12 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
 import { cache } from "react";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users, rateLimits } from "@/db/schema";
-import type { Role, User } from "@/db/schema";
+import type { User } from "@/db/schema";
 
 export const SESSION_COOKIE = "oobee_session";
 /** 30 days, sliding — every authenticated request extends it. */
@@ -190,7 +190,14 @@ export async function rateLimit(
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowMs);
 
-  await db.delete(rateLimits).where(lt(rateLimits.windowStart, windowStart));
+  // Scoped to this bucket. Sweeping the whole table with *this* caller's window
+  // meant a short-window bucket deleted a long-window bucket's live rows, which
+  // silently resets that limit to zero — harmless while every bucket here uses
+  // fifteen minutes, and a hole the moment one doesn't. Each bucket collects
+  // its own expired rows on its next call instead.
+  await db
+    .delete(rateLimits)
+    .where(and(eq(rateLimits.bucket, bucket), lt(rateLimits.windowStart, windowStart)));
 
   const [row] = await db
     .insert(rateLimits)
@@ -213,16 +220,4 @@ export async function rateLimit(
     .returning({ count: rateLimits.count });
 
   return (row?.count ?? 1) <= limit;
-}
-
-/** Timing-safe string compare for tokens that are not password hashes. */
-export function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
-
-export function isAdminRole(role: Role): boolean {
-  return role === "admin" || role === "owner";
 }

@@ -52,11 +52,21 @@ export async function loginAction(
   const valid = await verifyPassword(password, user.passwordHash);
 
   if (!valid) {
+    // A lock that has served its time resets the counter rather than adding to
+    // it. Incrementing a count that only a *successful* login ever cleared left
+    // an account permanently at the limit: one typo after the fifteen minutes
+    // were up re-locked it immediately, forever. Anyone still holding a stale
+    // `locked_until` here is past it — the live-lock check above returned.
+    const attempts = sql`case
+      when ${users.lockedUntil} is not null then 1
+      else ${users.failedLoginCount} + 1
+    end`;
+
     await db
       .update(users)
       .set({
-        failedLoginCount: sql`${users.failedLoginCount} + 1`,
-        lockedUntil: sql`case when ${users.failedLoginCount} + 1 >= ${LOGIN_LIMIT}
+        failedLoginCount: attempts,
+        lockedUntil: sql`case when (${attempts}) >= ${LOGIN_LIMIT}
           then now() + interval '15 minutes' else null end`,
       })
       .where(eq(users.id, user.id));
