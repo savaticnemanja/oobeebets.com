@@ -65,10 +65,10 @@ export default async function AdminOverviewPage() {
             <p className="num text-3xl font-semibold">{pickCount}<span className="text-base text-fg-subtle">/30</span></p>
             <p className="mt-1 text-sm text-fg-muted">
               {slate?.publishedAt
-                ? "Live to subscribers."
+                ? "Live to everyone."
                 : pickCount === 0
                   ? "Nothing added yet today."
-                  : "Not published — subscribers can't see these."}
+                  : "Not published — testers can't see these."}
             </p>
             <Button className="mt-4" size="sm" asChild>
               <Link href="/admin/slate">

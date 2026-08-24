@@ -20,7 +20,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// Per-request: what a viewer may see depends on their subscription.
+// Per-request: what a viewer may see depends on whether they're signed in
+// and whether they're an admin.
 export const dynamic = "force-dynamic";
 
 export default async function PicksPage({

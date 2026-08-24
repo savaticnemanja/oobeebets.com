@@ -3,8 +3,6 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/motion";
-import { StatTile } from "@/components/stat-tile";
-import { getHeadlineStats } from "@/lib/stats";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -14,11 +12,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-export const revalidate = 300;
-
-export default async function AboutPage() {
-  const stats = await getHeadlineStats();
-
+export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
       <Reveal>
@@ -92,22 +86,6 @@ export default async function AboutPage() {
       </Reveal>
 
       <Reveal delay={0.1}>
-        <dl className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Picks daily" value="30" tone="brand" />
-          <StatTile label="Settled" value={stats.settled} />
-          <StatTile
-            label="Record"
-            value={`${stats.wins}–${stats.losses}`}
-          />
-          <StatTile
-            label="Net units"
-            tone={stats.netUnits >= 0 ? "hit" : "miss"}
-            value={`${stats.netUnits > 0 ? "+" : ""}${stats.netUnits.toFixed(2)}u`}
-          />
-        </dl>
-      </Reveal>
-
-      <Reveal delay={0.15}>
         <div className="mt-12 flex flex-col gap-3 sm:flex-row">
           <Button asChild>
             <Link href="/picks">
