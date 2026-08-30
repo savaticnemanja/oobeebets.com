@@ -148,8 +148,13 @@ export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean })
   );
 }
 
-/** Hero treatment for rank 1 — the shop window, free to everyone. */
+/**
+ * Hero treatment for rank 1 — the shop window, free to everyone. There is one
+ * per board, so the heading names which board: two sections both calling
+ * themselves "top pick of the day" would be a lie on one of the two tabs.
+ */
 export function TopPickCard({ pick }: { pick: Pick }) {
+  const heading = pick.category === "prop" ? "Top prop of the day" : "Top pick of the day";
   return (
     <section aria-labelledby="potd-heading" className="relative">
       <div className="mb-3 flex items-center gap-2">
@@ -158,7 +163,7 @@ export function TopPickCard({ pick }: { pick: Pick }) {
           id="potd-heading"
           className="text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-hit"
         >
-          Top pick of the day
+          {heading}
         </h2>
       </div>
       <PickCard pick={pick} featured />

@@ -8,8 +8,9 @@
  * Checks the things that would actually cost money if they broke:
  *   1. Settlement maths — every stat on the site is a sum of this.
  *   2. Board visibility — picks past the free limit must not be in the
- *      response at all, on /picks or on either /top-picks tab, and the
- *      board's own contract, called directly.
+ *      response at all, on either /picks tab or either /top-picks tab, and
+ *      the board's own contract, called directly. Each /picks tab must also
+ *      serve its own board and nothing from the other one.
  *   3. Access control — /admin must not be reachable by a normal user.
  *   4. Session handling — /picks is gated: no session, or a dead one, sends
  *      the request to /login instead of rendering anything.
@@ -20,8 +21,20 @@ import postgres from "postgres";
 // this file expects a viewer to see is computed from it, so a product change
 // to VISIBLE_PICKS can never leave a stale number behind in here. Run under
 // tsx — see package.json.
-import { VISIBLE_PICKS, visiblePicks } from "../src/lib/board.ts";
-import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
+import {
+  CATEGORY_LABELS,
+  VISIBLE_PICKS,
+  pickCategories,
+  visiblePicks,
+} from "../src/lib/board.ts";
+import {
+  FIXTURE_SELECTIONS,
+  createSlate,
+  dropSlate,
+  ensureTester,
+  dropTester,
+  slateDateString,
+} from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
@@ -122,9 +135,14 @@ check(
 
 console.log("\nBoard visibility (picks past the free limit must be absent from the payload)");
 
-const [{ n: total }] = await sql`
-  select count(*)::int as n from picks where slate_date = ${today}
+const tallies = await sql`
+  select category, count(*)::int as n from picks
+  where slate_date = ${today} group by category
 `;
+const totals = Object.fromEntries(
+  pickCategories.map((c) => [c, tallies.find((r) => r.category === c)?.n ?? 0]),
+);
+const total = tallies.reduce((n, r) => n + r.n, 0);
 
 async function sessionFor(email) {
   const [user] = await sql`select id from users where email = ${email}`;
@@ -177,15 +195,56 @@ check(
 );
 
 /** Mirrors visiblePicks' admin bypass; the limit itself is asked of the app. */
-const expectedFor = ({ role }) =>
-  role === "admin" ? total : Math.min(VISIBLE_PICKS, total);
+const expectedFor = ({ role }, category) =>
+  role === "admin" ? totals[category] : Math.min(VISIBLE_PICKS[category], totals[category]);
 
-for (const viewer of viewers) {
-  const { token, cleanup } = await sessionFor(viewer.email);
+/** Selections belonging to the board that is *not* being requested. */
+const foreignSelections = (category) =>
+  pickCategories.filter((c) => c !== category).flatMap((c) => FIXTURE_SELECTIONS[c]);
+
+for (const category of pickCategories) {
+  for (const viewer of viewers) {
+    const { token, cleanup } = await sessionFor(viewer.email);
+    const html = await (
+      await fetch(`${APP_URL}/picks?category=${category}`, {
+        headers: { cookie: `oobee_session=${token}` },
+      })
+    ).text();
+
+    reportRanks(
+      `${viewer.email} · ${category}`,
+      servedRanks(html),
+      expectedFor(viewer, category),
+    );
+
+    // Both boards are ranked 1..15, so matching ranks alone cannot tell them
+    // apart — a tab serving the wrong list would look perfect above. The
+    // selections are what actually distinguish them.
+    const leaked = foreignSelections(category).filter((sel) => html.includes(sel));
+    check(
+      leaked.length === 0,
+      `${CATEGORY_LABELS[category]} tab holds only its own board`.padEnd(46),
+      leaked.length ? `LEAKED:${leaked.join(" | ")}` : `${viewer.email}`,
+    );
+    await cleanup();
+  }
+}
+
+// An unknown ?category= must land on a real board rather than an empty one —
+// categoryFromParam falls back to game bets.
+{
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
   const html = await (
-    await fetch(`${APP_URL}/picks`, { headers: { cookie: `oobee_session=${token}` } })
+    await fetch(`${APP_URL}/picks?category=not-a-board`, {
+      headers: { cookie: `oobee_session=${token}` },
+    })
   ).text();
-  reportRanks(viewer.email, servedRanks(html), expectedFor(viewer));
+  const served = servedRanks(html);
+  check(
+    served.size === Math.min(VISIBLE_PICKS.game, totals.game),
+    "unknown ?category= falls back to game bets",
+    `served=${served.size}`,
+  );
   await cleanup();
 }
 
@@ -210,7 +269,9 @@ for (const viewer of viewers) {
  * which runs across the whole slate rather than within one sport. So an
  * MLB-heavy top 15 leaves the NFL tab holding fewer than 15 rows, and "the
  * first 15 rows for this sport" would quietly serve ranks past the limit.
- * A signed-in tester must never see a rank above VISIBLE_PICKS on either tab.
+ * A signed-in tester must never see a rank above the game board's own limit on
+ * either tab. /top-picks is game bets only — props are ranked separately and
+ * have their own tab on /picks — so the cut here is VISIBLE_PICKS.game.
  */
 console.log("\nBoard visibility on /top-picks (per-sport tabs share one rank cut)");
 
@@ -222,7 +283,7 @@ for (const sport of ["mlb", "nfl"]) {
     })
   ).text();
   const served = [...servedRanks(html)];
-  const over = served.filter((r) => r > VISIBLE_PICKS);
+  const over = served.filter((r) => r > VISIBLE_PICKS.game);
   check(
     over.length === 0,
     `tester /top-picks?sport=${sport}`.padEnd(30),
@@ -235,25 +296,46 @@ for (const sport of ["mlb", "nfl"]) {
 
 console.log("\nBoard contract (visiblePicks, called directly)");
 
-{
+for (const category of pickCategories) {
   // Deliberately five ranks past the free limit, so there is always something
   // to truncate however VISIBLE_PICKS is configured.
-  const beyond = VISIBLE_PICKS + 5;
-  const sample = Array.from({ length: beyond }, (_, i) => ({ rank: i + 1 }));
+  const limit = VISIBLE_PICKS[category];
+  const beyond = limit + 5;
+  const sample = Array.from({ length: beyond }, (_, i) => ({ rank: i + 1, category }));
 
   const nonAdmin = visiblePicks(sample, false);
   check(
-    nonAdmin.length === VISIBLE_PICKS,
-    "non-admin sees exactly VISIBLE_PICKS",
-    `served=${nonAdmin.length}/${VISIBLE_PICKS}`,
+    nonAdmin.length === limit,
+    `non-admin sees exactly VISIBLE_PICKS.${category}`,
+    `served=${nonAdmin.length}/${limit}`,
   );
 
   // The bypass the picks page depends on when an admin previews a draft slate.
   const admin = visiblePicks(sample, true);
   check(
     admin.length === beyond,
-    "admins bypass the limit entirely",
+    `admins bypass the ${category} limit entirely`,
     `served=${admin.length}/${beyond}`,
+  );
+}
+
+{
+  // A mixed list is the case a single shared limit would get wrong: each row
+  // has to be cut against its own board, not against whichever limit the
+  // caller happened to have in hand.
+  const mixed = pickCategories.flatMap((category) =>
+    Array.from({ length: VISIBLE_PICKS[category] + 3 }, (_, i) => ({
+      rank: i + 1,
+      category,
+    })),
+  );
+  const kept = visiblePicks(mixed, false);
+  const wrong = kept.filter((p) => p.rank > VISIBLE_PICKS[p.category]);
+  check(
+    wrong.length === 0 &&
+      kept.length === pickCategories.reduce((n, c) => n + VISIBLE_PICKS[c], 0),
+    "a mixed list is cut per category",
+    `kept=${kept.length}` + (wrong.length ? ` OVER:${wrong.length}` : ""),
   );
 }
 
@@ -360,7 +442,9 @@ await dropTester(sql, TESTER_EMAIL);
 
 console.log(
   failures === 0
-    ? `\n✓ All checks passed (slate ${today}, ${total} picks).\n`
+    ? `\n✓ All checks passed (slate ${today}, ${total} picks: ` +
+      pickCategories.map((c) => `${totals[c]} ${c}`).join(", ") +
+      `).\n`
     : `\n✗ ${failures} check(s) failed.\n`,
 );
 

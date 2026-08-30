@@ -1,22 +1,31 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
-import { visiblePicks } from "@/lib/board";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_NOUN,
+  PICKS_PER_SLATE,
+  categoryFromParam,
+  pickCategories,
+  visiblePicks,
+} from "@/lib/board";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { SlateDatePicker } from "@/components/slate-date-picker";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Today's picks",
-  description: "All 15 picks for today — free during our beta.",
+  description: `All ${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props for today — free during our beta.`,
   robots: { index: false, follow: false },
 };
 
@@ -27,7 +36,7 @@ export const dynamic = "force-dynamic";
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; welcome?: string }>;
+  searchParams: Promise<{ date?: string; category?: string; welcome?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
@@ -37,19 +46,34 @@ export default async function PicksPage({
 
   // Only admins can browse history — everyone else always sees today's board.
   const date = auth.isAdmin ? requested : today;
+  const category = categoryFromParam(params.category);
 
   const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
 
   // Admins preview drafts; nobody else sees an unpublished slate exists.
   const visible = Boolean(slate?.publishedAt) || auth.isAdmin;
 
+  // Filtered in SQL rather than in memory: (slate_date, category) is the
+  // leading edge of picks_slate_rank_unique, so the tab query is an index
+  // range read, and the tab you are not looking at is never fetched.
   const rows: Pick[] = visible
     ? await db
         .select()
         .from(picksTable)
-        .where(eq(picksTable.slateDate, date))
+        .where(and(eq(picksTable.slateDate, date), eq(picksTable.category, category)))
         .orderBy(asc(picksTable.rank))
     : [];
+
+  // Counts for the tab labels — cheap, and the alternative is a tab that
+  // claims nothing is there until you click it.
+  const tallies = visible
+    ? await db
+        .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
+        .from(picksTable)
+        .where(eq(picksTable.slateDate, date))
+        .groupBy(picksTable.category)
+    : [];
+  const countFor = new Map(tallies.map((t) => [t.category, t.n]));
 
   // Admins preview the whole slate; everyone else sees the top VISIBLE_PICKS.
   const view = visiblePicks(rows, auth.isAdmin);
@@ -73,7 +97,8 @@ export default async function PicksPage({
           role="status"
           className="mb-6 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand"
         >
-          Account created. All 15 picks are free, every day, during our beta.
+          Account created. All {PICKS_PER_SLATE.game} game bets and{" "}
+          {PICKS_PER_SLATE.prop} player props are free, every day, during our beta.
         </div>
       )}
 
@@ -89,10 +114,13 @@ export default async function PicksPage({
             {slate?.publishedAt ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{view.length} picks, free</span>
+                <span>
+                  {view.length} {CATEGORY_NOUN[category]}
+                  {view.length === 1 ? "" : "s"}, free
+                </span>
               </>
             ) : null}
-            {!slate?.publishedAt && rows.length > 0 && (
+            {!slate?.publishedAt && countFor.size > 0 && (
               <Badge variant="pending">Draft — admin preview</Badge>
             )}
           </p>
@@ -105,15 +133,49 @@ export default async function PicksPage({
         </div>
       </div>
 
+      {/* -------------------------------------------------------------- tabs */}
+      <nav
+        aria-label="Board"
+        className="mt-8 -mb-px flex items-center gap-1 border-b border-border"
+      >
+        {pickCategories.map((c) => {
+          const isActive = c === category;
+          const n = countFor.get(c) ?? 0;
+          return (
+            <Link
+              key={c}
+              href={
+                date === today
+                  ? `/picks?category=${c}`
+                  : `/picks?date=${date}&category=${c}`
+              }
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "relative inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                isActive ? "text-brand" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {CATEGORY_LABELS[c]}
+              {n > 0 && <span className="num text-xs text-fg-subtle">{n}</span>}
+              {isActive && (
+                <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
       {/* ------------------------------------------------------------- empty */}
       {view.length === 0 ? (
-        <div className="card-hairline mt-10 p-10 text-center">
+        <div className="card-hairline mt-8 p-10 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
-            {date === today ? "The board isn't up yet" : "Nothing published for this day"}
+            {date === today
+              ? `No ${CATEGORY_NOUN[category]}s up yet`
+              : "Nothing published for this day"}
           </h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-fg-muted">
             {date === today
-              ? "Picks go out before the first kick-off. Check back shortly."
+              ? "Picks go out before the first kick-off. Check back shortly, or flip to the other tab."
               : "Try another date."}
           </p>
         </div>
