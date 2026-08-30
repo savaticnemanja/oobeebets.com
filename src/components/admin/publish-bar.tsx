@@ -8,17 +8,28 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { publishSlateAction, unpublishSlateAction } from "@/app/actions/admin";
-import { PICKS_PER_SLATE } from "@/lib/board";
+import {
+  CATEGORY_LABELS,
+  PICKS_PER_SLATE,
+  TOTAL_PICKS_PER_SLATE,
+  pickCategories,
+  type PickCategory,
+} from "@/lib/board";
 
 export function PublishBar({
   date,
+  category,
   published,
-  pickCount,
+  counts,
   anySettled,
 }: {
   date: string;
+  /** Carried through the date picker below, so changing the day keeps you on
+   * the tab you were working in. */
+  category: PickCategory;
   published: boolean;
-  pickCount: number;
+  /** Both lists, because publishing sends them out together. */
+  counts: Record<PickCategory, number>;
   anySettled: boolean;
 }) {
   const router = useRouter();
@@ -31,7 +42,10 @@ export function PublishBar({
     else if (s && !s.ok) toast.error(s.error);
   }, [pubState, unpubState]);
 
-  const pct = Math.round((pickCount / PICKS_PER_SLATE) * 100);
+  // One bar for the day, not one per tab: publish is a single action over both
+  // lists, so the thing worth showing is how close the whole slate is.
+  const total = pickCategories.reduce((n, c) => n + counts[c], 0);
+  const pct = Math.round((total / TOTAL_PICKS_PER_SLATE) * 100);
 
   return (
     <div className="card-hairline mt-6 p-4">
@@ -40,7 +54,7 @@ export function PublishBar({
           <Input
             type="date"
             value={date}
-            onChange={(e) => router.push(`/admin/slate?date=${e.target.value}`)}
+            onChange={(e) => router.push(`/admin/slate?date=${e.target.value}&category=${category}`)}
             aria-label="Slate date"
             className="h-9 w-44 num"
           />
@@ -49,9 +63,16 @@ export function PublishBar({
           ) : (
             <Badge variant="pending">Draft</Badge>
           )}
-          <span className="num text-sm text-fg-muted">
-            {pickCount}/{PICKS_PER_SLATE}
-          </span>
+          <div className="flex items-center gap-3 text-sm text-fg-muted">
+            {pickCategories.map((c) => (
+              <span key={c} className="whitespace-nowrap">
+                {CATEGORY_LABELS[c]}{" "}
+                <span className="num text-fg">
+                  {counts[c]}/{PICKS_PER_SLATE[c]}
+                </span>
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -80,7 +101,7 @@ export function PublishBar({
           ) : (
             <form action={publish}>
               <input type="hidden" name="slateDate" value={date} />
-              <Button type="submit" size="sm" disabled={publishing || pickCount === 0}>
+              <Button type="submit" size="sm" disabled={publishing || total === 0}>
                 {publishing ? (
                   <Loader2 className="animate-spin" aria-hidden="true" />
                 ) : (
@@ -96,9 +117,9 @@ export function PublishBar({
       <div
         className="mt-3 h-1 overflow-hidden rounded-full bg-surface-2"
         role="progressbar"
-        aria-valuenow={pickCount}
+        aria-valuenow={total}
         aria-valuemin={0}
-        aria-valuemax={PICKS_PER_SLATE}
+        aria-valuemax={TOTAL_PICKS_PER_SLATE}
         aria-label="Slate completeness"
       >
         <div

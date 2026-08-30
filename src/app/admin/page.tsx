@@ -8,7 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrackRecord } from "@/lib/stats";
-import { PICKS_PER_SLATE } from "@/lib/board";
+import {
+  CATEGORY_LABELS,
+  PICKS_PER_SLATE,
+  TOTAL_PICKS_PER_SLATE,
+  pickCategories,
+  type PickCategory,
+} from "@/lib/board";
 import { slateDateString } from "@/lib/slate-date";
 import type { Metadata } from "next";
 import { formatDateTime, formatSlateDate, formatUnits } from "@/lib/i18n/format";
@@ -24,9 +30,10 @@ export default async function AdminOverviewPage() {
     getTrackRecord(),
     db.select().from(slates).where(eq(slates.date, today)).limit(1),
     db
-      .select({ n: sql<number>`count(*)::int` })
+      .select({ category: picks.category, n: sql<number>`count(*)::int` })
       .from(picks)
-      .where(eq(picks.slateDate, today)),
+      .where(eq(picks.slateDate, today))
+      .groupBy(picks.category),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(picks)
@@ -39,7 +46,10 @@ export default async function AdminOverviewPage() {
     .from(users);
 
   const slate = todaySlate[0];
-  const pickCount = counts[0]?.n ?? 0;
+  const byCategory = Object.fromEntries(
+    pickCategories.map((c) => [c, counts.find((r) => r.category === c)?.n ?? 0]),
+  ) as Record<PickCategory, number>;
+  const pickCount = counts.reduce((n, r) => n + r.n, 0);
   const toSettle = awaiting[0]?.n ?? 0;
 
   return (
@@ -65,7 +75,17 @@ export default async function AdminOverviewPage() {
           <CardContent>
             <p className="num text-3xl font-semibold">
               {pickCount}
-              <span className="text-base text-fg-subtle">/{PICKS_PER_SLATE}</span>
+              <span className="text-base text-fg-subtle">/{TOTAL_PICKS_PER_SLATE}</span>
+            </p>
+            <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-fg-subtle">
+              {pickCategories.map((c) => (
+                <span key={c}>
+                  {CATEGORY_LABELS[c]}{" "}
+                  <span className="num">
+                    {byCategory[c]}/{PICKS_PER_SLATE[c]}
+                  </span>
+                </span>
+              ))}
             </p>
             <p className="mt-1 text-sm text-fg-muted">
               {slate?.publishedAt

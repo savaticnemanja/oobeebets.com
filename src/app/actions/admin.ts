@@ -14,7 +14,14 @@ import {
   type ActionState,
 } from "@/lib/validation";
 import { isValidSlateDate, zonedTimeToUtc } from "@/lib/slate-date";
-import { PICKS_PER_SLATE } from "@/lib/board";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_NOUN,
+  PICKS_PER_SLATE,
+  isPickCategory,
+  pickCategories,
+  type PickCategory,
+} from "@/lib/board";
 import { z } from "zod";
 
 async function audit(
@@ -67,9 +74,17 @@ export async function createPickAction(
     return { ok: false, error: "Invalid kick-off time", fieldErrors: { startsAt: ["Invalid date"] } };
   }
 
+  // A player prop is always market "prop" — derived here rather than trusted
+  // from the form, for the same reason sport is derived from league: one less
+  // pair of fields a forged request can put out of step.
+  const market = d.category === "prop" ? "prop" : d.market;
+  const limit = PICKS_PER_SLATE[d.category];
+
   // Rank is never typed in — a new pick always lands on the lowest free rank
-  // (filling a gap left by a deleted pick, or appending after the last one).
-  // Reordering happens afterward by dragging rows in the list.
+  // *within its own category* (filling a gap left by a deleted pick, or
+  // appending after the last one). Reordering happens afterward by dragging
+  // rows in the list. The two categories fill independently, so adding a prop
+  // never shifts a game bet.
   let nextRank = 0;
   try {
     await db.transaction(async (tx) => {
@@ -80,28 +95,34 @@ export async function createPickAction(
 
       const free = await tx.execute<{ rank: number | null }>(sql`
         select min(t.rank) as rank
-        from generate_series(1, ${PICKS_PER_SLATE}) as t(rank)
+        from generate_series(1, ${limit}) as t(rank)
         where not exists (
           select 1 from ${picks} p
-          where p.slate_date = ${d.slateDate} and p.rank = t.rank
+          where p.slate_date = ${d.slateDate}
+            and p.category = ${d.category}::pick_category
+            and p.rank = t.rank
         )
       `);
 
       if (free[0]?.rank == null) {
-        throw new Error(`Slate is full — ${PICKS_PER_SLATE} picks max`);
+        throw new Error(
+          `Slate is full — ${limit} ${CATEGORY_NOUN[d.category]}s max`,
+        );
       }
       nextRank = free[0].rank;
 
       await tx.insert(picks).values({
         slateDate: d.slateDate,
+        category: d.category,
         rank: nextRank,
         sport: LEAGUE_SPORT[d.league],
         league: d.league,
         event: `${d.awayTeam} vs ${d.homeTeam}`,
         startsAt,
-        market: d.market,
+        market,
         selection: d.selection,
         price: d.price,
+        book: d.book || null,
         units: String(d.units),
         confidence: d.confidence ?? null,
         evPct: d.evPct !== undefined ? String(d.evPct) : null,
@@ -119,20 +140,29 @@ export async function createPickAction(
     throw err;
   }
 
-  await audit(actor, "pick.created", "pick", undefined, { slateDate: d.slateDate, rank: nextRank });
+  await audit(actor, "pick.created", "pick", undefined, {
+    slateDate: d.slateDate,
+    category: d.category,
+    rank: nextRank,
+  });
   revalidateSlate();
-  return { ok: true, message: `Rank ${nextRank} added.` };
+  return { ok: true, message: `${CATEGORY_LABELS[d.category]} — rank ${nextRank} added.` };
 }
 
 /* ----------------------------------------------------------- reorder picks */
 
 export async function reorderPicksAction(
   slateDate: string,
+  category: PickCategory,
   orderedIds: string[],
 ): Promise<ActionState> {
   const actor = await requireAdmin();
 
-  if (!isValidSlateDate(slateDate) || orderedIds.some((id) => !z.string().uuid().safeParse(id).success)) {
+  if (
+    !isValidSlateDate(slateDate) ||
+    !isPickCategory(category) ||
+    orderedIds.some((id) => !z.string().uuid().safeParse(id).success)
+  ) {
     return { ok: false, error: "Bad request" };
   }
 
@@ -141,10 +171,14 @@ export async function reorderPicksAction(
     return { ok: false, error: "Slate is published — ranks are locked." };
   }
 
+  // Scoped to the one category being dragged. Comparing against the whole day
+  // would reject every reorder as incomplete once the other tab has rows in
+  // it — and renumbering both lists from a single ordering would silently
+  // rewrite the tab the admin isn't even looking at.
   const existing = await db
     .select({ id: picks.id })
     .from(picks)
-    .where(eq(picks.slateDate, slateDate));
+    .where(and(eq(picks.slateDate, slateDate), eq(picks.category, category)));
   const existingIds = new Set(existing.map((r) => r.id));
 
   if (orderedIds.length !== existing.length || !orderedIds.every((id) => existingIds.has(id))) {
@@ -163,7 +197,10 @@ export async function reorderPicksAction(
     }
   });
 
-  await audit(actor, "picks.reordered", "slate", slateDate, { count: orderedIds.length });
+  await audit(actor, "picks.reordered", "slate", slateDate, {
+    category,
+    count: orderedIds.length,
+  });
   revalidateSlate();
   return { ok: true };
 }
@@ -209,10 +246,17 @@ export async function publishSlateAction(
   const date = String(formData.get("slateDate") ?? "");
   if (!isValidSlateDate(date)) return { ok: false, error: "Bad slate date" };
 
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)::int` })
+  const byCategory = await db
+    .select({ category: picks.category, n: sql<number>`count(*)::int` })
     .from(picks)
-    .where(eq(picks.slateDate, date));
+    .where(eq(picks.slateDate, date))
+    .groupBy(picks.category);
+
+  const counts = Object.fromEntries(byCategory.map((r) => [r.category, r.n])) as Record<
+    PickCategory,
+    number | undefined
+  >;
+  const n = byCategory.reduce((total, r) => total + r.n, 0);
 
   if (n === 0) return { ok: false, error: "Nothing to publish — add picks first." };
 
@@ -221,9 +265,18 @@ export async function publishSlateAction(
     .set({ publishedAt: new Date(), publishedBy: actor.user.id })
     .where(and(eq(slates.date, date), sql`${slates.publishedAt} is null`));
 
-  await audit(actor, "slate.published", "slate", date, { pickCount: n });
+  await audit(actor, "slate.published", "slate", date, {
+    pickCount: n,
+    ...Object.fromEntries(byCategory.map((r) => [`${r.category}Count`, r.n])),
+  });
   revalidateSlate();
-  return { ok: true, message: `Slate published — ${n} picks live.` };
+
+  // Both tabs go live together, so the confirmation names both — "15 picks
+  // live" no longer says which board got them.
+  const breakdown = pickCategories
+    .map((c) => `${counts[c] ?? 0} ${CATEGORY_NOUN[c]}${counts[c] === 1 ? "" : "s"}`)
+    .join(", ");
+  return { ok: true, message: `Slate published — ${breakdown} live.` };
 }
 
 export async function unpublishSlateAction(

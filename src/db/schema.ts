@@ -28,6 +28,14 @@ export const sportEnum = pgEnum("sport", [
 
 export const marketEnum = pgEnum("market", ["moneyline", "spread", "total", "prop"]);
 
+/**
+ * Which of the two boards a pick belongs to. Distinct from `market`, which is
+ * the bet type: a player prop is always market "prop", but a game bet can be a
+ * team prop too, so the tab a pick appears on is its own fact rather than
+ * something inferred from the market.
+ */
+export const pickCategoryEnum = pgEnum("pick_category", ["game", "prop"]);
+
 export const pickStatusEnum = pgEnum("pick_status", [
   "pending",
   "won",
@@ -172,7 +180,15 @@ export const picks = pgTable(
     slateDate: date("slate_date")
       .notNull()
       .references(() => slates.date, { onDelete: "cascade" }),
-    /** 1 = best pick of the day. Drives board visibility; see lib/board.ts. */
+    /**
+     * Which board this pick is on. Defaults to "game" so every pick that
+     * predates the split stays exactly where it was.
+     */
+    category: pickCategoryEnum("category").notNull().default("game"),
+    /**
+     * 1 = best pick of the day *within its category*, so a full slate holds
+     * two rank-1s. Drives board visibility; see lib/board.ts.
+     */
     rank: integer("rank").notNull(),
 
     sport: sportEnum("sport").notNull(),
@@ -203,17 +219,24 @@ export const picks = pgTable(
   (t) => [
     // NOTE: declared here as a plain index because drizzle-kit's schema
     // builder can't express DEFERRABLE — but in the live DB, as of migration
-    // 0002, this is actually a DEFERRABLE INITIALLY DEFERRED unique
-    // constraint (same name), which is what lets reorderPicksAction commit a
-    // whole new rank ordering in one transaction. Don't `db:generate` a
-    // "fix" for this line — it would silently drop back to a non-deferrable
-    // index and break drag-and-drop reordering.
-    uniqueIndex("picks_slate_rank_unique").on(t.slateDate, t.rank),
+    // 0002 and re-keyed in 0006, this is actually a DEFERRABLE INITIALLY
+    // DEFERRED unique constraint (same name), which is what lets
+    // reorderPicksAction commit a whole new rank ordering in one transaction.
+    // Don't `db:generate` a "fix" for this line — it would silently drop back
+    // to a non-deferrable index and break drag-and-drop reordering.
+    //
+    // `category` is part of the key, not just along for the ride: it is what
+    // allows a game bet and a player prop to both be rank 1 on the same day.
+    // It also leaves (slate_date, category) as a usable index prefix, which is
+    // what each board tab queries on — so no separate index for that.
+    uniqueIndex("picks_slate_rank_unique").on(t.slateDate, t.category, t.rank),
     index("picks_slate_idx").on(t.slateDate),
     index("picks_status_idx").on(t.status),
     index("picks_starts_at_idx").on(t.startsAt),
-    // Keep in step with PICKS_PER_SLATE in lib/board.ts — changing the slate
-    // size needs a migration to move this bound, not just the constant.
+    // Keep in step with PICKS_PER_SLATE in lib/board.ts — changing a list's
+    // size needs a migration to move this bound, not just the constant. One
+    // bound covers both categories while they are both 15; the day they
+    // diverge this becomes a CASE on category.
     check("picks_rank_range", sql`${t.rank} >= 1 and ${t.rank} <= 15`),
     check("picks_confidence_range", sql`${t.confidence} is null or (${t.confidence} >= 0 and ${t.confidence} <= 100)`),
     // American odds are never between -100 and +100 exclusive, and never 0.
@@ -286,5 +309,6 @@ export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];
 export type Market = (typeof marketEnum.enumValues)[number];
+export type PickCategory = (typeof pickCategoryEnum.enumValues)[number];
 export type SpendBand = (typeof spendBandEnum.enumValues)[number];
 export type InviteStatus = (typeof inviteStatusEnum.enumValues)[number];

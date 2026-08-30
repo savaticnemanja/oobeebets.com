@@ -24,17 +24,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { deletePickAction, reorderPicksAction } from "@/app/actions/admin";
 import type { Pick } from "@/db/schema";
-import { VISIBLE_PICKS } from "@/lib/board";
+import { CATEGORY_NOUN, VISIBLE_PICKS, type PickCategory } from "@/lib/board";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
 import { formatDateTime, formatOdds } from "@/lib/i18n/format";
 
 export function SlatePickList({
   date,
+  category,
   picks,
   published,
 }: {
   date: string;
+  /** The list being dragged. Ranks are per-category, so a reorder must say
+   * which of the two it is renumbering. */
+  category: PickCategory;
   picks: Pick[];
   published: boolean;
 }) {
@@ -76,6 +80,7 @@ export function SlatePickList({
     startSave(async () => {
       const res = await reorderPicksAction(
         date,
+        category,
         reordered.map((p) => p.id),
       );
       if (res && !res.ok) {
@@ -89,7 +94,7 @@ export function SlatePickList({
     return (
       <div className="card-hairline flex min-h-64 items-center justify-center p-8 text-center">
         <p className="text-sm text-fg-muted">
-          No picks on this slate yet. Add one to start.
+          No {CATEGORY_NOUN[category]}s on this slate yet. Add one to start.
         </p>
       </div>
     );
@@ -106,6 +111,7 @@ export function SlatePickList({
                 key={p.id}
                 pick={p}
                 rank={i + 1}
+                freeLimit={VISIBLE_PICKS[category]}
                 published={published}
                 deleteAction={deleteAction}
               />
@@ -120,11 +126,13 @@ export function SlatePickList({
 function SortableRow({
   pick,
   rank,
+  freeLimit,
   published,
   deleteAction,
 }: {
   pick: Pick;
   rank: number;
+  freeLimit: number;
   published: boolean;
   deleteAction: (formData: FormData) => void;
 }) {
@@ -133,7 +141,7 @@ function SortableRow({
     disabled: published,
   });
 
-  const visible = rank <= VISIBLE_PICKS;
+  const visible = rank <= freeLimit;
 
   return (
     <div

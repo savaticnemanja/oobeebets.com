@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import type { Sport } from "@/db/schema";
+import { pickCategories } from "@/lib/board";
 
 /** Rejects the handful of passwords that make up most credential-stuffing hits. */
 const COMMON_PASSWORDS = new Set([
@@ -92,8 +93,27 @@ export const LEAGUE_SPORT: Record<(typeof leagueValues)[number], Sport> = {
   NFL: "football",
 };
 
+/**
+ * Player-prop stat lines the composer suggests, per league. A suggestion list
+ * rather than an enum: it is offered through a datalist, so the long tail
+ * ("Outs Recorded", "Longest Reception") can still be typed. The stat is part
+ * of the selection string, not a column, so nothing downstream parses it.
+ */
+export const PROP_STATS: Record<(typeof leagueValues)[number], readonly string[]> = {
+  MLB: [
+    "Strikeouts", "Hits Allowed", "Earned Runs", "Walks Allowed", "Outs Recorded",
+    "Hits", "Total Bases", "Home Runs", "RBIs", "Runs", "Walks", "Stolen Bases",
+  ],
+  NFL: [
+    "Passing Yards", "Passing TDs", "Completions", "Interceptions",
+    "Rushing Yards", "Receiving Yards", "Receptions", "Anytime TD",
+  ],
+};
+
 export const pickSchema = z.object({
   slateDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  /** Which board the pick lands on. Defaults so an older form post still works. */
+  category: z.enum(pickCategories).default("game"),
   league: z.enum(leagueValues),
   awayTeam: z.string().trim().min(1, "Away team is required").max(90),
   homeTeam: z.string().trim().min(1, "Home team is required").max(90),
@@ -104,6 +124,9 @@ export const pickSchema = z.object({
     .number()
     .int()
     .refine((n) => n >= 100 || n <= -100, "American odds: >= +100 or <= -100"),
+  /** Free text, and often several books ("FD/DK/BetRivers") — the best price
+   * is rarely at one of them, and the card prints whatever is entered. */
+  book: z.string().trim().max(60).optional().or(z.literal("")),
   units: z.coerce.number().min(0.1).max(10).default(1),
   confidence: z.coerce.number().int().min(0).max(100).optional(),
   evPct: z.coerce.number().min(-100).max(100).optional(),

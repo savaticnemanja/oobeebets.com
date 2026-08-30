@@ -46,14 +46,18 @@ const SHOTS = [
   { name: "01-landing", path: "/", user: null, full: true },
   { name: "02-top-picks", path: "/top-picks", user: TESTER_EMAIL, full: true },
   { name: "03-picks", path: "/picks", user: TESTER_EMAIL, full: false },
+  // The board is two tabs; a shot of only the default one reviews half of it.
+  { name: "03b-picks-props", path: "/picks?category=prop", user: TESTER_EMAIL, full: false },
   { name: "04-account", path: "/account", user: TESTER_EMAIL, full: false },
   { name: "05-admin", path: "/admin", user: ADMIN_EMAIL, full: false },
   { name: "06-admin-slate", path: "/admin/slate", user: ADMIN_EMAIL, full: false },
+  { name: "06b-admin-slate-props", path: "/admin/slate?category=prop", user: ADMIN_EMAIL, full: false },
   { name: "07-admin-settle", path: "/admin/settle", user: ADMIN_EMAIL, full: false },
   { name: "08-admin-users", path: "/admin/users", user: ADMIN_EMAIL, full: false },
   { name: "09-admin-announce", path: "/admin/announce", user: ADMIN_EMAIL, full: false },
   { name: "10-login", path: "/login", user: null, full: false },
   { name: "11-picks-mobile", path: "/picks", user: TESTER_EMAIL, full: false, mobile: true },
+  { name: "12-picks-props-mobile", path: "/picks?category=prop", user: TESTER_EMAIL, full: false, mobile: true },
 ];
 
 for (const s of SHOTS) {

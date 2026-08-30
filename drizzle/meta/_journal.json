@@ -43,6 +43,13 @@
       "when": 1787583685405,
       "tag": "0005_fifteen_picks_per_slate",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788121053840,
+      "tag": "0006_player_props_category",
+      "breakpoints": true
     }
   ]
 }

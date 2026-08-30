@@ -11,6 +11,10 @@
  * than a number written down twice — and it has to, since picks_rank_range
  * rejects anything above that bound at the database.
  *
+ * A slate is two ranked lists, game bets and player props, each numbered from
+ * 1. Both are built here, because a fixture that only filled one tab would
+ * leave the other one's rank cut untested.
+ *
  * Note that while PICKS_PER_SLATE equals VISIBLE_PICKS, no fixture can put a
  * rank past the free limit, so the truncation checks in verify.mjs cannot bite
  * on a real board. The synthetic visiblePicks() contract test covers that
@@ -18,7 +22,7 @@
  */
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { PICKS_PER_SLATE } from "../src/lib/board.ts";
+import { PICKS_PER_SLATE, pickCategories } from "../src/lib/board.ts";
 
 /**
  * The non-admin viewer the suites need. The seed creates one admin and nothing
@@ -70,63 +74,125 @@ const GAMES = {
   },
 };
 
+/**
+ * Player props, in the shape the composer writes them: player, side, line and
+ * stat composed into one selection string.
+ */
+const PROPS = {
+  baseball: {
+    league: "MLB",
+    events: [
+      "Colorado Rockies vs Atlanta Braves",
+      "Baltimore Orioles vs Detroit Tigers",
+      "Chicago Cubs vs St. Louis Cardinals",
+    ],
+    selections: [
+      "Martin Perez UNDER 4.5 Strikeouts",
+      "Jordan Beck UNDER 0.5 Hits",
+      "Matt Olson OVER 1.5 Total Bases",
+    ],
+  },
+  football: {
+    league: "NFL",
+    events: [
+      "Kansas City Chiefs vs Buffalo Bills",
+      "San Francisco 49ers vs Seattle Seahawks",
+      "Dallas Cowboys vs Philadelphia Eagles",
+    ],
+    selections: [
+      "Josh Allen OVER 246.5 Passing Yards",
+      "Christian McCaffrey OVER 4.5 Receptions",
+      "CeeDee Lamb UNDER 79.5 Receiving Yards",
+    ],
+  },
+};
+
+/**
+ * Every selection string a fixture slate can contain, by category. Suites use
+ * these to prove a tab serves its own board and not the other one — matching
+ * ranks alone can't, since both boards are numbered 1..15.
+ */
+export const FIXTURE_SELECTIONS = {
+  game: Object.values(GAMES).flatMap((g) => g.selections),
+  prop: Object.values(PROPS).flatMap((g) => g.selections),
+};
+
 /** Settled outcomes for the picks whose games have already kicked off. */
 const OUTCOMES = ["won", "lost", "won", "push", "lost", "won", "void", "won"];
 
 /**
- * Creates a published slate of `count` picks on `date`.
+ * Creates a published slate on `date`: both boards, each filled to its own
+ * limit and each ranked from 1.
  *
  * Odd ranks are MLB, even are NFL, so both /top-picks tabs have something in
  * them. Ranks 1..settled started three hours ago and carry a result; the rest
  * start in the future and stay pending, which is what the settle flow needs to
  * find.
+ *
+ * `counts` takes a partial override ({ prop: 0 }) for suites that want one
+ * board empty; anything unset falls back to that category's real limit.
  */
-export async function createSlate(
-  sql,
-  { date, publishedBy, count = PICKS_PER_SLATE, settled = Math.floor(PICKS_PER_SLATE / 2) },
-) {
+export async function createSlate(sql, { date, publishedBy, counts = {} }) {
   await sql`
     insert into slates (date, published_at, published_by)
     values (${date}, now(), ${publishedBy})
     on conflict (date) do update set published_at = now(), published_by = ${publishedBy}
   `;
 
-  for (let rank = 1; rank <= count; rank++) {
-    const sport = rank % 2 === 1 ? "baseball" : "football";
-    const g = GAMES[sport];
-    const i = rank % 3;
-    const isSettled = rank <= settled;
-    const price = PRICES[rank % PRICES.length];
+  const sizes = Object.fromEntries(
+    pickCategories.map((c) => [c, counts[c] ?? PICKS_PER_SLATE[c]]),
+  );
 
-    // Settled picks kicked off three hours ago; pending ones are still ahead,
-    // staggered so "order by starts_at" is deterministic.
-    const startsAt = isSettled
-      ? new Date(Date.now() - 3 * 3600_000)
-      : new Date(Date.now() + (rank - settled) * 15 * 60_000);
+  for (const category of pickCategories) {
+    const count = sizes[category];
+    const settled = Math.floor(count / 2);
+    const source = category === "prop" ? PROPS : GAMES;
+    const market = category === "prop" ? "prop" : "total";
 
-    const status = isSettled ? OUTCOMES[rank % OUTCOMES.length] : "pending";
+    for (let rank = 1; rank <= count; rank++) {
+      const sport = rank % 2 === 1 ? "baseball" : "football";
+      const g = source[sport];
+      const i = rank % 3;
+      const isSettled = rank <= settled;
+      const price = PRICES[rank % PRICES.length];
 
-    await sql`
-      insert into picks (
-        slate_date, rank, sport, league, event, starts_at, market, selection,
-        price, units, confidence, ev_pct, reasoning,
-        status, final_score, settled_at, settled_by, void_reason
-      ) values (
-        ${date}, ${rank}, ${sport}::sport, ${g.league}, ${g.events[i]},
-        ${startsAt}, ${"total"}::market, ${g.selections[i]},
-        ${price}, ${"1.00"}, ${Math.max(50, 82 - rank)}, ${(rank % 7) + 1.5},
-        ${rank <= 3 ? "Fixture pick — created by the test suite." : null},
-        ${status}::pick_status,
-        ${status === "won" || status === "lost" ? "4-2" : null},
-        ${isSettled ? new Date() : null},
-        ${isSettled ? publishedBy : null},
-        ${status === "void" ? "Game postponed — no action." : null}
-      )
-    `;
+      // Settled picks kicked off three hours ago; pending ones are still
+      // ahead, staggered so "order by starts_at" is deterministic.
+      const startsAt = isSettled
+        ? new Date(Date.now() - 3 * 3600_000)
+        : new Date(Date.now() + (rank - settled) * 15 * 60_000);
+
+      const status = isSettled ? OUTCOMES[rank % OUTCOMES.length] : "pending";
+
+      await sql`
+        insert into picks (
+          slate_date, category, rank, sport, league, event, starts_at, market,
+          selection, price, units, confidence, ev_pct, reasoning,
+          status, final_score, settled_at, settled_by, void_reason
+        ) values (
+          ${date}, ${category}::pick_category, ${rank}, ${sport}::sport,
+          ${g.league}, ${g.events[i]},
+          ${startsAt}, ${market}::market, ${g.selections[i]},
+          ${price}, ${"1.00"}, ${Math.max(50, 82 - rank)}, ${(rank % 7) + 1.5},
+          ${rank <= 3 ? "Fixture pick — created by the test suite." : null},
+          ${status}::pick_status,
+          ${status === "won" || status === "lost" ? "4-2" : null},
+          ${isSettled ? new Date() : null},
+          ${isSettled ? publishedBy : null},
+          ${status === "void" ? "Game postponed — no action." : null}
+        )
+      `;
+    }
   }
 
-  const [{ n }] = await sql`select count(*)::int as n from picks where slate_date = ${date}`;
-  return { date, count: n };
+  const rows = await sql`
+    select category, count(*)::int as n from picks
+    where slate_date = ${date} group by category
+  `;
+  const created = Object.fromEntries(
+    pickCategories.map((c) => [c, rows.find((r) => r.category === c)?.n ?? 0]),
+  );
+  return { date, counts: created, count: rows.reduce((n, r) => n + r.n, 0) };
 }
 
 /** Removes the slate and everything hanging off it. Picks cascade with it. */

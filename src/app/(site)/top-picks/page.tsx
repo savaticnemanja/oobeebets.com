@@ -51,6 +51,10 @@ export default async function TopPicksPage({
         .where(
           and(
             eq(picksTable.slateDate, date),
+            // Game bets only. Player props are ranked separately and live on
+            // their own tab on /picks; mixing them in here would put two rank
+            // 1s in one MLB list.
+            eq(picksTable.category, "game"),
             eq(picksTable.sport, active.sport),
             eq(picksTable.league, active.league),
           ),
@@ -58,11 +62,11 @@ export default async function TopPicksPage({
         .orderBy(asc(picksTable.rank))
     : [];
 
-  // Ranks run across the whole slate, not per sport, so "the first 15 rows for
-  // this sport" is not the same set as "the picks this viewer may see" — an
-  // MLB-heavy top 15 would push NFL picks ranked 16+ into an NFL tab holding
-  // fewer than 15 rows. The rank cut is the gate, so it goes through the board
-  // contract like every other surface does.
+  // Ranks run across the whole game-bets list, not per sport, so "the first 15
+  // rows for this sport" is not the same set as "the picks this viewer may
+  // see" — an MLB-heavy top 15 would push NFL picks ranked 16+ into an NFL tab
+  // holding fewer than 15 rows. The rank cut is the gate, so it goes through
+  // the board contract like every other surface does.
   const view = visiblePicks(rows, auth.isAdmin);
 
   return (

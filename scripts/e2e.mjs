@@ -39,13 +39,17 @@ if (!seedAdmin) {
 
 const latestSlate = slateDateString();
 await dropSlate(sql, latestSlate);
-const { count: slateSize } = await createSlate(sql, {
+const { counts: slateCounts } = await createSlate(sql, {
   date: latestSlate,
   publishedBy: seedAdmin.id,
 });
 
-/** What a signed-in tester is entitled to on today's board. */
-const freeBoard = Math.min(VISIBLE_PICKS, slateSize);
+/**
+ * What a signed-in tester is entitled to on the tab they land on. Onboarding
+ * drops them at /picks with no ?category=, which is the game-bets board — the
+ * props tab has its own limit and is checked in verify.mjs.
+ */
+const freeBoard = Math.min(VISIBLE_PICKS.game, slateCounts.game);
 
 let failures = 0;
 const check = (cond, name, extra = "") => {
@@ -200,7 +204,7 @@ console.log("\nSettling a pick");
 {
   // Pick something in the future so it appears in the "not started yet" list.
   const [target] = await sql`
-    select p.id, p.rank, p.selection, p.price, p.slate_date
+    select p.id, p.rank, p.category, p.selection, p.price, p.slate_date
     from picks p where p.status = 'pending'
     order by p.starts_at asc limit 1
   `;
@@ -246,11 +250,11 @@ console.log("\nSettling a pick");
         ? target.slate_date.toISOString().slice(0, 10)
         : target.slate_date;
     const pub = await ctx.newPage();
-    await pub.goto(`${APP_URL}/picks?date=${targetDate}`);
+    await pub.goto(`${APP_URL}/picks?date=${targetDate}&category=${target.category}`);
     const boardHtml = await pub.content();
     check(
       boardHtml.includes(target.selection),
-      "settled pick appears on the picks board",
+      `settled pick appears on the ${target.category} board`,
     );
 
     // Restore.
