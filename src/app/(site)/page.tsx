@@ -1,127 +1,164 @@
 import type { Metadata } from "next";
-import { SubscribeForm } from "@/components/newsletter/subscribe-form";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Eye, ListChecks, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Reveal, Stagger, StaggerItem, PulseDot } from "@/components/ui/motion";
 import { SITE, appUrl } from "@/lib/site";
-import { shareCard } from "@/lib/metadata";
-import { getLocale, localeConfig } from "@/lib/i18n/config";
-
-/**
- * The pre-launch signup page, and the site's root.
- *
- * It used to be `/soon`, served at `/` through a rewrite in the gate's proxy.
- * With the product gone there is nothing left to gate, so this is simply the
- * root page — which also means it prerenders instead of passing through
- * middleware on every request.
- */
-// Written once and used four times: the page title, the meta description, and
-// both share cards. Overriding `title`/`description` alone left og: and
-// twitter: inheriting the root layout's evergreen brand copy, so a link to this
-// page previewed as "Every pick, settled in public." while the page it opened
-// said "launching soon" — the share card sold a product, the page asked for an
-// email.
-const TITLE = `${SITE.name} — launching soon`;
-const DESCRIPTION =
-  "Daily sports betting picks with a public, unedited track record. We're launching soon — join the list for the launch notification.";
 
 export const metadata: Metadata = {
-  // Absolute, or the root layout's `%s · oobee bets` template appends the brand
-  // to a title that already opens with it.
-  title: { absolute: TITLE },
-  description: DESCRIPTION,
+  title: `${SITE.name} — ${SITE.tagline}`,
+  description: SITE.description,
   alternates: { canonical: "/" },
-  ...shareCard({ title: TITLE, description: DESCRIPTION, path: "/" }),
 };
 
-/**
- * Organization and WebSite, which is all a one-page pre-launch site can
- * honestly claim.
- *
- * The two are linked by `@id` rather than nested so the publisher is one entity
- * a crawler can resolve, not a copy inside another node. Deliberately absent:
- * SearchAction (there is no search endpoint to point it at) and any
- * aggregateRating or Offer — describing a product nobody can buy yet is the
- * kind of structured data that earns a manual action rather than a rich result.
- */
-function structuredData(): string {
-  const locale = localeConfig(getLocale());
-  const organizationId = appUrl("/#organization");
-
-  return JSON.stringify({
+export default function HomePage() {
+  const jsonLd = {
     "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "Organization",
-        "@id": organizationId,
-        name: SITE.name,
-        url: appUrl("/"),
-        description: SITE.description,
-        email: SITE.supportEmail,
-        logo: {
-          "@type": "ImageObject",
-          url: appUrl("/icons/icon-512.png"),
-          width: 512,
-          height: 512,
-        },
-        // The same claim the twitter:site meta tag already makes.
-        sameAs: [`https://x.com/${SITE.twitter.replace(/^@/, "")}`],
-      },
-      {
-        "@type": "WebSite",
-        "@id": appUrl("/#website"),
-        name: SITE.name,
-        url: appUrl("/"),
-        description: SITE.description,
-        inLanguage: locale.tag,
-        publisher: { "@id": organizationId },
-      },
-    ],
-  });
-}
+    "@type": "Organization",
+    name: SITE.name,
+    url: SITE.url,
+    description: SITE.description,
+    logo: appUrl("/icons/icon-512.png"),
+    sameAs: [`https://twitter.com/${SITE.twitter.replace("@", "")}`],
+  };
 
-export default function PrelaunchPage() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-12 sm:px-6 sm:pt-20">
+    <>
       <script
         type="application/ld+json"
-        // Serialised by JSON.stringify from values we control — no user input
-        // reaches this, and Next renders script children verbatim.
-        dangerouslySetInnerHTML={{ __html: structuredData() }}
+        // JSON-LD is data, not markup; it is serialised, never user-authored.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      {/* Delays are staggered by hand rather than through the motion components:
-          this is the one page every visitor loads, and a CSS keyframe already
-          in the theme costs nothing to ship. */}
-      <div className="animate-rise">
-        <div className="flex items-center gap-2.5">
-          {/* The dot grows with the label so the badge stays in proportion —
-              the ripple rings are inset from this span, so they scale too. */}
-          <span className="ripple size-2.5" aria-hidden="true">
-            <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
-          </span>
-          <span className="text-sm font-medium uppercase tracking-[0.2em] text-brand">
-            Launching soon
-          </span>
-        </div>
-      </div>
 
-      <h1
-        className="animate-rise mt-6 text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
-        style={{ animationDelay: "60ms" }}
+      {/* ------------------------------------------------------------ hero */}
+      <section className="relative mx-auto max-w-6xl px-4 pb-16 pt-20 sm:px-6 sm:pt-28">
+        <Reveal>
+          <div className="flex items-center gap-2">
+            <PulseDot />
+            <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
+              Beta — all 15 picks free for testers
+            </span>
+          </div>
+        </Reveal>
+
+        <Reveal delay={0.05}>
+          <h1 className="mt-5 max-w-3xl text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
+            Every pick we make,{" "}
+            <span className="text-brand">settled in public.</span>
+          </h1>
+        </Reveal>
+
+        <Reveal delay={0.1}>
+          <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
+            Fifteen picks a day, ranked best to worst — the whole board free for
+            everyone during our beta. Every one is graded against the real final
+            score, and the losses stay on the page next to the wins.
+          </p>
+        </Reveal>
+
+        <Reveal delay={0.15}>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button size="lg" asChild>
+              <Link href="/picks">
+                Today&apos;s board
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* ------------------------------------------------------ how it works */}
+      <section
+        aria-labelledby="how-heading"
+        className="mx-auto max-w-6xl px-4 py-16 sm:px-6"
       >
-        Every pick we make,{" "}
-        <span className="text-brand">settled in public.</span>
-      </h1>
+        <Reveal>
+          <h2 id="how-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            How it works
+          </h2>
+        </Reveal>
 
-      <p
-        className="animate-rise mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg"
-        style={{ animationDelay: "120ms" }}
-      >
-        We&rsquo;re not open yet. The board is being built &mdash; thirty picks a day,
-        ranked best to worst, every one graded against the real final score. Leave your
-        email and you&rsquo;ll be first through the door.
-      </p>
+        <Stagger className="mt-8 grid gap-4 md:grid-cols-3">
+          {[
+            {
+              icon: ListChecks,
+              title: "We rank the board",
+              body: "Fifteen plays a day, ordered 1 to 15 by how much we like them. Rank 1 is the pick we'd make if we could only make one.",
+            },
+            {
+              icon: Eye,
+              title: "You see all of it",
+              body: "Every one of the fifteen is free during our beta — nothing held back behind a plan. Each comes with the reasoning.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "We settle in public",
+              body: "Every pick is graded against the final score and stays on the track record forever. Nothing gets quietly deleted.",
+            },
+          ].map((step) => (
+            <StaggerItem key={step.title}>
+              <div className="card-hairline h-full p-5 transition-colors hover:border-border-strong">
+                <div className="w-fit rounded-lg bg-brand/10 p-2 text-brand">
+                  <step.icon className="size-5" aria-hidden="true" />
+                </div>
+                <h3 className="mt-4 font-semibold tracking-tight">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-fg-muted">{step.body}</p>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+      </section>
 
-      <div className="animate-rise max-w-xl" style={{ animationDelay: "180ms" }}>
-        <SubscribeForm />
-      </div>
-    </div>
+      {/* -------------------------------------------------------------- about */}
+      <section aria-labelledby="about-heading" className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <Reveal>
+          <div className="card-hairline overflow-hidden">
+            <div className="grid gap-8 p-6 sm:p-10 md:grid-cols-2">
+              <div>
+                <h2
+                  id="about-heading"
+                  className="text-2xl font-semibold tracking-tight sm:text-3xl"
+                >
+                  About us
+                </h2>
+                <p className="mt-4 text-sm leading-relaxed text-fg-muted">
+                  We are a small team that bets for a living and got tired of tipsters
+                  who post winners and delete losers. So we built the opposite: a board
+                  where every pick is logged before kick-off and graded after, whether it
+                  lands or not.
+                </p>
+                <p className="mt-4 text-sm leading-relaxed text-fg-muted">
+                  No parlay bait, no &ldquo;lock of the century&rdquo;, no screenshots of
+                  slips we never placed. One unit per pick, a public ledger, and a room
+                  we deliberately keep small.
+                </p>
+                <Button variant="link" asChild className="mt-4">
+                  <Link href="/about">
+                    Read the full story <ArrowRight aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+
+              <ul className="space-y-3">
+                {[
+                  "Every pick logged before the game starts",
+                  "Losses stay on the record, permanently",
+                  "One unit staked per pick — no chasing",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3 text-sm text-fg-muted">
+                    <CheckCircle2
+                      className="mt-0.5 size-4 shrink-0 text-hit"
+                      aria-hidden="true"
+                    />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Reveal>
+      </section>
+    </>
   );
 }

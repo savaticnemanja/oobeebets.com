@@ -1,25 +1,46 @@
 import type { MetadataRoute } from "next";
-import { appUrl } from "@/lib/site";
+import { SITE } from "@/lib/site";
+import { betaGatePassword } from "@/lib/beta-gate";
 
 /**
- * Three pages exist and two of them are worth indexing.
- *
- * The long disallow list this replaced was aimed at a board, an account area
- * and an admin console that are not in this build. Naming routes that do not
- * exist tells a crawler nothing except that they might.
+ * Prerendered by default, which would freeze whichever answer was right at
+ * build time. BETA_GATE_PASSWORD arrives from the environment at run time, so
+ * a static robots.txt would be generated with the gate off and keep saying so
+ * on a deployment that is gated.
  */
-const DISALLOWED = [
-  "/api/",
-  "/offline",
-  // Reached from a tokenised link in an email, and nothing anyone should find
-  // in search results.
-  "/unsubscribe",
-];
+export const dynamic = "force-dynamic";
 
 export default function robots(): MetadataRoute.Robots {
+  // A gated deployment is a copy of the real site on a different hostname.
+  // Every crawlable answer it could give is one production should be giving
+  // instead, so it asks for nothing to be indexed at all — and omits the
+  // sitemap, which would otherwise advertise the very routes being withheld.
+  if (betaGatePassword()) {
+    return { rules: [{ userAgent: "*", disallow: "/" }] };
+  }
+
   return {
-    rules: [{ userAgent: "*", allow: "/", disallow: DISALLOWED }],
-    sitemap: appUrl("/sitemap.xml"),
-    host: appUrl("/"),
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        // The board is the product; crawlers have no business in it, and the
+        // rest is per-user state that would only produce junk index entries.
+        // /unsubscribe is reached from a tokenised link in an email and is
+        // nothing anyone should find in search results.
+        disallow: [
+          "/picks",
+          "/account",
+          "/admin",
+          "/api/",
+          "/login",
+          "/signup",
+          "/offline",
+          "/unsubscribe",
+        ],
+      },
+    ],
+    sitemap: `${SITE.url}/sitemap.xml`,
+    host: SITE.url,
   };
 }

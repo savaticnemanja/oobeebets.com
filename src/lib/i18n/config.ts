@@ -7,9 +7,9 @@
  * components, which is how it was before.
  *
  * Language and formatting are separate fields on purpose. This product writes
- * American English copy ("Soccer", "Football" for the NFL), prices in dollars,
- * and prints dates day-first — `en` for the content, `en-GB` for the numbers.
- * Collapsing the two would silently change what every date on the site says.
+ * American English copy ("Soccer", "Football" for the NFL) but prints dates
+ * day-first — `en` for the content, `en-GB` for the numbers. Collapsing the two
+ * would silently change what every date on the site says.
  */
 export const LOCALES = ["en"] as const;
 
@@ -36,8 +36,6 @@ export interface LocaleConfig {
   readonly timeZone: string;
   /** Shown beside the zone so a time is never ambiguous. */
   readonly timeZoneLabel: string;
-  /** ISO 4217. Prices are stored in cents of this. */
-  readonly currency: string;
 }
 
 export const LOCALE_CONFIG: Record<Locale, LocaleConfig> = {
@@ -48,7 +46,6 @@ export const LOCALE_CONFIG: Record<Locale, LocaleConfig> = {
     formats: "en-GB",
     timeZone: "UTC",
     timeZoneLabel: "UTC",
-    currency: "USD",
   },
 };
 

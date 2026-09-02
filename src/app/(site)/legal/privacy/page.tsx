@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SITE } from "@/lib/site";
 import { shareCard } from "@/lib/metadata";
 
-const DESCRIPTION = `How ${SITE.name} handles the email address you give the pre-launch list.`;
+const DESCRIPTION = `How ${SITE.name} handles your account details and the email address you give the list.`;
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -19,22 +19,31 @@ export const metadata: Metadata = {
 };
 
 /**
- * Scoped to the pre-launch phase, and deliberately narrow.
+ * Covers both surfaces this site now has: the product, and the mailing list
+ * that predates it.
  *
- * The previous draft described accounts, passwords, sessions and a payment
- * processor, none of which exist while the gate is up. Overstating collection
- * is not a harmless placeholder — accuracy is the actual transparency
- * obligation, and a notice that describes the wrong service fails it.
+ * The pre-launch draft of this page deliberately described only the list, and
+ * said in this comment that "the account and billing sections belong back here
+ * the day signup opens". That day is this merge, so the account, session and
+ * invitation sections are back — checked against the schema rather than
+ * written from memory:
  *
- * Everything below is checked against what the code really does: Resend's
- * contact book holds the address and is the only copy of it (lib/newsletter.ts),
- * and `rateLimits` holds the IP for fifteen minutes (lib/auth.ts). Widen this
- * in step with the product, not ahead of it — the account and billing sections
- * belong back here the day signup opens.
+ *   - `users` holds email, a password *hash*, and the display name, phone and
+ *     monthly spend band collected by the onboarding wizard.
+ *   - `sessions` holds a token hash, the user agent and the IP.
+ *   - `invitations` holds the invited address and a token hash.
+ *   - `rateLimits` holds an IP for about fifteen minutes (lib/auth.ts).
+ *   - Resend's contact book is still the only copy of the mailing list
+ *     (lib/newsletter.ts) — no local mirror, which is why the retention
+ *     wording for it differs from everything else here.
+ *
+ * There is still no payment processor and no billing section, because the beta
+ * takes no money. Do not add one ahead of the product: overstating collection
+ * fails the same transparency obligation understating it does.
  */
 
 /** Shown to visitors, so it has to be updated whenever the copy below changes. */
-const LAST_UPDATED = "3 August 2026";
+const LAST_UPDATED = "2 September 2026";
 
 export default function PrivacyPage() {
   return (
@@ -48,11 +57,17 @@ export default function PrivacyPage() {
         <section>
           <p>
             {SITE.name}{" "}
-            has not launched yet. The only thing this site does today is
-            take an email address for the pre-launch list, so this policy covers only
-            that. There are no accounts, no payments and no picks to buy. When the
-            product opens we will publish an updated policy covering the rest, and
-            everyone on the list will be told before it takes effect.
+            is in a free, invite-only beta. This policy covers two things: the
+            account you get if you accept an invitation, and the email list anyone can
+            join from the{" "}
+            <Link href="/soon" className="text-brand hover:underline">
+              signup page
+            </Link>{" "}
+            without an account. You can do either, both, or neither.
+          </p>
+          <p className="mt-2">
+            There are no payments and nothing for sale, so there is no payment processor
+            and nothing here about billing. If that changes, this page changes first.
           </p>
         </section>
 
@@ -69,8 +84,23 @@ export default function PrivacyPage() {
             cannot be flooded with fake addresses or used to send mail to a stranger.
           </p>
           <p className="mt-2">
-            That is the complete list. We do not ask for your name, we do not collect
-            anything about the pages you visit, and we do not build a profile of you.
+            <strong className="font-medium text-fg">Your account details</strong>, if you
+            accept an invitation: your email address, your password (stored only as a
+            hash &mdash; we cannot read it back), and the display name, phone number and
+            rough monthly betting budget you give the onboarding form. The budget is a
+            broad band, not a figure, and we ask for it to understand who the beta is
+            reaching.
+          </p>
+          <p className="mt-2">
+            <strong className="font-medium text-fg">Your sign-in sessions</strong>, while
+            you are signed in: the browser you used and the IP you signed in from, so you
+            can stay signed in and so we can spot an account being used by someone who is
+            not you.
+          </p>
+          <p className="mt-2">
+            That is the complete list. We do not collect anything about the pages you
+            visit, we do not build a profile of you, and we do not track you across other
+            sites.
           </p>
         </section>
 
@@ -83,9 +113,15 @@ export default function PrivacyPage() {
             no explanation.
           </p>
           <p className="mt-2">
+            We rely on the{" "}
+            <strong className="font-medium text-fg">contract</strong> between us for your
+            account details &mdash; we cannot give you an account to sign into without
+            them.
+          </p>
+          <p className="mt-2">
             We rely on our{" "}
             <strong className="font-medium text-fg">legitimate interest</strong> in
-            keeping the service working for the IP address, for the abuse control
+            keeping the service working for IP and session records, for the abuse control
             described above.
           </p>
         </section>
@@ -125,8 +161,15 @@ export default function PrivacyPage() {
             thing that would bring you back.
           </p>
           <p className="mt-2">
-            IP records are discarded about fifteen minutes after the submission that
-            created them.
+            Your account stays until you ask us to delete it. Deleting it removes your
+            personal details and signs out every session. The picks and results
+            themselves stay, because they are the public record and contain nothing
+            personal &mdash; they are ours, not yours.
+          </p>
+          <p className="mt-2">
+            Session records are deleted when you sign out, and expire on their own within
+            thirty days. IP records kept for rate limiting are discarded about fifteen
+            minutes after the submission that created them.
           </p>
         </section>
 
@@ -153,12 +196,12 @@ export default function PrivacyPage() {
             withdrew it.
           </p>
           <p className="mt-2">
-            The fastest route to most of this is the{" "}
+            For the mailing list, the fastest route is the{" "}
             <Link href="/unsubscribe" className="text-brand hover:underline">
               unsubscribe page
             </Link>
-            , which needs no account and no reply from us. For anything else, email us
-            and we will respond within one month.
+            , which needs no account and no reply from us. For anything to do with an
+            account, email us and we will respond within one month.
           </p>
           <p className="mt-2">
             If you think we have handled your data badly, please tell us first so we can
@@ -173,9 +216,10 @@ export default function PrivacyPage() {
           <p className="mt-2">
             {SITE.name}{" "}
             is for adults: you must be at least 18, or the legal gambling age
-            where you live if that is higher. The list is not directed at children and we
-            do not knowingly hold a child&apos;s details. If you believe a child has
-            subscribed, email us and we will remove the address.
+            where you live if that is higher. Neither the beta nor the list is directed
+            at children and we do not knowingly hold a child&apos;s details. If you
+            believe a child has subscribed or holds an account, email us and we will
+            remove it.
           </p>
         </section>
 
@@ -183,9 +227,8 @@ export default function PrivacyPage() {
           <h2 className="text-base font-semibold text-fg">Changes</h2>
           <p className="mt-2">
             If this policy changes we will update the date at the top of the page. If the
-            change is a significant one &mdash; and the move from a newsletter to a full
-            product will be &mdash; we will email the list rather than rely on you
-            noticing.
+            change is a significant one &mdash; charging for access would be &mdash; we
+            will email you rather than rely on you noticing.
           </p>
         </section>
 

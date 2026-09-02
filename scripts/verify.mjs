@@ -1,20 +1,63 @@
 /**
- * Pre-launch smoke check. Run against the app serving on APP_URL:
+ * POC verification suite. Run against a seeded database with the app serving
+ * on APP_URL:
  *
  *   npm run build && npm start &
  *   npm run verify
  *
- * The suite this replaced checked settlement maths, tier gating and admin
- * access control — none of which exist in this build. What matters now is
- * narrower and worth stating plainly: the signup page is served at `/`, the
- * legal pages a subscriber is entitled to read are reachable, and the two
- * crawler files describe the site that actually exists.
- *
- * Deliberately no database and no Resend key: this runs in CI, and a check
- * that needs live credentials is a check that gets skipped.
+ * Checks the things that would actually cost money if they broke:
+ *   1. Settlement maths — every stat on the site is a sum of this.
+ *   2. Board visibility — picks past the free limit must not be in the
+ *      response at all, on either /picks tab or either /top-picks tab, and
+ *      the board's own contract, called directly. Each /picks tab must also
+ *      serve its own board and nothing from the other one.
+ *   3. Access control — /admin must not be reachable by a normal user.
+ *   4. Session handling — /picks is gated: no session, or a dead one, sends
+ *      the request to /login instead of rendering anything.
  */
+import { createHash, randomBytes } from "node:crypto";
+import postgres from "postgres";
+// The app's own board logic, imported rather than re-described. Everything
+// this file expects a viewer to see is computed from it, so a product change
+// to VISIBLE_PICKS can never leave a stale number behind in here. Run under
+// tsx — see package.json.
+import {
+  CATEGORY_LABELS,
+  VISIBLE_PICKS,
+  pickCategories,
+  visiblePicks,
+} from "../src/lib/board.ts";
+import {
+  FIXTURE_SELECTIONS,
+  createSlate,
+  dropSlate,
+  ensureTester,
+  dropTester,
+  slateDateString,
+} from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+
+/** The seeded account. `db:seed` creates this one admin and no picks at all. */
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "nemanjas@oobeebets.com";
+
+/* -------------------------------------------------------------- fixtures */
+
+// The suite builds the board it asserts on and the plain user that views it,
+// then removes both. Nothing in the database is assumed beyond the admin.
+const [admin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+if (!admin) {
+  console.error(`\n✗ No ${ADMIN_EMAIL} account. Run: npm run db:seed\n`);
+  await sql.end();
+  process.exit(1);
+}
+
+const TESTER_EMAIL = (await ensureTester(sql)).email;
+
+const today = slateDateString();
+await dropSlate(sql, today);
+await createSlate(sql, { date: today, publishedBy: admin.id });
 
 let failures = 0;
 const pass = (name, extra = "") => console.log(`  PASS  ${name}${extra ? "  " + extra : ""}`);
@@ -24,106 +67,386 @@ const fail = (name, extra = "") => {
 };
 const check = (cond, name, extra) => (cond ? pass(name, extra) : fail(name, extra));
 
-async function get(path) {
-  const res = await fetch(`${APP_URL}${path}`, { redirect: "manual" });
-  return { status: res.status, body: await res.text() };
+/** /picks redirects here for anyone without a live session — see the guard
+ * at the top of src/app/(site)/picks/page.tsx. */
+function redirectsToLogin(res) {
+  const location = res.headers.get("location") ?? "";
+  return { ok: res.status >= 300 && res.status < 400 && location.startsWith("/login"), location };
 }
 
-/* ------------------------------------------------------------ 1. the pages */
+/* ------------------------------------------------------ 1. settlement maths */
 
-console.log("\nPages");
+console.log("\nSettlement maths");
 
-const home = await get("/");
-check(home.status === 200, "/ serves 200", `got ${home.status}`);
-check(
-  home.body.includes('name="email"') && home.body.includes("Notify me"),
-  "/ serves the signup form",
-);
-check(!home.body.includes("/soon"), "/ is the page, not a redirect to a placeholder");
-
-for (const path of ["/legal/privacy", "/legal/terms", "/unsubscribe"]) {
-  const res = await get(path);
-  check(res.status === 200, `${path} serves 200`, `got ${res.status}`);
-}
-
-const health = await get("/api/health");
-check(health.status === 200, "/api/health serves 200", `got ${health.status}`);
-check(health.body.includes('"db":"up"'), "/api/health reports the database up");
-
-/* ------------------------------------------------- 2. nothing left behind */
-
-console.log("\nRemoved surfaces are gone");
-
-// If any of these come back, something was reintroduced by accident — this
-// build is meant to have no product in it at all.
-for (const path of ["/picks", "/pricing", "/admin", "/login", "/account"]) {
-  const res = await get(path);
-  check(res.status === 404, `${path} is 404`, `got ${res.status}`);
-}
-
-/* ---------------------------------------------------------- 3. crawlers */
-
-console.log("\nCrawler files");
-
-const robots = await get("/robots.txt");
-check(robots.status === 200, "/robots.txt serves 200", `got ${robots.status}`);
-check(robots.body.includes("Disallow: /unsubscribe"), "robots keeps /unsubscribe out");
-
-const sitemap = await get("/sitemap.xml");
-check(sitemap.status === 200, "/sitemap.xml serves 200", `got ${sitemap.status}`);
-check(sitemap.body.includes("/legal/privacy"), "sitemap lists the privacy policy");
-check(
-  !sitemap.body.includes("/track-record") && !sitemap.body.includes("/pricing"),
-  "sitemap claims no page that no longer exists",
-);
-
-/* ------------------------------------------------------- 4. install + share */
-
-console.log("\nManifest and share tags");
-
-// The sitemap was checked for dead routes and the manifest was not, which is
-// how start_url sat on /picks — a route the section above asserts is a 404.
-// An installed app launching into "Nothing here" is invisible until someone
-// installs it, so it gets a check rather than a reread.
-const manifest = await get("/manifest.webmanifest");
-check(manifest.status === 200, "/manifest.webmanifest serves 200", `got ${manifest.status}`);
-
-let start = null;
-try {
-  const parsed = JSON.parse(manifest.body);
-  start = parsed.start_url;
-  const targets = [parsed.start_url, ...(parsed.shortcuts ?? []).map((s) => s.url)];
-  const dead = [];
-  for (const url of targets) {
-    const res = await get(url);
-    if (res.status !== 200) dead.push(`${url} -> ${res.status}`);
+// Mirrors src/lib/settlement.ts. If these two ever disagree, the public record
+// disagrees with itself.
+function profitUnits(price, units, status) {
+  switch (status) {
+    case "won":
+      return price > 0 ? units * (price / 100) : units * (100 / Math.abs(price));
+    case "lost":
+      return -units;
+    default:
+      return 0;
   }
-  check(dead.length === 0, "every manifest destination serves 200", dead.join(", "));
-} catch {
-  fail("manifest is valid JSON");
-}
-check(typeof start === "string" && start.length > 0, "manifest declares a start_url", `${start}`);
-
-// Both icon routes and the share image, which are only ever noticed by their
-// absence — a 404 here is a blank tab and a bare text link on every share.
-for (const path of ["/favicon.ico", "/icon.svg", "/apple-icon.png", "/opengraph-image"]) {
-  const res = await get(path);
-  check(res.status === 200, `${path} serves 200`, `got ${res.status}`);
 }
 
-// og: and twitter: inherit from the root layout unless a page overrides both,
-// so the home page's card is checked against the page's own copy.
-check(
-  home.body.includes('property="og:image"') && home.body.includes('name="twitter:card"'),
-  "/ carries an image card",
-);
-check(
-  home.body.includes('property="og:title" content="oobee bets — launching soon"'),
-  "/ share card says launching soon, like the page does",
-);
-check(home.body.includes('application/ld+json'), "/ carries structured data");
+const near = (a, b) => Math.abs(a - b) < 1e-9;
 
-/* -------------------------------------------------------------- summary */
+check(near(profitUnits(150, 1, "won"), 1.5), "+150 @ 1u won = +1.50u");
+check(near(profitUnits(-120, 1, "won"), 0.8333333333333334), "-120 @ 1u won = +0.83u");
+check(near(profitUnits(-110, 1, "won"), 0.9090909090909091), "-110 @ 1u won = +0.909u");
+check(near(profitUnits(200, 2.5, "won"), 5), "+200 @ 2.5u won = +5.00u");
+check(near(profitUnits(150, 1, "lost"), -1), "any price @ 1u lost = -1.00u");
+check(near(profitUnits(-110, 2, "lost"), -2), "-110 @ 2u lost = -2.00u");
+check(near(profitUnits(150, 1, "push"), 0), "push = 0");
+check(near(profitUnits(150, 1, "void"), 0), "void = 0");
+check(near(profitUnits(150, 1, "pending"), 0), "pending = 0");
 
-console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
+// Cross-check the DB aggregate used on the landing page against the same maths
+// applied row by row — these are two independent implementations.
+const rows = await sql`
+  select p.price, p.units, p.status from picks p
+  join slates s on s.date = p.slate_date and s.published_at is not null
+`;
+const manual = rows.reduce(
+  (acc, r) => acc + profitUnits(r.price, Number(r.units), r.status),
+  0,
+);
+const [{ agg }] = await sql`
+  select coalesce(sum(
+    case
+      when p.status = 'won' and p.price > 0 then p.units * (p.price::numeric / 100)
+      when p.status = 'won' and p.price < 0 then p.units * (100 / abs(p.price)::numeric)
+      when p.status = 'lost' then -p.units
+      else 0
+    end
+  ), 0)::float as agg
+  from picks p
+  join slates s on s.date = p.slate_date and s.published_at is not null
+`;
+check(
+  Math.abs(manual - agg) < 1e-6,
+  "SQL aggregate matches row-by-row maths",
+  `js=${manual.toFixed(4)} sql=${agg.toFixed(4)}`,
+);
+
+/* ------------------------------------------------------- 2. board visibility */
+
+console.log("\nBoard visibility (picks past the free limit must be absent from the payload)");
+
+const tallies = await sql`
+  select category, count(*)::int as n from picks
+  where slate_date = ${today} group by category
+`;
+const totals = Object.fromEntries(
+  pickCategories.map((c) => [c, tallies.find((r) => r.category === c)?.n ?? 0]),
+);
+const total = tallies.reduce((n, r) => n + r.n, 0);
+
+async function sessionFor(email) {
+  const [user] = await sql`select id from users where email = ${email}`;
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  await sql`
+    insert into sessions (user_id, token_hash, expires_at)
+    values (${user.id}, ${tokenHash}, ${new Date(Date.now() + 3600_000)})
+  `;
+  return { token, cleanup: () => sql`delete from sessions where token_hash = ${tokenHash}` };
+}
+
+/**
+ * Rank comes from the rendered aria-label, not from matching selection text:
+ * the fixture reuses selections across ranks, so text matching false-positives.
+ */
+const servedRanks = (html) =>
+  new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
+
+/** Ranks 1..expected, no more and no fewer. */
+function rankDiff(served, expected) {
+  const over = [...served].filter((r) => r > expected);
+  const missing = [];
+  for (let r = 1; r <= expected; r++) if (!served.has(r)) missing.push(r);
+  return { over, missing, ok: over.length === 0 && missing.length === 0 };
+}
+
+const reportRanks = (name, served, expected) => {
+  const { over, missing, ok } = rankDiff(served, expected);
+  check(
+    ok,
+    name.padEnd(22),
+    `unlocked=${served.size}/${expected}` +
+      (over.length ? ` OVER-SERVED:${over.join(",")}` : "") +
+      (missing.length ? ` MISSING:${missing.join(",")}` : ""),
+  );
+};
+
+/** One of each role: the seeded admin and the fixture tester. There is no third. */
+const DEMO_EMAILS = [ADMIN_EMAIL, TESTER_EMAIL];
+
+const viewers = await sql`
+  select email, role from users where email = any(${DEMO_EMAILS}) order by email
+`;
+
+check(
+  viewers.length === DEMO_EMAILS.length,
+  "both viewer roles exist",
+  `${viewers.length}/${DEMO_EMAILS.length}`,
+);
+
+/** Mirrors visiblePicks' admin bypass; the limit itself is asked of the app. */
+const expectedFor = ({ role }, category) =>
+  role === "admin" ? totals[category] : Math.min(VISIBLE_PICKS[category], totals[category]);
+
+/** Selections belonging to the board that is *not* being requested. */
+const foreignSelections = (category) =>
+  pickCategories.filter((c) => c !== category).flatMap((c) => FIXTURE_SELECTIONS[c]);
+
+for (const category of pickCategories) {
+  for (const viewer of viewers) {
+    const { token, cleanup } = await sessionFor(viewer.email);
+    const html = await (
+      await fetch(`${APP_URL}/picks?category=${category}`, {
+        headers: { cookie: `oobee_session=${token}` },
+      })
+    ).text();
+
+    reportRanks(
+      `${viewer.email} · ${category}`,
+      servedRanks(html),
+      expectedFor(viewer, category),
+    );
+
+    // Both boards are ranked 1..15, so matching ranks alone cannot tell them
+    // apart — a tab serving the wrong list would look perfect above. The
+    // selections are what actually distinguish them.
+    const leaked = foreignSelections(category).filter((sel) => html.includes(sel));
+    check(
+      leaked.length === 0,
+      `${CATEGORY_LABELS[category]} tab holds only its own board`.padEnd(46),
+      leaked.length ? `LEAKED:${leaked.join(" | ")}` : `${viewer.email}`,
+    );
+    await cleanup();
+  }
+}
+
+// An unknown ?category= must land on a real board rather than an empty one —
+// categoryFromParam falls back to game bets.
+{
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
+  const html = await (
+    await fetch(`${APP_URL}/picks?category=not-a-board`, {
+      headers: { cookie: `oobee_session=${token}` },
+    })
+  ).text();
+  const served = servedRanks(html);
+  check(
+    served.size === Math.min(VISIBLE_PICKS.game, totals.game),
+    "unknown ?category= falls back to game bets",
+    `served=${served.size}`,
+  );
+  await cleanup();
+}
+
+{
+  const res = await fetch(`${APP_URL}/picks`, { redirect: "manual" });
+  const { ok, location } = redirectsToLogin(res);
+  check(ok, "(anonymous) is gated".padEnd(22), `-> ${res.status} ${location}`);
+}
+
+// No public picks anywhere — /top-picks was the deliberate public teaser,
+// now gated the same as /picks.
+{
+  const res = await fetch(`${APP_URL}/top-picks`, { redirect: "manual" });
+  const { ok, location } = redirectsToLogin(res);
+  check(ok, "(anonymous) /top-picks is gated".padEnd(22), `-> ${res.status} ${location}`);
+}
+
+/* ------------------------------------------- 2a. the same limit, per sport */
+
+/**
+ * /top-picks filters the slate by sport and the free limit is a cut on rank,
+ * which runs across the whole slate rather than within one sport. So an
+ * MLB-heavy top 15 leaves the NFL tab holding fewer than 15 rows, and "the
+ * first 15 rows for this sport" would quietly serve ranks past the limit.
+ * A signed-in tester must never see a rank above the game board's own limit on
+ * either tab. /top-picks is game bets only — props are ranked separately and
+ * have their own tab on /picks — so the cut here is VISIBLE_PICKS.game.
+ */
+console.log("\nBoard visibility on /top-picks (per-sport tabs share one rank cut)");
+
+for (const sport of ["mlb", "nfl"]) {
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
+  const html = await (
+    await fetch(`${APP_URL}/top-picks?sport=${sport}`, {
+      headers: { cookie: `oobee_session=${token}` },
+    })
+  ).text();
+  const served = [...servedRanks(html)];
+  const over = served.filter((r) => r > VISIBLE_PICKS.game);
+  check(
+    over.length === 0,
+    `tester /top-picks?sport=${sport}`.padEnd(30),
+    `served=${served.length}` + (over.length ? ` OVER-SERVED:${over.join(",")}` : ""),
+  );
+  await cleanup();
+}
+
+/* --------------------------------------------------- 2b. the board's own contract */
+
+console.log("\nBoard contract (visiblePicks, called directly)");
+
+for (const category of pickCategories) {
+  // Deliberately five ranks past the free limit, so there is always something
+  // to truncate however VISIBLE_PICKS is configured.
+  const limit = VISIBLE_PICKS[category];
+  const beyond = limit + 5;
+  const sample = Array.from({ length: beyond }, (_, i) => ({ rank: i + 1, category }));
+
+  const nonAdmin = visiblePicks(sample, false);
+  check(
+    nonAdmin.length === limit,
+    `non-admin sees exactly VISIBLE_PICKS.${category}`,
+    `served=${nonAdmin.length}/${limit}`,
+  );
+
+  // The bypass the picks page depends on when an admin previews a draft slate.
+  const admin = visiblePicks(sample, true);
+  check(
+    admin.length === beyond,
+    `admins bypass the ${category} limit entirely`,
+    `served=${admin.length}/${beyond}`,
+  );
+}
+
+{
+  // A mixed list is the case a single shared limit would get wrong: each row
+  // has to be cut against its own board, not against whichever limit the
+  // caller happened to have in hand.
+  const mixed = pickCategories.flatMap((category) =>
+    Array.from({ length: VISIBLE_PICKS[category] + 3 }, (_, i) => ({
+      rank: i + 1,
+      category,
+    })),
+  );
+  const kept = visiblePicks(mixed, false);
+  const wrong = kept.filter((p) => p.rank > VISIBLE_PICKS[p.category]);
+  check(
+    wrong.length === 0 &&
+      kept.length === pickCategories.reduce((n, c) => n + VISIBLE_PICKS[c], 0),
+    "a mixed list is cut per category",
+    `kept=${kept.length}` + (wrong.length ? ` OVER:${wrong.length}` : ""),
+  );
+}
+
+/* -------------------------------------------------------- 3. access control */
+
+console.log("\nAccess control");
+
+const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/announce"];
+
+{
+  for (const route of adminRoutes) {
+    const res = await fetch(`${APP_URL}${route}`, { redirect: "manual" });
+    // 404, not 403 — a non-admin should not learn the route exists.
+    check(res.status === 404, `anonymous ${route}`, `-> ${res.status}`);
+  }
+
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
+  for (const route of adminRoutes) {
+    const res = await fetch(`${APP_URL}${route}`, {
+      headers: { cookie: `oobee_session=${token}` },
+      redirect: "manual",
+    });
+    check(res.status === 404, `tester ${route}`, `-> ${res.status}`);
+  }
+  await cleanup();
+
+  // One admin role, and it opens everything — including the two surfaces that
+  // used to be owner-only.
+  const admin = await sessionFor(ADMIN_EMAIL);
+  const cookie = { cookie: `oobee_session=${admin.token}` };
+
+  for (const route of adminRoutes) {
+    const res = await fetch(`${APP_URL}${route}`, { headers: cookie });
+    check(res.status === 200, `admin ${route}`.padEnd(24), `-> ${res.status}`);
+  }
+  await admin.cleanup();
+}
+
+/* ------------------------------------------------------ 3b. the role model */
+
+console.log("\nRole model");
+
+{
+  const roles = await sql`
+    select enumlabel from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'role' order by e.enumsortorder
+  `;
+  const labels = roles.map((r) => r.enumlabel);
+  check(
+    labels.length === 2 && labels.includes("user") && labels.includes("admin"),
+    "role enum is exactly user + admin",
+    labels.join(","),
+  );
+  check(!labels.includes("owner"), "owner is gone from the enum");
+
+  // Plural admins are the point of the change, so prove the model allows it
+  // rather than trusting that dropping the enum value was enough.
+  const [{ id: extraId }] = await sql`
+    insert into users (email, password_hash, role)
+    values (${"second-admin@example.com"}, ${"x"}, 'admin') returning id
+  `;
+  const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
+  check(n >= 2, "more than one admin can exist at once", `admins=${n}`);
+  await sql`delete from users where id = ${extraId}`;
+}
+
+/* ---------------------------------------------------------- 4. expired session */
+
+console.log("\nSession handling");
+
+{
+  const [user] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  await sql`
+    insert into sessions (user_id, token_hash, expires_at)
+    values (${user.id}, ${tokenHash}, ${new Date(Date.now() - 1000)})
+  `;
+  const expired = await fetch(`${APP_URL}/picks`, {
+    headers: { cookie: `oobee_session=${token}` },
+    redirect: "manual",
+  });
+  const expiredResult = redirectsToLogin(expired);
+  check(expiredResult.ok, "expired session is gated", `-> ${expired.status} ${expiredResult.location}`);
+  await sql`delete from sessions where token_hash = ${tokenHash}`;
+
+  const garbage = await fetch(`${APP_URL}/picks`, {
+    headers: { cookie: "oobee_session=not-a-real-token" },
+    redirect: "manual",
+  });
+  const garbageResult = redirectsToLogin(garbage);
+  check(garbageResult.ok, "forged cookie is rejected, gated", `-> ${garbage.status} ${garbageResult.location}`);
+}
+
+/* ---------------------------------------------------------------- teardown */
+
+// The fixture slate is removed whether the run passed or failed — leaving a
+// board of invented picks behind is exactly what dropping the seed avoided.
+await dropSlate(sql, today);
+await dropTester(sql, TESTER_EMAIL);
+
+/* ------------------------------------------------------------------ result */
+
+console.log(
+  failures === 0
+    ? `\n✓ All checks passed (slate ${today}, ${total} picks: ` +
+      pickCategories.map((c) => `${totals[c]} ${c}`).join(", ") +
+      `).\n`
+    : `\n✗ ${failures} check(s) failed.\n`,
+);
+
+await sql.end();
 process.exit(failures === 0 ? 0 : 1);

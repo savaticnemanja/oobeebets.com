@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   pull_request:
-    branches: [main]
+    branches: [main, beta]
 
 jobs:
   checks:
@@ -25,9 +25,10 @@ jobs:
     env:
       DATABASE_URL: postgres://oobee:oobee@localhost:5432/oobeebets
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
-      # No PRELAUNCH flag any more: this branch has no product to gate, so the
-      # gate that used to be lifted here is gone with it. No BILLING_PROVIDER
-      # either — nothing is for sale on the pre-launch site.
+      NEXT_PUBLIC_SLATE_TZ: America/New_York
+      # BETA_GATE_PASSWORD is deliberately not set here. Unset means no gate, so
+      # e2e drives the real pages instead of being redirected to a password
+      # prompt — and the checks stay identical for both branches.
     steps:
       - uses: actions/checkout@v4
 
@@ -42,13 +43,20 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
-      # Creates rate_limits, the one table left. There is nothing to seed: the
-      # mailing list lives at Resend and the product tables are gone.
       - run: npm run db:migrate
 
-      # verify drives a real server, so start one and wait for the health
-      # endpoint rather than sleeping a fixed number of seconds.
+      # This database is created and thrown away with the runner, so the
+      # destructive-seed guard is answered explicitly rather than disabled.
+      - run: npm run db:seed
+        env:
+          ALLOW_DESTRUCTIVE_SEED: 1
+
+      - run: npx playwright install --with-deps chromium
+
+      # verify and e2e both drive a real server, so start one and wait for the
+      # health endpoint rather than sleeping a fixed number of seconds.
       - name: Start the app
+        id: app
         run: |
           npm start &
           for i in $(seq 1 60); do
@@ -58,9 +66,16 @@ jobs:
           echo "app did not become healthy in 60s" >&2
           exit 1
 
-      # The pages serve, the removed surfaces stay 404, robots and sitemap
-      # describe the site that exists. No browser and no Resend key needed.
+      # Settlement maths, tier gating, admin access control.
       - run: npm run verify
+
+      # Invite -> onboarding -> the free board, settle -> public record, first-visit stability.
+      # Runs even when verify failed, as long as there is a server to drive it:
+      # both suites read the same product rules, so a product change tends to
+      # break both, and learning that one round-trip at a time is what made the
+      # 2026-08-23 beta break look smaller than it was.
+      - run: npm run e2e
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
 
   deploy:
     needs: checks
@@ -81,3 +96,28 @@ jobs:
             -H "X-Hub-Signature-256: $SIG" \
             -d "$PAYLOAD" \
             https://nemanjas.dev/hooks/oobeebets
+
+  deploy-beta:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    # Its own group: a beta deploy and a production deploy have nothing to
+    # serialise against each other, and queueing one behind the other would
+    # only make both slower.
+    concurrency:
+      group: deploy-beta
+      cancel-in-progress: false
+    steps:
+      - name: Trigger webhook deploy
+        env:
+          # The same repo secret signs both hooks. It is the branch in the
+          # payload that decides which one the receiver will run.
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          PAYLOAD='{"ref":"refs/heads/beta"}'
+          SIG="sha256=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')"
+          curl -fsSL -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: $SIG" \
+            -d "$PAYLOAD" \
+            https://nemanjas.dev/hooks/beta-oobeebets
