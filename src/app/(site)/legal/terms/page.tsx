@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SITE } from "@/lib/site";
 import { shareCard } from "@/lib/metadata";
 
-const DESCRIPTION = `Terms for using the ${SITE.name} pre-launch site and email list.`;
+const DESCRIPTION = `Terms for using the ${SITE.name} beta and email list.`;
 
 export const metadata: Metadata = {
   title: "Terms of use",
@@ -17,22 +17,22 @@ export const metadata: Metadata = {
 };
 
 /**
- * Cut to what the site actually offers today: a page and an email list.
+ * Cut to what the site actually offers today: a free invite-only beta, and an
+ * email list.
  *
- * The previous draft ran to eight sections on subscriptions, billing, free
- * trials, refunds and account termination — for a product nobody can reach.
- * Publishing commitments about a service that does not exist is worse than
- * publishing nothing: they are live terms, and §4's price-lock and §8's
- * "amount you paid us" liability cap were both being offered to people who
- * cannot pay us anything.
+ * An older draft ran to eight sections on subscriptions, billing, free trials,
+ * refunds and price locks — for a product nobody could reach. Those are still
+ * absent and must stay absent: the beta takes no money, so a price-lock clause
+ * or an "amount you paid us" liability cap would be a live commitment offered
+ * to people who cannot pay us anything.
  *
- * Those sections are not lost — `git log` has them, and they need restoring
- * (with counsel, per FSD O6: legal entity + jurisdiction) as part of opening
- * signup, not before.
+ * They are not lost — `git log` has them — and they need restoring with
+ * counsel (per FSD O6: legal entity + jurisdiction) as part of charging for
+ * access, not before.
  */
 
 /** Shown to visitors, so it has to be updated whenever the copy below changes. */
-const LAST_UPDATED = "3 August 2026";
+const LAST_UPDATED = "2 September 2026";
 
 export default function TermsPage() {
   return (
@@ -47,11 +47,12 @@ export default function TermsPage() {
           <h2 className="text-base font-semibold text-fg">1. What this site is today</h2>
           <p className="mt-2">
             {SITE.name}{" "}
-            has not launched. Right now this site does one thing: it takes an
-            email address so we can tell you when we open. Nothing is for sale, no
-            account exists, and no picks are published. These terms cover that and
-            nothing more &mdash; full terms will replace them before anything is sold,
-            and we will not charge anyone under this page.
+            is in an invite-only beta. Two things are available: an account, if
+            someone invites you, which gives you the daily board free of charge; and an
+            email list anyone can join without an account. Nothing is for sale and we
+            take no payment. These terms cover that and nothing more &mdash; full terms
+            will replace them before anything is sold, and we will not charge anyone
+            under this page.
           </p>
         </section>
 
@@ -63,15 +64,14 @@ export default function TermsPage() {
             {SITE.name}{" "}
             sells information and opinion. We are not a bookmaker,
             sportsbook, exchange or financial adviser. We do not accept wagers, hold
-            customer funds, or place bets for anyone. When picks are published they will
-            be opinion, they will lose regularly, and nothing we write is a guarantee of
-            profit or a prediction of a certain outcome. Every bet you place is your
-            decision and your risk.
+            customer funds, or place bets for anyone. The picks we publish are opinion, they lose
+            regularly, and nothing we write is a guarantee of profit or a prediction of a
+            certain outcome. Every bet you place is your decision and your risk.
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">3. Who can join the list</h2>
+          <h2 className="text-base font-semibold text-fg">3. Who can take part</h2>
           <p className="mt-2">
             You must be at least 18, or the legal gambling age where you live if that is
             higher. You are responsible for knowing whether sports betting is lawful
@@ -80,7 +80,22 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">4. The email list</h2>
+          <h2 className="text-base font-semibold text-fg">4. Beta access and your account</h2>
+          <p className="mt-2">
+            Access is by invitation and is free &mdash; we do not take payment, run
+            subscriptions or offer paid plans. That may change, and this page will be
+            updated before it does.
+          </p>
+          <p className="mt-2">
+            Your account is personal to you. Sharing your login, redistributing the
+            picks, scraping the site or reselling access will end your access. We may
+            also change or withdraw the beta at any time; it is a beta, and we do not
+            promise it will be uninterrupted.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-fg">5. The email list</h2>
           <p className="mt-2">
             Subscribing is free and commits you to nothing. You will get a welcome note,
             the launch announcement, and the occasional update in between &mdash; no
@@ -102,21 +117,20 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">5. Liability</h2>
+          <h2 className="text-base font-semibold text-fg">6. Liability</h2>
           <p className="mt-2">
-            The site is provided as it is, and we do not promise it will be uninterrupted
-            or that we will launch on any particular date. To the fullest extent the law
-            allows, we are not liable for any loss arising from your use of this
-            pre-launch site or the list &mdash; including gambling losses, which nothing
-            here could have caused, since we have not published a pick yet. Nothing in
+            The site is provided as it is, and we do not promise it will be uninterrupted.
+            To the fullest extent the law allows, we are not liable for any loss arising
+            from your use of the site, the beta or the list &mdash; including gambling
+            losses, missed bets, closed lines and disputes with a bookmaker. Nothing in
             these terms limits liability that cannot legally be limited.
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">6. Responsible gambling</h2>
+          <h2 className="text-base font-semibold text-fg">7. Responsible gambling</h2>
           <p className="mt-2">
-            When we do launch: only stake what you can afford to lose, and do not chase
+            Only stake what you can afford to lose, and do not chase
             losses. If gambling is causing you harm, stop and seek help from a
             support service in your country &mdash; free and confidential help is
             available, and it is independent of us.
@@ -124,7 +138,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-fg">7. Changes and contact</h2>
+          <h2 className="text-base font-semibold text-fg">8. Changes and contact</h2>
           <p className="mt-2">
             We may update these terms; the date at the top says when we last did. Email{" "}
             <a href={`mailto:${SITE.supportEmail}`} className="text-brand hover:underline">

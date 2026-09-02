@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export function Mark({ className }: { className?: string }) {
@@ -33,6 +34,11 @@ export function Logo({
       <span className="text-sm font-semibold tracking-[0.18em] lowercase">
         oobee<span className="text-brand">·</span>bets
       </span>
+      {/* Same chip as the role badge beside it in the admin header, rather
+          than the one-off `text-blue-400` span this used to be — that colour
+          was a raw Tailwind blue with no token behind it, so it drifted from
+          the brand cyan everything else uses. */}
+      <Badge variant="brand">Beta</Badge>
     </Link>
   );
 }

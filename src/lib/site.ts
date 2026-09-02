@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+
 /** Site-wide constants used by metadata, JSON-LD, sitemap and absolute URLs. */
 
 const DOMAIN = "oobeebets.com";
@@ -14,7 +16,10 @@ export const SITE = {
    * yet across two names.
    */
   supportEmail: `support@${DOMAIN}`,
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://oobeebets.com",
+  // `||`, not `??`: NEXT_PUBLIC_* is inlined at build time, and an image built
+  // without the build arg carries an empty string here rather than nothing at
+  // all. `??` would keep that empty string, and `new URL(path, "")` throws.
+  url: process.env.NEXT_PUBLIC_SITE_URL || "https://oobeebets.com",
   tagline: "Every pick, settled in public.",
   description:
     "Daily sports betting picks with a public, unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
@@ -30,8 +35,27 @@ export function appUrl(path = "/"): string {
   return new URL(path, SITE.url).toString();
 }
 
-/*
- * The NAV_PUBLIC / NAV_APP / NAV_ADMIN tables are gone with the header and
- * mobile nav that rendered them. Every entry pointed at a route this build no
- * longer serves, and the pre-launch footer names its three links directly.
+/**
+ * Shown to every visitor, so everything here has to open without a session.
+ * /picks and /top-picks are both gated now — advertising them to a signed-out
+ * visitor just bounces them to /login — so they live in NAV_APP.
  */
+export const NAV_PUBLIC = [
+  { href: "/about", label: t().nav.about },
+] as const;
+
+/** The signed-in surfaces. */
+export const NAV_APP = [
+  { href: "/picks", label: t().nav.picks },
+  { href: "/top-picks", label: t().nav.topPicks },
+  { href: "/account", label: t().nav.account },
+] as const;
+
+/** Every admin sees every tab — there is one admin role and it holds the lot. */
+export const NAV_ADMIN = [
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/slate", label: "Publish slate" },
+  { href: "/admin/settle", label: "Settle" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/announce", label: "Announce" },
+] as const;

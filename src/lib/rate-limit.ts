@@ -1,17 +1,18 @@
 import "server-only";
-import { lt, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { rateLimits } from "@/db/schema";
 
 /**
- * Abuse control for the two forms this site still has.
+ * Abuse control, shared by every form that has one.
  *
- * Lifted out of lib/auth.ts, which went with the rest of the product: there
- * are no accounts, sessions or passwords in the pre-launch build, and keeping
- * three hundred lines of session handling around for the two functions the
- * signup form needs was the definition of dead weight.
+ * Lifted out of lib/auth.ts during the pre-launch strip, and kept out of it
+ * now the product is back: the newsletter signup rate-limits itself and has no
+ * business importing three hundred lines of session handling to do it.
+ * lib/auth.ts re-exports both functions so its own callers are unaffected.
  *
- * This is also the only reason the pre-launch site still talks to Postgres.
+ * Buckets currently in use: login, invite, announce, beta-gate, and the
+ * newsletter's signup and unsubscribe forms.
  */
 
 export function clientIp(h: Headers): string {
@@ -34,7 +35,14 @@ export async function rateLimit(
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowMs);
 
-  await db.delete(rateLimits).where(lt(rateLimits.windowStart, windowStart));
+  // Scoped to this bucket. Sweeping the whole table with *this* caller's window
+  // meant a short-window bucket deleted a long-window bucket's live rows, which
+  // silently resets that limit to zero — harmless while every bucket used
+  // fifteen minutes, and a hole the moment one doesn't. Each bucket collects
+  // its own expired rows on its next call instead.
+  await db
+    .delete(rateLimits)
+    .where(and(eq(rateLimits.bucket, bucket), lt(rateLimits.windowStart, windowStart)));
 
   const [row] = await db
     .insert(rateLimits)

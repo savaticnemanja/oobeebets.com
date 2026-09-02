@@ -1,4 +1,5 @@
 import { SITE, appUrl } from "@/lib/site";
+import { formatDate } from "@/lib/i18n/format";
 
 /**
  * The design tokens from globals.css, restated as flat hex.
@@ -74,14 +75,30 @@ interface ShellArgs {
   /** The grey line after the subject in the inbox list. */
   preheader: string;
   body: string;
-  unsubscribeUrl: string;
+  /**
+   * The first line of the footer: why this person is receiving this message.
+   * HTML, because the newsletter's version carries the unsubscribe link and
+   * the transactional ones do not — an invite has nothing to unsubscribe from,
+   * and offering one implies a list the recipient is not on.
+   *
+   * The 18+ notice below it is not passed in. It is the one thing that has to
+   * be on every message we send, so it lives here where a new template cannot
+   * forget it.
+   */
+  footerNote: string;
 }
 
 /**
  * The frame every message shares: black canvas, 600px hairline card, wordmark,
  * legal footer.
+ *
+ * One shell for the newsletter, the invite and the announcement. Beta grew a
+ * second, light-palette shell of its own while main was rewriting this one;
+ * keeping both meant an invite and a welcome note arriving in the same inbox
+ * looked like they came from two different companies. This is the dark one,
+ * because that is what the product looks like.
  */
-function shell({ preheader, body, unsubscribeUrl }: ShellArgs): string {
+function shell({ preheader, body, footerNote }: ShellArgs): string {
   return `<!doctype html>
 <html lang="en" dir="ltr">
 <head>
@@ -128,9 +145,7 @@ function shell({ preheader, body, unsubscribeUrl }: ShellArgs): string {
           <tr>
             <td style="padding:24px 8px 0;">
               <p style="margin:0 0 12px;font-family:${FONT};font-size:12px;line-height:1.6;color:${c.fgSubtle};">
-                You're receiving this because you subscribed at
-                <a href="${appUrl("/")}" style="color:${c.fgMuted};text-decoration:underline;">${esc(SITE.domain)}</a>.
-                <a href="${unsubscribeUrl}" style="color:${c.fgMuted};text-decoration:underline;">Unsubscribe</a>.
+                ${footerNote}
               </p>
               <p style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${c.fgSubtle};">
                 <strong style="color:${c.fgMuted};">18+ only.</strong> ${esc(SITE.name)} sells information and opinion, not wagers.
@@ -157,7 +172,12 @@ export interface Email {
   subject: string;
   html: string;
   text: string;
-  headers: Record<string, string>;
+  /**
+   * Optional: only the newsletter sets any. The welcome note is bulk mail and
+   * needs List-Unsubscribe to reach Gmail and Yahoo inboxes at all; an invite
+   * is transactional and must not carry one.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -248,7 +268,10 @@ export function welcomeEmail(contactId: string): Email {
     html: shell({
       preheader: "The launch notification lands here first.",
       body,
-      unsubscribeUrl,
+      footerNote:
+        `You're receiving this because you subscribed at ` +
+        `<a href="${appUrl("/soon")}" style="color:${c.fgMuted};text-decoration:underline;">${esc(SITE.domain)}</a>. ` +
+        `<a href="${unsubscribeUrl}" style="color:${c.fgMuted};text-decoration:underline;">Unsubscribe</a>.`,
     }),
     text,
     headers: {
@@ -259,4 +282,141 @@ export function welcomeEmail(contactId: string): Email {
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
   };
+}
+
+/* ------------------------------------------------------------- invitations */
+
+/**
+ * Sent when an admin invites someone, and again (with a fresh link) when they
+ * resend it.
+ *
+ * No List-Unsubscribe header and no unsubscribe link in the footer: this is
+ * transactional, sent to one person who was named by an admin, and offering to
+ * unsubscribe them implies a list they are not on.
+ */
+export function inviteEmail({
+  inviteUrl,
+  expiresAt,
+}: {
+  inviteUrl: string;
+  expiresAt: Date;
+}): Email {
+  const expiresLabel = formatDate(expiresAt);
+
+  const body = `
+    <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:${c.brand};">Closed beta</p>
+
+    ${heading("You're invited to oobee bets")}
+
+    ${paragraph(
+      "Someone on the team invited you to the closed beta. Follow the link below to set a password and finish creating your account.",
+    )}
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0;">
+      <tr>
+        <td bgcolor="${c.brand}" style="background-color:${c.brand};border-radius:10px;">
+          <a href="${inviteUrl}" style="display:inline-block;padding:13px 28px;font-family:${FONT};font-size:15px;font-weight:600;color:#000000;text-decoration:none;">Accept your invite</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:28px 0 0;font-family:${FONT};font-size:13px;line-height:1.6;color:${c.fgSubtle};">
+      This link expires <strong style="color:${c.fgMuted};">${esc(expiresLabel)}</strong>. If the button above doesn't work, paste this into your browser:
+    </p>
+    <p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:1.5;word-break:break-all;">
+      <a href="${inviteUrl}" style="color:${c.brand};text-decoration:underline;">${esc(inviteUrl)}</a>
+    </p>
+  `;
+
+  const text = [
+    "CLOSED BETA",
+    "",
+    "You're invited to oobee bets",
+    "",
+    "Someone on the team invited you to the closed beta. Follow the link below",
+    "to set a password and finish creating your account.",
+    "",
+    inviteUrl,
+    "",
+    `This link expires ${expiresLabel}.`,
+    "",
+    "If you weren't expecting this, you can ignore it — the link only works",
+    "once and nothing happens until it's used.",
+  ].join("\n");
+
+  return {
+    subject: "You're invited to oobee bets",
+    html: shell({
+      preheader: `You've been invited to oobee bets — the link is inside, and it expires ${expiresLabel}.`,
+      body,
+      footerNote:
+        "If you weren't expecting this, you can ignore it — the link only works once and nothing happens until it's used.",
+    }),
+    text,
+  };
+}
+
+/* ---------------------------------------------------------- announcements */
+
+/** Blank line starts a paragraph; a single newline is a line break inside one. */
+function paragraphs(body: string): string[] {
+  return body
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/**
+ * A broadcast to testers — an admin writes the heading and the body, and this
+ * puts them in the same envelope the invite uses so an announcement doesn't
+ * arrive looking like it came from somewhere else.
+ *
+ * The body is escaped and split into paragraphs rather than passed through as
+ * markup. That is not (only) about trusting the author: hand-written HTML in an
+ * email body is where layouts break, and an admin writing plain text into a
+ * textarea cannot accidentally produce an unclosed tag that swallows the
+ * footer. Blank lines separate paragraphs, single newlines become <br>.
+ */
+export function announcementEmail({
+  heading: subject,
+  body,
+}: {
+  heading: string;
+  body: string;
+}): Email {
+  const blocks = paragraphs(body);
+
+  const bodyHtml = blocks
+    .map((p) => paragraph(esc(p).replace(/\n/g, "<br>")))
+    .join("\n    ");
+
+  // The opening of the body, as the inbox preview. Whitespace is collapsed
+  // first: this is one line in a list of subjects, and a paragraph that wraps
+  // in the textarea would otherwise carry its newlines into it.
+  const preheader = (blocks[0] ?? subject).replace(/\s+/g, " ").slice(0, 140);
+
+  const html = shell({
+    preheader,
+    body: `
+    <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:${c.brand};">Announcement</p>
+
+    ${heading(esc(subject))}
+
+    ${bodyHtml}
+  `,
+    footerNote: `You're receiving this because you have an account on ${esc(SITE.name)}.`,
+  });
+
+  const text = [
+    "ANNOUNCEMENT",
+    "",
+    subject,
+    "",
+    blocks.join("\n\n"),
+    "",
+    `You're receiving this because you have an account on ${SITE.name}.`,
+  ].join("\n");
+
+  return { subject, html, text };
 }

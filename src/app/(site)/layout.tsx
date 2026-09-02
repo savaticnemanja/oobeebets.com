@@ -1,18 +1,21 @@
-import { PrelaunchChrome } from "@/components/prelaunch-chrome";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { SmoothScroll } from "@/components/smooth-scroll";
 
-/**
- * Every page that gets the site chrome: the signup at `/`, the unsubscribe
- * flow and the legal pages.
- *
- * The group adds nothing to any URL — it exists so `/offline` can stay out of
- * it. That page renders its own `<main id="main">` for the case where the
- * network is gone and the chrome's footer links would lead nowhere, and two
- * elements with the same id on one page is not a thing to ship.
- *
- * This was two groups, `(screen)` and `(document)`, one pinned to the viewport
- * and one scrolling. Now that every page scrolls with the footer held to the
- * bottom, they had identical layouts and the split earned nothing.
- */
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
-  return <PrelaunchChrome>{children}</PrelaunchChrome>;
+  return (
+    <div className="flex min-h-dvh flex-col">
+      {/* Public pages only. /admin is a tool people work in for an hour at a
+          time, and putting a tenth of a second of easing between the wheel and
+          a table of results makes it worse, not nicer. */}
+      <SmoothScroll />
+      <SiteHeader />
+      <main id="main" className="flex-1">
+        {children}
+      </main>
+      <SiteFooter />
+      <InstallPrompt />
+    </div>
+  );
 }
