@@ -244,6 +244,66 @@ export const picks = pgTable(
   ],
 );
 
+/* ------------------------------------------------------- "I took this bet" */
+
+/**
+ * One row per tester per pick they say they actually placed. The whole fact is
+ * the primary key: this user, this pick. Nothing else is collected.
+ *
+ * That is the point rather than a shortcut. Asking a beta tester for stake,
+ * book and price before the row would be written is how a tracking feature
+ * gets an 8% completion rate and answers nothing; "did you take this one?" is
+ * a single tap, and everything the analysis needs is already on the pick —
+ * `price` for the odds, `status` for the result, `category`/`market`/`league`
+ * for what kind of bet it was. A column here would only be able to disagree
+ * with the pick it points at.
+ *
+ * Stake is the one figure that genuinely is not on the pick, and it stays
+ * uncollected: the beta record is flat-staked at FOLLOW_STAKE_UNITS (see
+ * lib/follows.ts), which is a deliberately different number from the pick's
+ * own recommended `units`. Oobee's record is what its own staking plan
+ * returned; a tester's is one unit a bet, because one unit a bet is the only
+ * stake we can honestly claim to know.
+ *
+ * Absence is the "no" — an unchecked pick is an untaken pick, so there is no
+ * status column and no row for a decline. Unchecking deletes the row.
+ *
+ * Shape notes, since both are load-bearing:
+ *
+ *   * No surrogate `id`. A uuid primary key here would be a second, wider way
+ *     to identify a row that (user_id, pick_id) already identifies uniquely,
+ *     and it would need its own unique index on top to stop duplicates — two
+ *     indexes to say what one says.
+ *   * The key is (user_id, pick_id) in that order, not the reverse. The hot
+ *     query by a wide margin is a board render — "which of today's thirty
+ *     picks has this viewer taken" — which is an index-only scan on the
+ *     leading column. pick_follows_pick_idx covers the other direction, which
+ *     the admin analytics and the ON DELETE CASCADE both read.
+ */
+export const pickFollows = pgTable(
+  "pick_follows",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pickId: uuid("pick_id")
+      .notNull()
+      .references(() => picks.id, { onDelete: "cascade" }),
+    /**
+     * When the tap happened, which is not the same as when the game did. The
+     * app only accepts a follow before kick-off (see followWindowOpen in
+     * lib/follows.ts), so this timestamp is evidence the choice was made with
+     * the result still unknown — without it, "they followed it" and "they
+     * said afterwards that they had" are the same row.
+     */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.pickId] }),
+    index("pick_follows_pick_idx").on(t.pickId),
+  ],
+);
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -281,6 +341,7 @@ export const rateLimits = pgTable(
 
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
+  follows: many(pickFollows),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -291,8 +352,14 @@ export const slatesRelations = relations(slates, ({ many }) => ({
   picks: many(picks),
 }));
 
-export const picksRelations = relations(picks, ({ one }) => ({
+export const picksRelations = relations(picks, ({ one, many }) => ({
   slate: one(slates, { fields: [picks.slateDate], references: [slates.date] }),
+  follows: many(pickFollows),
+}));
+
+export const pickFollowsRelations = relations(pickFollows, ({ one }) => ({
+  user: one(users, { fields: [pickFollows.userId], references: [users.id] }),
+  pick: one(picks, { fields: [pickFollows.pickId], references: [picks.id] }),
 }));
 
 /* ------------------------------------------------------------------ types */
@@ -303,6 +370,8 @@ export type Session = typeof sessions.$inferSelect;
 export type Pick = typeof picks.$inferSelect;
 export type NewPick = typeof picks.$inferInsert;
 export type Slate = typeof slates.$inferSelect;
+export type PickFollow = typeof pickFollows.$inferSelect;
+export type NewPickFollow = typeof pickFollows.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type Role = (typeof roleEnum.enumValues)[number];

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { Sparkles } from "lucide-react";
 import { db } from "@/db";
-import { picks as picksTable, slates } from "@/db/schema";
+import { pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { visiblePicks } from "@/lib/board";
+import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { PickCard } from "@/components/pick-card";
 import { Reveal } from "@/components/ui/motion";
 import { slateDateString } from "@/lib/slate-date";
@@ -68,6 +69,34 @@ export default async function TopPicksPage({
   // holding fewer than 15 rows. The rank cut is the gate, so it goes through
   // the board contract like every other surface does.
   const view = visiblePicks(rows, auth.isAdmin);
+
+  // The same cards as /picks, so the same check circles — a tester who takes a
+  // bet from this page is taking the same bet, and it has to record as one.
+  const published = Boolean(slate?.publishedAt);
+  const takenIds =
+    published && view.length > 0
+      ? new Set(
+          (
+            await db
+              .select({ pickId: pickFollows.pickId })
+              .from(pickFollows)
+              .where(
+                and(
+                  eq(pickFollows.userId, auth.user.id),
+                  inArray(
+                    pickFollows.pickId,
+                    view.map((p) => p.id),
+                  ),
+                ),
+              )
+          ).map((r) => r.pickId),
+        )
+      : new Set<string>();
+
+  function followFor(p: Pick): ViewerFollow | undefined {
+    if (!published) return undefined;
+    return { taken: takenIds.has(p.id), open: followWindowOpen(p) };
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -131,7 +160,7 @@ export default async function TopPicksPage({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {view.map((p, i) => (
               <Reveal key={p.id} delay={Math.min(i * 0.02, 0.2)}>
-                <PickCard pick={p} />
+                <PickCard pick={p} follow={followFor(p)} />
               </Reveal>
             ))}
           </div>

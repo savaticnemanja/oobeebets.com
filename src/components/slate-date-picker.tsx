@@ -13,16 +13,21 @@ import { formatSlateDate } from "@/lib/i18n/format";
 export function SlateDatePicker({
   dates,
   current,
+  /** Where the chosen date is applied. The admin follow report reads the same
+   * `?date=` param off a different route, so the destination is a prop rather
+   * than a hardcoded "/picks". */
+  basePath = "/picks",
 }: {
   dates: string[];
   current: string;
+  basePath?: string;
 }) {
   const router = useRouter();
 
   return (
     <Select
       value={dates.includes(current) ? current : undefined}
-      onValueChange={(v) => router.push(`/picks?date=${v}`)}
+      onValueChange={(v) => router.push(`${basePath}?date=${v}`)}
     >
       {/* Deliberately compact, and a Radix trigger is a button, so it is not
           one of the controls iOS zooms for — opt back out of touch:text-base

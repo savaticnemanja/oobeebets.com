@@ -5,6 +5,11 @@
  * There are no paid plans or billing backend — the whole tier/subscription
  * system was removed. Every account gets the same free board.
  *
+ * "I took this bet" is in here rather than only in verify.mjs because the
+ * check circle is the one control on the board a tester actually presses, and
+ * an optimistic toggle that never reaches the server looks identical to one
+ * that does until you go and read the row.
+ *
  *   npm run e2e
  *
  * Leaves the database as it found it (test user removed, settled pick reopened).
@@ -283,6 +288,86 @@ console.log("\nAuthorisation on mutations");
   await ctx.close();
 }
 
+/* ------------------------------------------------ 3b. "I took this bet" */
+
+console.log("\nFollowing a pick");
+
+{
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+
+  // Only picks still ahead of kick-off carry a pressable circle; the settled
+  // half of the fixture renders the same mark as a read-only statement. Asked
+  // of the database at this moment rather than hardcoded, because section 2
+  // settles and restores a pick above.
+  const [{ n: takeable }] = await sql`
+    select count(*)::int as n from picks
+    where slate_date = ${latestSlate} and category = 'game'
+      and status = 'pending' and starts_at > now() and rank <= ${freeBoard}
+  `;
+
+  await page.goto(`${APP_URL}/picks`);
+  await hydrated(page, 'button[role="checkbox"]');
+
+  const circles = page.locator('button[role="checkbox"]');
+  check(
+    (await circles.count()) === takeable,
+    "every takeable pick has a circle, and nothing else does",
+    `buttons=${await circles.count()} takeable=${takeable}`,
+  );
+
+  const first = circles.first();
+  check(
+    (await first.getAttribute("aria-checked")) === "false",
+    "circles start empty",
+    `aria-checked=${await first.getAttribute("aria-checked")}`,
+  );
+
+  await first.click();
+  await page.waitForTimeout(2500);
+
+  const followed = await sql`
+    select p.id, p.rank, p.status, p.starts_at, f.created_at
+    from pick_follows f join picks p on p.id = f.pick_id
+    where f.user_id = ${tester.id}
+  `;
+  check(followed.length === 1, "clicking the circle writes one row", `rows=${followed.length}`);
+  check(followed[0]?.status === "pending", "the followed pick was still open", `status=${followed[0]?.status}`);
+  check(
+    followed[0] && followed[0].created_at < followed[0].starts_at,
+    "the follow is recorded before kick-off, not after",
+  );
+  check(
+    (await first.getAttribute("aria-checked")) === "true",
+    "the circle reads as checked",
+    `aria-checked=${await first.getAttribute("aria-checked")}`,
+  );
+
+  // Server truth, not just optimistic state: a fresh navigation re-renders the
+  // card from the row that was written.
+  await page.reload();
+  await hydrated(page, 'button[role="checkbox"]');
+  const reloaded = page.locator('button[role="checkbox"][aria-checked="true"]');
+  check(
+    (await reloaded.count()) === 1,
+    "the tick survives a reload",
+    `checked=${await reloaded.count()}`,
+  );
+
+  // Unchecking before kick-off deletes the row — absence is the "no".
+  await reloaded.first().click();
+  await page.waitForTimeout(2500);
+  const [{ n: afterUncheck }] = await sql`
+    select count(*)::int as n from pick_follows where user_id = ${tester.id}
+  `;
+  check(afterUncheck === 0, "unchecking removes the row", `rows=${afterUncheck}`);
+
+  await ctx.close();
+}
+
 /* --------------------------------------- 4. first visit must not self-reload */
 
 console.log("\nFirst-visit stability");
@@ -329,7 +414,7 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   await ctx.addCookies([await sessionCookie(secondAdmin)]);
   const page = await ctx.newPage();
 
-  for (const route of ["/admin", "/admin/users", "/admin/announce"]) {
+  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/announce"]) {
     const res = await page.goto(`${APP_URL}${route}`);
     check(res.status() === 200, `second admin opens ${route}`, `${res.status()}`);
   }

@@ -46,6 +46,15 @@ export function formatSignedPct(value: number, digits = 1): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
+/**
+ * A ratio in 0..1 -> an unsigned percentage, e.g. 0.538 -> "53.8%". For rates
+ * — win rate, take-up, how often a tester follows — where a leading "+" would
+ * read as a gain rather than a proportion.
+ */
+export function formatRate(ratio: number, digits = 1): string {
+  return `${(ratio * 100).toFixed(digits)}%`;
+}
+
 /* ------------------------------------------------------------------ dates */
 
 /** "Wed 29 Jul" — the slate day, which is a date string, not an instant. */

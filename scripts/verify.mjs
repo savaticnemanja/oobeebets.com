@@ -14,6 +14,10 @@
  *   3. Access control — /admin must not be reachable by a normal user.
  *   4. Session handling — /picks is gated: no session, or a dead one, sends
  *      the request to /login instead of rendering anything.
+ *   5. Follow tracking — "I took this bet" is a dataset we will make decisions
+ *      from, so the rules that keep it honest: the window closes at kick-off,
+ *      one row per tester per pick, follows die with what they point at, and
+ *      an admin's own ticks never land in the tester cohort.
  */
 import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
@@ -27,6 +31,7 @@ import {
   pickCategories,
   visiblePicks,
 } from "../src/lib/board.ts";
+import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import {
   FIXTURE_SELECTIONS,
   createSlate,
@@ -431,12 +436,134 @@ console.log("\nSession handling");
   check(garbageResult.ok, "forged cookie is rejected, gated", `-> ${garbage.status} ${garbageResult.location}`);
 }
 
+/* ------------------------------------------------------- 5. follow tracking */
+
+console.log("\nFollow tracking (\"I took this bet\")");
+
+// Set inside the block, read after teardown: the cascade is only observable
+// once the pick it hangs off has actually been deleted.
+let followedPickId = null;
+
+{
+  // The window rule, called directly. This is the only thing standing between
+  // a dataset of pre-kick-off decisions and one a tester can edit after the
+  // final whistle, so it is asserted against the app's own function rather
+  // than re-described here.
+  const ahead = new Date(Date.now() + 3600_000);
+  const behind = new Date(Date.now() - 3600_000);
+
+  check(
+    followWindowOpen({ startsAt: ahead, status: "pending" }),
+    "pending pick before kick-off is open",
+  );
+  check(
+    !followWindowOpen({ startsAt: behind, status: "pending" }),
+    "pending pick after kick-off is closed",
+  );
+  for (const status of ["won", "lost", "push", "void"]) {
+    check(
+      !followWindowOpen({ startsAt: ahead, status }),
+      `${status} pick is closed even before kick-off`,
+    );
+  }
+  check(
+    Number(FOLLOW_STAKE_UNITS) === 1,
+    "beta record is flat-staked at one unit",
+    `FOLLOW_STAKE_UNITS=${FOLLOW_STAKE_UNITS}`,
+  );
+
+  // A pending pick from the fixture slate to hang rows off.
+  const [pick] = await sql`
+    select id from picks
+    where slate_date = ${today} and status = 'pending'
+    order by rank limit 1
+  `;
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const [adminRow] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+
+  // One row per tester per pick. Without this the same tap landing twice —
+  // a double click, two tabs — would count the bet twice in every figure.
+  await sql`insert into pick_follows (user_id, pick_id) values (${tester.id}, ${pick.id})`;
+  await sql`
+    insert into pick_follows (user_id, pick_id) values (${tester.id}, ${pick.id})
+    on conflict do nothing
+  `;
+  const [{ n: dupes }] = await sql`
+    select count(*)::int as n from pick_follows
+    where user_id = ${tester.id} and pick_id = ${pick.id}
+  `;
+  check(dupes === 1, "a pick cannot be followed twice by one tester", `rows=${dupes}`);
+
+  // Admin ticks are product use, not evidence. Mirrors the cohort join in
+  // getFollowAnalytics / getSlateTakeRates — if these two disagree, the admin
+  // report quietly counts the operator as a tester.
+  await sql`insert into pick_follows (user_id, pick_id) values (${adminRow.id}, ${pick.id})`;
+  const [{ n: all }] = await sql`
+    select count(*)::int as n from pick_follows where pick_id = ${pick.id}
+  `;
+  const [{ n: cohort }] = await sql`
+    select count(u.id)::int as n from pick_follows f
+    join users u on u.id = f.user_id and u.role = 'user'
+    where f.pick_id = ${pick.id}
+  `;
+  check(
+    all === 2 && cohort === 1,
+    "an admin's own follow is outside the tester cohort",
+    `rows=${all} cohort=${cohort}`,
+  );
+
+  // Unchecking is a delete — absence is the "no", so there is no tombstone to
+  // leave behind and nothing for the analytics to have to filter out.
+  await sql`
+    delete from pick_follows where user_id = ${tester.id} and pick_id = ${pick.id}
+  `;
+  const [{ n: afterUncheck }] = await sql`
+    select count(*)::int as n from pick_follows
+    where user_id = ${tester.id} and pick_id = ${pick.id}
+  `;
+  check(afterUncheck === 0, "unchecking removes the row", `rows=${afterUncheck}`);
+
+  // Both foreign keys cascade. A follow pointing at a deleted pick, or a
+  // deleted account, would be a row the analytics joins away silently — a
+  // count that drifts from the truth with no error anywhere.
+  const [throwaway] = await sql`
+    insert into users (email, password_hash, role)
+    values (${"fixture-follower@oobeebets.test"}, ${"x"}, 'user')
+    on conflict (email) do update set role = 'user'
+    returning id
+  `;
+  await sql`insert into pick_follows (user_id, pick_id) values (${throwaway.id}, ${pick.id})`;
+  await sql`delete from users where id = ${throwaway.id}`;
+  const [{ n: afterUserDelete }] = await sql`
+    select count(*)::int as n from pick_follows where user_id = ${throwaway.id}
+  `;
+  check(afterUserDelete === 0, "deleting an account takes its follows", `rows=${afterUserDelete}`);
+
+  // The admin row is still on `pick`, deliberately: teardown has to take it.
+  const [{ n: beforeSlateDrop }] = await sql`
+    select count(*)::int as n from pick_follows where pick_id = ${pick.id}
+  `;
+  check(beforeSlateDrop === 1, "follow survives until its pick does not", `rows=${beforeSlateDrop}`);
+  followedPickId = pick.id;
+}
+
 /* ---------------------------------------------------------------- teardown */
 
 // The fixture slate is removed whether the run passed or failed — leaving a
 // board of invented picks behind is exactly what dropping the seed avoided.
 await dropSlate(sql, today);
 await dropTester(sql, TESTER_EMAIL);
+
+// One follow was left pointing at a fixture pick on purpose, and it is checked
+// after the slate is gone rather than before: ON DELETE CASCADE is the whole
+// reason dropSlate is enough teardown for this table, and a row surviving here
+// would mean every later run started against a dirty dataset.
+if (followedPickId) {
+  const [{ n: left }] = await sql`
+    select count(*)::int as n from pick_follows where pick_id = ${followedPickId}
+  `;
+  check(left === 0, "deleting a pick takes its follows", `rows=${left}`);
+}
 
 /* ------------------------------------------------------------------ result */
 

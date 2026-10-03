@@ -50,6 +50,13 @@
       "when": 1788121053840,
       "tag": "0006_player_props_category",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791069563980,
+      "tag": "0007_pick_follows",
+      "breakpoints": true
     }
   ]
 }

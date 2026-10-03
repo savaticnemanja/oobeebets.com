@@ -22,6 +22,7 @@ import bcrypt from "bcryptjs";
 import {
   auditLog,
   invitations,
+  pickFollows,
   picks,
   rateLimits,
   sessions,
@@ -51,7 +52,7 @@ function describeTarget(url: string): string {
 }
 
 /**
- * main() deletes every row in seven tables, including the whole pick history —
+ * main() deletes every row in eight tables, including the whole pick history —
  * which §10 of the FSD calls the company's entire asset, and which no backup
  * restores without losing a day. A stale DATABASE_URL in a shell is all it
  * takes, so seeding requires an opt-in that no deployed environment carries.
@@ -77,7 +78,16 @@ requireSeedOptIn(connectionString);
 
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client, {
-  schema: { users, sessions, slates, picks, auditLog, rateLimits, invitations },
+  schema: {
+    users,
+    sessions,
+    slates,
+    picks,
+    pickFollows,
+    auditLog,
+    rateLimits,
+    invitations,
+  },
 });
 
 /** Overridable so a different first admin can be created without editing this
@@ -94,6 +104,11 @@ async function main() {
   console.log(`[seed] clearing ${describeTarget(connectionString)}...`);
   await db.delete(auditLog);
   await db.delete(rateLimits);
+  // Before picks and users, both of which it cascades from. Named explicitly
+  // anyway: this function claims to clear every table, and a reader should be
+  // able to check that claim against this list rather than against two foreign
+  // keys three files away.
+  await db.delete(pickFollows);
   await db.delete(picks);
   await db.delete(slates);
   await db.delete(sessions);

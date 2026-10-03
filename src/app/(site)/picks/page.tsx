@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, eq, sql } from "drizzle-orm";
-import { CalendarDays } from "lucide-react";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { CalendarDays, Circle } from "lucide-react";
 import { db } from "@/db";
-import { picks as picksTable, slates } from "@/db/schema";
+import { pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import {
@@ -15,6 +15,7 @@ import {
   pickCategories,
   visiblePicks,
 } from "@/lib/board";
+import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
@@ -90,6 +91,39 @@ export default async function PicksPage({
         .limit(30)
     : [];
 
+  // Which of these picks this viewer has already ticked off. Keyed on
+  // (user_id, pick_id) in that order, so this is an index-only scan over at
+  // most fifteen keys — see the note on pick_follows in db/schema.ts.
+  const published = Boolean(slate?.publishedAt);
+  const takenIds =
+    published && view.length > 0
+      ? new Set(
+          (
+            await db
+              .select({ pickId: pickFollows.pickId })
+              .from(pickFollows)
+              .where(
+                and(
+                  eq(pickFollows.userId, auth.user.id),
+                  inArray(
+                    pickFollows.pickId,
+                    view.map((p) => p.id),
+                  ),
+                ),
+              )
+          ).map((r) => r.pickId),
+        )
+      : new Set<string>();
+
+  /**
+   * An unpublished draft gets no control at all: an admin previewing tomorrow's
+   * board has nothing to take yet, and the action refuses it anyway.
+   */
+  function followFor(p: Pick): ViewerFollow | undefined {
+    if (!published) return undefined;
+    return { taken: takenIds.has(p.id), open: followWindowOpen(p) };
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       {params.welcome === "1" && (
@@ -132,6 +166,21 @@ export default async function PicksPage({
           )}
         </div>
       </div>
+
+      {/* -------------------------------------------------------------- hint */}
+      {/* Said once, at the top, rather than as a label on fifteen cards. The
+          circles are discoverable on their own, but "it is one tap and we
+          never ask for a stake" is not, and it is the part that decides
+          whether a tester bothers. */}
+      {published && view.length > 0 && (
+        <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
+          <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Took one of these? Tap its circle. That&apos;s the whole thing — no stake,
+            no book, no odds — and it locks when the game starts.
+          </span>
+        </p>
+      )}
 
       {/* -------------------------------------------------------------- tabs */}
       <nav
@@ -185,7 +234,7 @@ export default async function PicksPage({
           {top && (
             <div className="mt-8">
               <Reveal>
-                <TopPickCard pick={top} />
+                <TopPickCard pick={top} follow={followFor(top)} />
               </Reveal>
             </div>
           )}
@@ -200,7 +249,7 @@ export default async function PicksPage({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {rest.map((p, i) => (
                   <Reveal key={p.id} delay={Math.min(i * 0.02, 0.2)}>
-                    <PickCard pick={p} />
+                    <PickCard pick={p} follow={followFor(p)} />
                   </Reveal>
                 ))}
               </div>

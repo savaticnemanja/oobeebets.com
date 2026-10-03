@@ -22,6 +22,18 @@ export const en = {
     football: "Football",
   },
 
+  /**
+   * Bet types. Keys are the `market` enum. Here rather than inline because it
+   * is one of the Record<enum, string> tables the note above is about — the
+   * admin follow breakdown ships it as data with no sentence around it.
+   */
+  market: {
+    moneyline: "Moneyline",
+    spread: "Spread",
+    total: "Total",
+    prop: "Prop",
+  },
+
   /** Pick outcomes. Keys are the `pick_status` enum. Never colour-only. */
   status: {
     won: "Won",

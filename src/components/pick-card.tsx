@@ -2,6 +2,8 @@ import { TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
+import { FollowToggle } from "@/components/follow-toggle";
+import type { ViewerFollow } from "@/lib/follows";
 import type { Pick, PickStatus, Sport } from "@/db/schema";
 import {
   formatKickoff,
@@ -44,7 +46,20 @@ function KickoffTime({ at }: { at: Date }) {
 
 /* ------------------------------------------------------------------ export */
 
-export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean }) {
+/**
+ * `follow` is the viewer's own "I took this bet" state. Left undefined, the
+ * card renders no check circle at all — which is the right answer for an admin
+ * previewing an unpublished draft, where there is nothing to take yet.
+ */
+export function PickCard({
+  pick,
+  featured,
+  follow,
+}: {
+  pick: Pick;
+  featured?: boolean;
+  follow?: ViewerFollow;
+}) {
   const profit = pickProfit(pick);
   const settled = pick.status !== "pending";
 
@@ -70,22 +85,41 @@ export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean })
         <Badge variant={STATUS_VARIANT[pick.status]}>{STATUS_LABEL[pick.status]}</Badge>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <h3
-          className={cn(
-            "font-semibold tracking-tight text-fg",
-            featured ? "text-2xl" : "text-lg",
-          )}
-        >
-          {pick.selection}
-        </h3>
-        <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
-          {formatOdds(pick.price)}
-        </span>
-        {pick.book && <span className="text-[0.6875rem] text-fg-subtle">{pick.book}</span>}
-      </div>
+      {/* The check circle sits to the left of the selection, on the same line
+          — "○ Jalen Hurts — Over 24.5 Rush Yards". `items-start` rather than
+          centred, so a selection long enough to wrap keeps the circle beside
+          its first line instead of floating to the middle of two. */}
+      <div className="mt-3 flex items-start gap-2.5">
+        {follow && (
+          <FollowToggle
+            pickId={pick.id}
+            selection={pick.selection}
+            follow={follow}
+            featured={featured}
+          />
+        )}
+        {/* The fixture reads as the selection's subtitle, so it is inside this
+            column rather than below the row — at the card's left edge it would
+            hang a quarter-inch to the left of the headline it describes. */}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <h3
+              className={cn(
+                "font-semibold tracking-tight text-fg",
+                featured ? "text-2xl" : "text-lg",
+              )}
+            >
+              {pick.selection}
+            </h3>
+            <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
+              {formatOdds(pick.price)}
+            </span>
+            {pick.book && <span className="text-[0.6875rem] text-fg-subtle">{pick.book}</span>}
+          </div>
 
-      <p className="mt-1 truncate text-sm text-fg-muted">{pick.event}</p>
+          <p className="mt-1 truncate text-sm text-fg-muted">{pick.event}</p>
+        </div>
+      </div>
 
       <dl className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {pick.confidence !== null && (
@@ -153,7 +187,7 @@ export function PickCard({ pick, featured }: { pick: Pick; featured?: boolean })
  * per board, so the heading names which board: two sections both calling
  * themselves "top pick of the day" would be a lie on one of the two tabs.
  */
-export function TopPickCard({ pick }: { pick: Pick }) {
+export function TopPickCard({ pick, follow }: { pick: Pick; follow?: ViewerFollow }) {
   const heading = pick.category === "prop" ? "Top prop of the day" : "Top pick of the day";
   return (
     <section aria-labelledby="potd-heading" className="relative">
@@ -166,7 +200,7 @@ export function TopPickCard({ pick }: { pick: Pick }) {
           {heading}
         </h2>
       </div>
-      <PickCard pick={pick} featured />
+      <PickCard pick={pick} follow={follow} featured />
     </section>
   );
 }
