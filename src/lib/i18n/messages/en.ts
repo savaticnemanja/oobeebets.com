@@ -48,6 +48,7 @@ export const en = {
     topPicks: "Our Top Picks",
     about: "About",
     picks: "Picks",
+    myBets: "My bets",
     account: "Account",
     admin: "Admin",
     signIn: "Sign in",

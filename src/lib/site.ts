@@ -37,6 +37,7 @@ export const NAV_PUBLIC = [
 export const NAV_APP = [
   { href: "/picks", label: t().nav.picks },
   { href: "/top-picks", label: t().nav.topPicks },
+  { href: "/my-bets", label: t().nav.myBets },
   { href: "/account", label: t().nav.account },
 ] as const;
 
@@ -47,5 +48,6 @@ export const NAV_ADMIN = [
   { href: "/admin/settle", label: "Settle" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/follows", label: "Follows" },
+  { href: "/admin/parlays", label: "Parlays" },
   { href: "/admin/announce", label: "Announce" },
 ] as const;

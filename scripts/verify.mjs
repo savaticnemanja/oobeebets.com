@@ -18,6 +18,10 @@
  *      from, so the rules that keep it honest: the window closes at kick-off,
  *      one row per tester per pick, follows die with what they point at, and
  *      an admin's own ticks never land in the tester cohort.
+ *   6. Parlays — a ticket is only as trustworthy as its legs, so: the grade is
+ *      derived and never stored, a leg cannot appear twice, ranks are unique
+ *      to Oobee's board only, and a tester's parlay can never be ranked onto
+ *      it.
  */
 import { createHash, randomBytes } from "node:crypto";
 import postgres from "postgres";
@@ -32,6 +36,16 @@ import {
   visiblePicks,
 } from "../src/lib/board.ts";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
+import { combineOdds } from "../src/lib/settlement.ts";
+import { americanToDecimal, decimalToAmerican } from "../src/lib/settlement.ts";
+import {
+  MAX_PARLAY_LEGS,
+  MIN_PARLAY_LEGS,
+  parlayPrice,
+  parlayProfit,
+  parlayStatus,
+  parlayWindowOpen,
+} from "../src/lib/parlays.ts";
 import {
   FIXTURE_SELECTIONS,
   createSlate,
@@ -545,6 +559,165 @@ let followedPickId = null;
   `;
   check(beforeSlateDrop === 1, "follow survives until its pick does not", `rows=${beforeSlateDrop}`);
   followedPickId = pick.id;
+}
+
+/* --------------------------------------------------------------- 6. parlays */
+
+console.log("\nParlays");
+
+{
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const legs = await sql`
+    select id, price from picks
+    where slate_date = ${today} and status = 'pending' and starts_at > now()
+    order by rank limit 3
+  `;
+
+  // A parlay is its legs. The database stores no grade, so the only way the
+  // board and a tester's record can agree is by both deriving it -- asserted
+  // here against the app's own function rather than restated.
+  check(
+    parlayStatus([{ price: -110, status: "won" }, { price: -110, status: "lost" }]) === "lost",
+    "one lost leg sinks the ticket",
+  );
+  check(
+    parlayPrice([{ price: -110, status: "won" }, { price: -110, status: "push" }]) === -110,
+    "a pushed leg drops out and the rest reprice",
+  );
+  check(combineOdds([-110, -110, -110]) === 596, "three -110 legs price at +596");
+  check(combineOdds([100, 100]) === 300, "two coin-flips price at +300");
+  check(combineOdds([]) === null, "no legs has no price (never a free bet)");
+
+  // The conversion underneath it has to be lossless, or every parlay price on
+  // the site is quietly wrong. -100 is the one exception and is checked as the
+  // normalisation it is, not waved through.
+  const roundTripFailures = [];
+  for (let price = -2000; price <= 2000; price++) {
+    if (price > -100 && price < 100) continue;
+    if (price === -100) continue;
+    if (decimalToAmerican(americanToDecimal(price)) !== price) roundTripFailures.push(price);
+  }
+  check(
+    roundTripFailures.length === 0,
+    "every legal price round-trips through decimal",
+    roundTripFailures.length ? `broken=${roundTripFailures.slice(0, 5).join(",")}` : "",
+  );
+  check(
+    decimalToAmerican(americanToDecimal(-100)) === 100,
+    "-100 normalises to +100 — the same bet at evens",
+  );
+
+  // A ticket where every leg is no-action is void, not a winner. Getting this
+  // backwards would pay out on parlays that never ran.
+  check(
+    parlayStatus([{ price: -110, status: "push" }, { price: -110, status: "void" }]) === "void",
+    "a ticket of pushes and voids is void, not won",
+  );
+  check(
+    parlayStatus([{ price: -110, status: "lost" }, { price: -110, status: "pending" }]) === "lost",
+    "a lost leg settles the ticket without waiting for the rest",
+  );
+  check(
+    parlayProfit([{ price: 100, status: "won" }, { price: 100, status: "won" }], 1) === 3,
+    "+100 twice at 1u pays +3.00u",
+  );
+  check(
+    parlayProfit([{ price: -110, status: "push" }, { price: -110, status: "void" }], 1) === 0,
+    "a void ticket pays nothing and costs nothing",
+  );
+
+  // The window shuts on the earliest leg, so nothing can be bolted onto a
+  // game already in progress.
+  const soon = new Date(Date.now() + 3600_000);
+  const gone = new Date(Date.now() - 3600_000);
+  check(
+    parlayWindowOpen([{ startsAt: soon, status: "pending" }, { startsAt: soon, status: "pending" }]),
+    "every leg ahead of kick-off -> open",
+  );
+  check(
+    !parlayWindowOpen([{ startsAt: gone, status: "pending" }, { startsAt: soon, status: "pending" }]),
+    "one leg under way -> closed, so nothing attaches to a winner",
+  );
+
+  const [{ no_status: noStatus }] = await sql`
+    select count(*)::int as no_status from information_schema.columns
+    where table_name = 'parlays' and column_name in ('status', 'settled_at')
+  `;
+  check(noStatus === 0, "parlays table stores no grade at all", `grade columns=${noStatus}`);
+
+  // A tester's parlay.
+  const [built] = await sql`
+    insert into parlays (owner_id, slate_date) values (${tester.id}, ${today}) returning id
+  `;
+  await sql`
+    insert into parlay_legs (parlay_id, pick_id)
+    select ${built.id}, id from picks where id = any(${legs.map((l) => l.id)})
+  `;
+  const [{ n: legCount }] = await sql`
+    select count(*)::int as n from parlay_legs where parlay_id = ${built.id}
+  `;
+  check(legCount === legs.length, "legs attach to the parlay", `legs=${legCount}`);
+
+  // The same pick twice would square its odds and invent money no book pays.
+  let dupeRejected = false;
+  try {
+    await sql`insert into parlay_legs (parlay_id, pick_id) values (${built.id}, ${legs[0].id})`;
+  } catch {
+    dupeRejected = true;
+  }
+  check(dupeRejected, "a pick cannot be a leg of the same parlay twice");
+
+  // A tester's parlay is never ranked, so it can never land on Oobee's board.
+  let rankedUserRejected = false;
+  try {
+    await sql`update parlays set rank = 1 where id = ${built.id}`;
+  } catch {
+    rankedUserRejected = true;
+  }
+  check(rankedUserRejected, "a tester's parlay cannot be given a board rank");
+
+  // ...and Oobee's must be ranked, by the same constraint read the other way.
+  let unrankedOobeeRejected = false;
+  try {
+    await sql`insert into parlays (owner_id, slate_date) values (null, ${today})`;
+  } catch {
+    unrankedOobeeRejected = true;
+  }
+  check(unrankedOobeeRejected, "one of Oobee's parlays cannot be unranked");
+
+  // Rank 1 is unique among Oobee's only -- which is what lets every tester
+  // hold an unranked ticket on the same day.
+  const [oobee1] = await sql`
+    insert into parlays (owner_id, slate_date, rank) values (null, ${today}, 1) returning id
+  `;
+  let dupeRankRejected = false;
+  try {
+    await sql`insert into parlays (owner_id, slate_date, rank) values (null, ${today}, 1)`;
+  } catch {
+    dupeRankRejected = true;
+  }
+  check(dupeRankRejected, "two of Oobee's parlays cannot share a rank");
+
+  const [second] = await sql`
+    insert into parlays (owner_id, slate_date) values (${tester.id}, ${today}) returning id
+  `;
+  check(Boolean(second), "testers can each hold an unranked parlay the same day");
+
+  check(
+    MIN_PARLAY_LEGS === 2 && MAX_PARLAY_LEGS === 10,
+    "leg bounds are the ones the UI enforces",
+    `${MIN_PARLAY_LEGS}..${MAX_PARLAY_LEGS}`,
+  );
+
+  // Deleting a leg's pick must take the leg with it: a leg pointing at nothing
+  // would silently reprice every parlay containing it.
+  await sql`delete from picks where id = ${legs[0].id}`;
+  const [{ n: afterPickDelete }] = await sql`
+    select count(*)::int as n from parlay_legs where pick_id = ${legs[0].id}
+  `;
+  check(afterPickDelete === 0, "deleting a pick takes the legs pointing at it", `rows=${afterPickDelete}`);
+
+  await sql`delete from parlays where id = any(${[built.id, oobee1.id, second.id]})`;
 }
 
 /* ---------------------------------------------------------------- teardown */

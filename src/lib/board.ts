@@ -86,3 +86,54 @@ export function visiblePicks<T extends { rank: number; category: PickCategory }>
 ): T[] {
   return isAdmin ? picks : picks.filter((p) => p.rank <= VISIBLE_PICKS[p.category]);
 }
+
+/* ------------------------------------------------------------ board tabs */
+
+/**
+ * What the board shows as tabs, which is not the same list as `pickCategories`.
+ *
+ * Game bets and player props are both rows in `picks` and share every query,
+ * rank rule and limit above. Oobee parlays are a different table — several
+ * picks riding as one bet, graded from their legs — so they are a third *tab*
+ * without being a third *category*. Keeping the two concepts apart is what
+ * stops a parlay leaking into the singles record: anything iterating
+ * `pickCategories` still sees exactly the two things that live in `picks`.
+ */
+export const boardTabs = ["game", "prop", "parlay"] as const;
+
+export type BoardTab = (typeof boardTabs)[number];
+
+export const TAB_LABELS: Record<BoardTab, string> = {
+  ...CATEGORY_LABELS,
+  parlay: "Oobee parlays",
+};
+
+export const TAB_NOUN: Record<BoardTab, string> = {
+  ...CATEGORY_NOUN,
+  parlay: "parlay",
+};
+
+/**
+ * Oobee parlays published per day. Lower than the pick lists on purpose —
+ * a parlay is a garnish on a board of singles, and fifteen of them a day
+ * would be the parlay bait the front page promises not to serve.
+ *
+ * parlays_rank_range in the database allows 1..15, so raising this is an edit
+ * here rather than a migration. Lowering it never needs one either.
+ */
+export const PARLAYS_PER_SLATE = 5;
+
+export function isBoardTab(value: unknown): value is BoardTab {
+  return typeof value === "string" && (boardTabs as readonly string[]).includes(value);
+}
+
+/**
+ * Reads a `?category=` param as a board tab, falling back to game bets.
+ *
+ * Shares the parameter name with categoryFromParam rather than inventing a
+ * second one, so every link already written stays correct and a tab the
+ * reader has not heard of lands on the default instead of erroring.
+ */
+export function tabFromParam(value: string | undefined): BoardTab {
+  return isBoardTab(value) ? value : "game";
+}

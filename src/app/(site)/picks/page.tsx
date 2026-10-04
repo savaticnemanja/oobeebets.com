@@ -8,13 +8,18 @@ import { pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import {
-  CATEGORY_LABELS,
   CATEGORY_NOUN,
   PICKS_PER_SLATE,
+  TAB_NOUN,
+  TAB_LABELS,
+  boardTabs,
   categoryFromParam,
-  pickCategories,
+  tabFromParam,
   visiblePicks,
 } from "@/lib/board";
+import { getOobeeParlays, getUserParlays, selectableLegs } from "@/lib/parlay-store";
+import { ParlayCard } from "@/components/parlay-card";
+import { DeleteParlayButton, ParlayBuilder } from "@/components/parlay-builder";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +52,11 @@ export default async function PicksPage({
 
   // Only admins can browse history — everyone else always sees today's board.
   const date = auth.isAdmin ? requested : today;
+  // Three tabs, two of which are pick categories. `category` stays the thing
+  // the picks query filters on; `tab` is what the reader is looking at, and on
+  // the parlay tab it points at a different table entirely.
+  const tab = tabFromParam(params.category);
+  const isParlayTab = tab === "parlay";
   const category = categoryFromParam(params.category);
 
   const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
@@ -57,7 +67,7 @@ export default async function PicksPage({
   // Filtered in SQL rather than in memory: (slate_date, category) is the
   // leading edge of picks_slate_rank_unique, so the tab query is an index
   // range read, and the tab you are not looking at is never fetched.
-  const rows: Pick[] = visible
+  const rows: Pick[] = visible && !isParlayTab
     ? await db
         .select()
         .from(picksTable)
@@ -124,6 +134,22 @@ export default async function PicksPage({
     return { taken: takenIds.has(p.id), open: followWindowOpen(p) };
   }
 
+  // The parlay tab reads a different table, so none of this is fetched for the
+  // two tabs that do not show it. The viewer's own parlays are filtered to the
+  // day on screen — their full history lives on /my-bets.
+  const [oobeeParlays, myParlays, buildable] = isParlayTab && visible
+    ? await Promise.all([
+        getOobeeParlays(date),
+        getUserParlays(auth.user.id),
+        published ? selectableLegs(date) : Promise.resolve([]),
+      ])
+    : [[], [], []];
+
+  const myParlaysToday = myParlays.filter((p) => p.slateDate === date);
+
+  /** What the heading counts — the parlay tab has its own table. */
+  const tabCount = isParlayTab ? oobeeParlays.length : view.length;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       {params.welcome === "1" && (
@@ -148,9 +174,12 @@ export default async function PicksPage({
             {slate?.publishedAt ? (
               <>
                 <span aria-hidden="true">·</span>
+                {/* Counted off whichever table this tab reads. Before, the
+                    parlay tab reported the picks query it never ran, which
+                    rendered as "0 game bets" above a board full of parlays. */}
                 <span>
-                  {view.length} {CATEGORY_NOUN[category]}
-                  {view.length === 1 ? "" : "s"}, free
+                  {tabCount} {TAB_NOUN[tab]}
+                  {tabCount === 1 ? "" : "s"}, free
                 </span>
               </>
             ) : null}
@@ -172,7 +201,7 @@ export default async function PicksPage({
           circles are discoverable on their own, but "it is one tap and we
           never ask for a stake" is not, and it is the part that decides
           whether a tester bothers. */}
-      {published && view.length > 0 && (
+      {published && !isParlayTab && view.length > 0 && (
         <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
           <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span>
@@ -187,9 +216,11 @@ export default async function PicksPage({
         aria-label="Board"
         className="mt-8 -mb-px flex items-center gap-1 border-b border-border"
       >
-        {pickCategories.map((c) => {
-          const isActive = c === category;
-          const n = countFor.get(c) ?? 0;
+        {boardTabs.map((c) => {
+          const isActive = c === tab;
+          // The parlay count comes from its own table; the other two are in
+          // the tally above. Zero renders as nothing either way.
+          const n = c === "parlay" ? oobeeParlays.length : (countFor.get(c) ?? 0);
           return (
             <Link
               key={c}
@@ -204,7 +235,7 @@ export default async function PicksPage({
                 isActive ? "text-brand" : "text-fg-muted hover:text-fg",
               )}
             >
-              {CATEGORY_LABELS[c]}
+              {TAB_LABELS[c]}
               {n > 0 && <span className="num text-xs text-fg-subtle">{n}</span>}
               {isActive && (
                 <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />
@@ -214,8 +245,64 @@ export default async function PicksPage({
         })}
       </nav>
 
-      {/* ------------------------------------------------------------- empty */}
-      {view.length === 0 ? (
+      {/* ------------------------------------------------------- parlay tab */}
+      {isParlayTab ? (
+        <div className="mt-8 space-y-10">
+          {/* Oobee's own, ranked like the other two boards. */}
+          <section aria-labelledby="oobee-parlays-heading">
+            <h2
+              id="oobee-parlays-heading"
+              className="text-sm font-semibold tracking-tight"
+            >
+              Oobee parlays
+            </h2>
+            {oobeeParlays.length === 0 ? (
+              <p className="mt-2 text-sm text-fg-muted">
+                {date === today
+                  ? "None up yet today — they go out with the rest of the board."
+                  : "None published for this day."}
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {oobeeParlays.map((pl, i) => (
+                  <Reveal key={pl.id} delay={Math.min(i * 0.03, 0.2)}>
+                    <ParlayCard parlay={pl} featured={pl.rank === 1} />
+                  </Reveal>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* The tester's own. Only on a published board — there is nothing to
+              build from a draft, and the action refuses it regardless. */}
+          {published && (
+            <section aria-labelledby="my-parlays-heading">
+              <h2 id="my-parlays-heading" className="text-sm font-semibold tracking-tight">
+                Your parlays
+              </h2>
+              <p className="mt-1 text-xs text-fg-subtle">
+                Built from today&apos;s picks, graded leg by leg. These are yours
+                alone — nobody else sees them, and they never touch Oobee&apos;s
+                record.
+              </p>
+
+              {myParlaysToday.length > 0 && (
+                <div className="mt-4 grid gap-3">
+                  {myParlaysToday.map((pl) => (
+                    <ParlayCard key={pl.id} parlay={pl}>
+                      {pl.open && <DeleteParlayButton parlayId={pl.id} />}
+                    </ParlayCard>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4">
+                <ParlayBuilder legs={buildable} />
+              </div>
+            </section>
+          )}
+        </div>
+      ) : view.length === 0 ? (
         <div className="card-hairline mt-8 p-10 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
             {date === today

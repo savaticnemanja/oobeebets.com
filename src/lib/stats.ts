@@ -649,3 +649,84 @@ export async function getPlayerFollows(userId: string): Promise<PlayerFollows | 
     days,
   };
 }
+
+/* ------------------------------------------------- a tester's own numbers */
+
+/**
+ * What a tester sees about themselves on /my-bets.
+ *
+ * Singles and parlays are reported apart and then together, because they are
+ * different bets with different variance and averaging them into one line
+ * hides the thing most worth seeing — whether the parlays are paying for
+ * themselves. All three are flat-staked at one unit; see FOLLOW_STAKE_UNITS.
+ */
+export interface MyBets {
+  singles: TrackRecord;
+  parlays: TrackRecord;
+  combined: TrackRecord;
+  /** Parlays taken, settled or not — the headline count. */
+  parlayCount: number;
+  openParlays: number;
+}
+
+/**
+ * Summarises one tester's own betting.
+ *
+ * The parlay rows arrive already graded from lib/parlay-store.ts, so this
+ * re-uses their derived price and status rather than re-deriving either — one
+ * grading path, as everywhere else parlays are touched.
+ */
+export function summariseMyBets(
+  singles: { price: number; status: PickStatus }[],
+  parlayViews: { price: number | null; status: PickStatus }[],
+): MyBets {
+  const singleRows = asBetaRows(singles);
+
+  // A parlay with no live price has no legs left to pay on; it is a void, and
+  // profitUnits returns zero for it whatever price is quoted.
+  const parlayRows: RecordRow[] = parlayViews.map((p) => ({
+    price: p.price ?? 100,
+    units: FOLLOW_STAKE_UNITS,
+    status: p.status,
+  }));
+
+  return {
+    singles: summarise(singleRows),
+    parlays: summarise(parlayRows),
+    combined: summarise([...singleRows, ...parlayRows]),
+    parlayCount: parlayViews.length,
+    openParlays: parlayViews.filter((p) => p.status === "pending").length,
+  };
+}
+
+/** The settled singles a tester took, for their own dashboard. */
+export async function getMySingles(userId: string) {
+  return db
+    .select({
+      pickId: picks.id,
+      slateDate: picks.slateDate,
+      category: picks.category,
+      market: picks.market,
+      rank: picks.rank,
+      league: picks.league,
+      event: picks.event,
+      selection: picks.selection,
+      price: picks.price,
+      units: picks.units,
+      status: picks.status,
+      startsAt: picks.startsAt,
+      finalScore: picks.finalScore,
+      takenAt: pickFollows.createdAt,
+    })
+    .from(pickFollows)
+    .innerJoin(picks, eq(picks.id, pickFollows.pickId))
+    .where(and(eq(pickFollows.userId, userId), publishedSlate))
+    .orderBy(desc(picks.slateDate), asc(picks.rank));
+}
+
+/**
+ * The record arithmetic, for callers that already hold their own rows —
+ * parlays, say, which are graded in lib/parlay-store.ts before they get here.
+ * Exported as an alias so there is still exactly one implementation.
+ */
+export { summarise as summariseRecord };

@@ -1,0 +1,354 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { auditLog, parlayLegs, parlays, picks, slates } from "@/db/schema";
+import type { AuthContext } from "@/lib/auth";
+import { getAuth, requireAdmin } from "@/lib/auth";
+import {
+  MAX_PARLAY_LEGS,
+  MIN_PARLAY_LEGS,
+  parlayWindowOpen,
+} from "@/lib/parlays";
+import { PARLAYS_PER_SLATE } from "@/lib/board";
+import { isValidSlateDate } from "@/lib/slate-date";
+import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
+
+/**
+ * Building and tearing down parlays — Oobee's own, and the ones testers make
+ * from the board.
+ *
+ * Both paths run the same leg validation, because the rule they enforce is the
+ * same rule: a parlay may only ever contain picks that were published and
+ * still unplayed at the moment it was built. Everything downstream — the live
+ * price, the grade, the tester's record — is only trustworthy because that is
+ * checked here rather than in the form that submitted it.
+ */
+
+const legIdsSchema = z
+  .array(z.string().uuid())
+  .min(MIN_PARLAY_LEGS, `A parlay needs at least ${MIN_PARLAY_LEGS} legs`)
+  .max(MAX_PARLAY_LEGS, `A parlay tops out at ${MAX_PARLAY_LEGS} legs`)
+  // A pick twice in one parlay would square its odds and invent money no book
+  // would pay. The primary key refuses it too; this is the readable error.
+  .refine((ids) => new Set(ids).size === ids.length, "A pick can only be in a parlay once");
+
+interface ValidatedLegs {
+  slateDate: string;
+  ids: string[];
+}
+
+/**
+ * The gate every parlay passes through.
+ *
+ * Re-reads each leg from the database rather than trusting anything the form
+ * sent: the client's list of selectable picks is a suggestion, and a forged
+ * request can name any uuid it likes.
+ */
+async function validateLegs(
+  ids: string[],
+): Promise<{ ok: true; legs: ValidatedLegs } | { ok: false; error: string }> {
+  const rows = await db
+    .select({
+      id: picks.id,
+      slateDate: picks.slateDate,
+      startsAt: picks.startsAt,
+      status: picks.status,
+      publishedAt: slates.publishedAt,
+    })
+    .from(picks)
+    .innerJoin(slates, eq(slates.date, picks.slateDate))
+    .where(inArray(picks.id, ids));
+
+  if (rows.length !== ids.length) {
+    return { ok: false, error: "One of those picks no longer exists." };
+  }
+  if (rows.some((r) => !r.publishedAt)) {
+    return { ok: false, error: "A parlay can only use picks that are live on the board." };
+  }
+
+  // One slate per parlay. The row carries a single slate_date, and a ticket
+  // spanning two betting days would belong to neither board — it is also not
+  // something the builder can produce, since it only ever shows one day.
+  const dates = new Set(rows.map((r) => r.slateDate));
+  if (dates.size > 1) {
+    return { ok: false, error: "Every leg has to come from the same day's board." };
+  }
+
+  // The earliest leg closes the ticket. Checked against the legs as a set,
+  // not one at a time, which is the point — see parlayWindowOpen.
+  if (!parlayWindowOpen(rows)) {
+    return { ok: false, error: "One of those games has already started." };
+  }
+
+  return { ok: true, legs: { slateDate: [...dates][0], ids } };
+}
+
+/** Writes the parlay and its legs together, or neither. */
+async function insertParlay(
+  values: typeof parlays.$inferInsert,
+  legIds: string[],
+): Promise<string> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx.insert(parlays).values(values).returning({ id: parlays.id });
+    await tx.insert(parlayLegs).values(legIds.map((pickId) => ({ parlayId: row.id, pickId })));
+    return row.id;
+  });
+}
+
+/* ------------------------------------------------------- a tester's parlay */
+
+/**
+ * A tester builds a parlay out of picks on today's board.
+ *
+ * Nothing is asked for beyond which legs — no stake, no book, no price —
+ * exactly as with the "I took this bet" circle, and for the same reason. The
+ * price comes off the legs and the stake is flat at PARLAY_STAKE_UNITS.
+ *
+ * Note what this deliberately does *not* do: it does not mark those picks as
+ * followed. A parlay is one bet, not three singles, and writing follow rows
+ * here would double-count every leg in the singles record.
+ */
+export async function createUserParlayAction(pickIds: string[]): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) {
+    return { ok: false, error: "Your session expired — sign in again to build this." };
+  }
+
+  const parsed = legIdsSchema.safeParse(pickIds);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Bad request" };
+  }
+
+  const checked = await validateLegs(parsed.data);
+  if (!checked.ok) return { ok: false, error: checked.error };
+
+  await insertParlay(
+    { ownerId: auth.user.id, slateDate: checked.legs.slateDate },
+    checked.legs.ids,
+  );
+
+  revalidatePath("/picks");
+  revalidatePath("/my-bets");
+  return { ok: true, message: `${parsed.data.length}-leg parlay saved.` };
+}
+
+/**
+ * A tester removes their own parlay, while every leg is still ahead of
+ * kick-off.
+ *
+ * The window is the same one that governs building, and it closes for the same
+ * reason: once a game is under way, deleting the ticket would be editing a
+ * record whose outcome is becoming known. The legs cascade with the row.
+ */
+export async function deleteUserParlayAction(parlayId: string): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) return { ok: false, error: "Your session expired — sign in again." };
+
+  if (!z.string().uuid().safeParse(parlayId).success) {
+    return { ok: false, error: "Bad request" };
+  }
+
+  // Ownership is part of the where clause, not a check after the fact: this
+  // cannot read, and therefore cannot leak, somebody else's ticket.
+  const [owned] = await db
+    .select({ id: parlays.id })
+    .from(parlays)
+    .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, auth.user.id)))
+    .limit(1);
+
+  if (!owned) return { ok: false, error: "Parlay not found" };
+
+  const legs = await db
+    .select({ startsAt: picks.startsAt, status: picks.status })
+    .from(parlayLegs)
+    .innerJoin(picks, eq(picks.id, parlayLegs.pickId))
+    .where(eq(parlayLegs.parlayId, parlayId));
+
+  if (!parlayWindowOpen(legs)) {
+    return { ok: false, error: "This one is locked in — a leg has already started." };
+  }
+
+  await db.delete(parlays).where(eq(parlays.id, parlayId));
+
+  revalidatePath("/picks");
+  revalidatePath("/my-bets");
+  return { ok: true, message: "Parlay removed." };
+}
+
+/* --------------------------------------------------------- Oobee's parlay */
+
+const oobeeParlaySchema = z.object({
+  slateDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  title: z.string().trim().max(80).optional().or(z.literal("")),
+  /** Blank derives the price from the legs; a value records the book's own. */
+  price: z
+    .union([z.literal(""), z.coerce.number().int()])
+    .optional()
+    .refine(
+      (n) => n === "" || n === undefined || n >= 100 || n <= -100,
+      "American odds: >= +100 or <= -100",
+    ),
+  units: z.coerce.number().min(0.1).max(10).default(1),
+  confidence: z.coerce.number().int().min(0).max(100).optional(),
+  evPct: z.coerce.number().min(-100).max(100).optional(),
+  reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
+  book: z.string().trim().max(60).optional().or(z.literal("")),
+});
+
+async function audit(
+  actor: AuthContext,
+  action: string,
+  entityId: string,
+  meta?: Record<string, unknown>,
+) {
+  await db.insert(auditLog).values({
+    actorId: actor.user.id,
+    actorEmail: actor.user.email,
+    action,
+    entity: "parlay",
+    entityId,
+    meta: meta ?? null,
+  });
+}
+
+function revalidateBoard() {
+  revalidatePath("/picks");
+  revalidatePath("/admin/slate");
+  revalidatePath("/admin/parlays");
+}
+
+/**
+ * Oobee publishes a parlay onto its own board tab.
+ *
+ * Ranked like the other two boards, and on the same "lowest free rank" rule as
+ * createPickAction — rank is never typed in, so two admins adding at once
+ * cannot both claim rank 1.
+ */
+export async function createOobeeParlayAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+
+  const legIds = formData.getAll("legIds").map(String);
+  const legs = legIdsSchema.safeParse(legIds);
+  if (!legs.success) {
+    return { ok: false, error: legs.error.issues[0]?.message ?? "Pick the legs first" };
+  }
+
+  const parsed = oobeeParlaySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { ok: false, error: "Check the fields", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+  const d = parsed.data;
+  if (!isValidSlateDate(d.slateDate)) return { ok: false, error: "Bad slate date" };
+
+  const checked = await validateLegs(legs.data);
+  if (!checked.ok) return { ok: false, error: checked.error };
+  if (checked.legs.slateDate !== d.slateDate) {
+    return { ok: false, error: "Those legs are not on that day's board." };
+  }
+
+  let rank = 0;
+  try {
+    const id = await db.transaction(async (tx) => {
+      const free = await tx.execute<{ rank: number | null }>(sql`
+        select min(t.rank) as rank
+        from generate_series(1, ${PARLAYS_PER_SLATE}) as t(rank)
+        where not exists (
+          select 1 from ${parlays} p
+          where p.slate_date = ${d.slateDate}
+            and p.owner_id is null
+            and p.rank = t.rank
+        )
+      `);
+      if (free[0]?.rank == null) {
+        throw new Error(`Parlay board is full — ${PARLAYS_PER_SLATE} max`);
+      }
+      rank = free[0].rank;
+
+      const [row] = await tx
+        .insert(parlays)
+        .values({
+          ownerId: null,
+          slateDate: d.slateDate,
+          rank,
+          title: d.title || null,
+          price: d.price === "" || d.price === undefined ? null : d.price,
+          units: String(d.units),
+          confidence: d.confidence ?? null,
+          evPct: d.evPct !== undefined ? String(d.evPct) : null,
+          reasoning: d.reasoning || null,
+          book: d.book || null,
+        })
+        .returning({ id: parlays.id });
+
+      await tx
+        .insert(parlayLegs)
+        .values(checked.legs.ids.map((pickId) => ({ parlayId: row.id, pickId })));
+      return row.id;
+    });
+
+    await audit(actor, "parlay.created", id, {
+      slateDate: d.slateDate,
+      rank,
+      legs: checked.legs.ids.length,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Parlay board is full")) return { ok: false, error: msg };
+    if (msg.includes("parlays_oobee_rank_unique")) {
+      return { ok: false, error: "Someone else just added a parlay — try again." };
+    }
+    throw err;
+  }
+
+  revalidateBoard();
+  return { ok: true, message: `Parlay added at rank ${rank}.` };
+}
+
+/**
+ * Removes one of Oobee's parlays, draft only.
+ *
+ * Published parlays are immutable for the same reason published picks are:
+ * deleting one after it has been seen rewrites the record. There is no "void a
+ * parlay" counterpart because a parlay cannot be voided on its own — voiding
+ * its legs on /admin/settle is what empties it, and the grade follows.
+ */
+export async function deleteOobeeParlayAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const id = z.string().uuid().safeParse(formData.get("parlayId"));
+  if (!id.success) return { ok: false, error: "Bad parlay id" };
+
+  const [existing] = await db
+    .select({ slateDate: parlays.slateDate, rank: parlays.rank, ownerId: parlays.ownerId })
+    .from(parlays)
+    .where(eq(parlays.id, id.data))
+    .limit(1);
+
+  if (!existing) return { ok: false, error: "Parlay not found" };
+  if (existing.ownerId !== null) {
+    return { ok: false, error: "That is a tester's parlay, not one of ours." };
+  }
+
+  const [slate] = await db
+    .select({ publishedAt: slates.publishedAt })
+    .from(slates)
+    .where(eq(slates.date, existing.slateDate))
+    .limit(1);
+
+  if (slate?.publishedAt) {
+    return { ok: false, error: "Slate is published — settle the legs instead of deleting." };
+  }
+
+  await db.delete(parlays).where(eq(parlays.id, id.data));
+  await audit(actor, "parlay.deleted", id.data, { rank: existing.rank });
+  revalidateBoard();
+  return { ok: true, message: "Parlay removed." };
+}

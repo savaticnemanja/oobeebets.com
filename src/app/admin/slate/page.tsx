@@ -7,12 +7,19 @@ import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import {
-  CATEGORY_LABELS,
+  PARLAYS_PER_SLATE,
   PICKS_PER_SLATE,
+  TAB_LABELS,
+  boardTabs,
   categoryFromParam,
   pickCategories,
+  tabFromParam,
   type PickCategory,
 } from "@/lib/board";
+import { getOobeeParlays, selectableLegs } from "@/lib/parlay-store";
+import { ParlayComposer } from "@/components/admin/parlay-composer";
+import { ParlayCard } from "@/components/parlay-card";
+import { DeleteOobeeParlayButton } from "@/components/admin/parlay-delete";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 
@@ -28,6 +35,8 @@ export default async function AdminSlatePage({
   const params = await searchParams;
   const date =
     params.date && isValidSlateDate(params.date) ? params.date : slateDateString();
+  const tab = tabFromParam(params.category);
+  const isParlayTab = tab === "parlay";
   const category = categoryFromParam(params.category);
 
   const [slateRow, rows] = await Promise.all([
@@ -48,6 +57,13 @@ export default async function AdminSlatePage({
   const counts = Object.fromEntries(
     pickCategories.map((c) => [c, byCategory[c].length]),
   ) as Record<PickCategory, number>;
+
+  // Oobee's parlays are a different table, so only the parlay tab pays for
+  // them. `legs` is what the composer may build from — this slate's picks that
+  // are published-or-draft and still ahead of kick-off.
+  const [oobeeParlays, legs] = isParlayTab
+    ? await Promise.all([getOobeeParlays(date), selectableLegs(date)])
+    : [[], []];
 
   return (
     <div>
@@ -72,8 +88,12 @@ export default async function AdminSlatePage({
         aria-label="Board"
         className="mt-6 -mb-px flex items-center gap-1 border-b border-border"
       >
-        {pickCategories.map((c) => {
-          const isActive = c === category;
+        {boardTabs.map((c) => {
+          const isActive = c === tab;
+          const [have, limit] =
+            c === "parlay"
+              ? [oobeeParlays.length, PARLAYS_PER_SLATE]
+              : [counts[c], PICKS_PER_SLATE[c]];
           return (
             <Link
               key={c}
@@ -84,9 +104,9 @@ export default async function AdminSlatePage({
                 isActive ? "text-brand" : "text-fg-muted hover:text-fg",
               )}
             >
-              {CATEGORY_LABELS[c]}
+              {TAB_LABELS[c]}
               <span className="num text-xs text-fg-subtle">
-                {counts[c]}/{PICKS_PER_SLATE[c]}
+                {have}/{limit}
               </span>
               {isActive && (
                 <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />
@@ -98,19 +118,49 @@ export default async function AdminSlatePage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="lg:sticky lg:top-32 lg:self-start">
-          <PickComposer
+          {isParlayTab ? (
+            <ParlayComposer
+              date={date}
+              legs={legs}
+              parlayCount={oobeeParlays.length}
+              disabled={published}
+            />
+          ) : (
+            <PickComposer
+              date={date}
+              category={category}
+              pickCount={counts[category]}
+              disabled={published}
+            />
+          )}
+        </div>
+
+        {isParlayTab ? (
+          <div>
+            {oobeeParlays.length === 0 ? (
+              <div className="card-hairline p-8 text-center text-sm text-fg-muted">
+                No parlays on this slate yet.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {oobeeParlays.map((p) => (
+                  <ParlayCard key={p.id} parlay={p}>
+                    {/* Published parlays are immutable, like published picks:
+                        settling their legs is what grades them. */}
+                    {!published && <DeleteOobeeParlayButton parlayId={p.id} />}
+                  </ParlayCard>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <SlatePickList
             date={date}
             category={category}
-            pickCount={counts[category]}
-            disabled={published}
+            picks={byCategory[category]}
+            published={published}
           />
-        </div>
-        <SlatePickList
-          date={date}
-          category={category}
-          picks={byCategory[category]}
-          published={published}
-        />
+        )}
       </div>
     </div>
   );

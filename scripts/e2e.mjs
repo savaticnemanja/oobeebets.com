@@ -22,6 +22,7 @@ import { chromium } from "playwright";
 // VISIBLE_PICKS can not leave a stale number behind. Run under tsx — see
 // package.json.
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
+import { combineOdds } from "../src/lib/settlement.ts";
 import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
@@ -368,6 +369,123 @@ console.log("\nFollowing a pick");
   await ctx.close();
 }
 
+/* --------------------------------------------- 3c. building a parlay */
+
+console.log("\nBuilding a parlay, and grading it from its legs");
+
+{
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+
+  await page.goto(`${APP_URL}/picks?category=parlay`);
+  await hydrated(page, 'button[role="checkbox"]');
+
+  const options = page.locator('button[role="checkbox"]');
+  const available = await options.count();
+  check(available >= 2, "the builder lists takeable picks", `options=${available}`);
+
+  // Save is refused until the ticket is actually a parlay.
+  const save = page.locator('button:has-text("Save parlay")');
+  check(await save.isDisabled(), "cannot save a parlay with no legs");
+  await options.nth(0).click();
+  check(await save.isDisabled(), "cannot save a one-leg parlay");
+
+  await options.nth(1).click();
+  // The slip prices the selection before it is saved, client-side.
+  const slip = await page.locator("text=/leg[s]? ·/").first().textContent();
+  check(/[+-]\d+/.test(slip ?? ""), "the slip shows a combined price before saving", slip?.trim());
+
+  await save.click();
+  await page.waitForTimeout(2500);
+
+  const built = await sql`
+    select p.id, count(l.pick_id)::int as legs
+    from parlays p join parlay_legs l on l.parlay_id = p.id
+    where p.owner_id = ${tester.id} group by p.id
+  `;
+  check(built.length === 1 && built[0].legs === 2, "a two-leg parlay is written", `parlays=${built.length} legs=${built[0]?.legs}`);
+
+  const parlayId = built[0]?.id;
+  const [ranked] = await sql`select rank, price from parlays where id = ${parlayId}`;
+  check(ranked?.rank === null, "a tester's parlay is unranked -- never on Oobee's board");
+  check(ranked?.price === null, "no price is stored; it comes off the legs");
+
+  // The legs, and what the maths says they are worth together.
+  const legs = await sql`
+    select pk.id, pk.price from parlay_legs l
+    join picks pk on pk.id = l.pick_id where l.parlay_id = ${parlayId}
+  `;
+  const expected = combineOdds(legs.map((l) => l.price));
+
+  await page.goto(`${APP_URL}/my-bets`);
+  let html = await page.content();
+  check(html.includes("Your parlays"), "the parlay shows on the tester's dashboard");
+  const sign = expected > 0 ? `+${expected}` : `${expected}`;
+  check(html.includes(sign), "the dashboard quotes the combined price", sign);
+  check(html.includes("Pending"), "it starts life pending");
+
+  // THE point of deriving rather than storing: settle one leg and the ticket
+  // re-grades itself, with nothing having touched the parlay row.
+  const [{ updated_at: before }] = await sql`select updated_at from parlays where id = ${parlayId}`;
+  await sql`update picks set status = 'lost', settled_at = now() where id = ${legs[0].id}`;
+
+  await page.goto(`${APP_URL}/my-bets`);
+  html = await page.content();
+  check(html.includes("Lost"), "settling one leg lost grades the whole parlay lost");
+
+  const [{ updated_at: after }] = await sql`select updated_at from parlays where id = ${parlayId}`;
+  check(
+    before.getTime() === after.getTime(),
+    "the parlay row was never written to -- the grade is derived",
+  );
+
+  // Put it back and win both legs instead.
+  await sql`update picks set status = 'won' where id = any(${legs.map((l) => l.id)})`;
+  await page.goto(`${APP_URL}/my-bets`);
+  html = await page.content();
+  check(html.includes("Won"), "winning every leg grades the parlay won");
+
+  // A ticket whose legs have been graded is locked -- no deleting a loser.
+  const [{ n: stillThere }] = await sql`select count(*)::int as n from parlays where id = ${parlayId}`;
+  check(stillThere === 1, "the settled parlay is still on the record");
+
+  await sql`update picks set status = 'pending', settled_at = null where id = any(${legs.map((l) => l.id)})`;
+  await sql`delete from parlays where id = ${parlayId}`;
+  await ctx.close();
+}
+
+/* ------------------------------------------- 3d. admin sees what testers built */
+
+console.log("\nAdmin inspection");
+
+{
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const page = await ctx.newPage();
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+
+  const legs = await sql`
+    select id from picks where slate_date = ${latestSlate}
+      and status = 'pending' and starts_at > now() order by rank limit 2
+  `;
+  const [p] = await sql`
+    insert into parlays (owner_id, slate_date) values (${tester.id}, ${latestSlate}) returning id
+  `;
+  await sql`insert into parlay_legs (parlay_id, pick_id)
+            select ${p.id}, id from picks where id = any(${legs.map((l) => l.id)})`;
+
+  const res = await page.goto(`${APP_URL}/admin/parlays`);
+  check(res.status() === 200, "admin opens the parlay inspector", `${res.status()}`);
+  const html = await page.content();
+  check(html.includes(TESTER_EMAIL), "the tester's parlay is listed with its owner");
+  check(html.includes("Built by testers"), "tester-built parlays have their own section");
+
+  await sql`delete from parlays where id = ${p.id}`;
+  await ctx.close();
+}
+
 /* --------------------------------------- 4. first visit must not self-reload */
 
 console.log("\nFirst-visit stability");
@@ -414,7 +532,7 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   await ctx.addCookies([await sessionCookie(secondAdmin)]);
   const page = await ctx.newPage();
 
-  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/announce"]) {
+  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/parlays", "/admin/announce"]) {
     const res = await page.goto(`${APP_URL}${route}`);
     check(res.status() === 200, `second admin opens ${route}`, `${res.status()}`);
   }

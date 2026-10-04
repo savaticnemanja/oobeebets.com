@@ -304,6 +304,126 @@ export const pickFollows = pgTable(
   ],
 );
 
+/* ---------------------------------------------------------------- parlays */
+
+/**
+ * A parlay: several of the board's picks riding as one bet, where every leg
+ * has to land or the whole thing is gone.
+ *
+ * Two kinds live here, told apart by `ownerId`:
+ *
+ *   NULL      — Oobee's own, published on the board beside game bets and
+ *               player props, ranked and staked like any other recommendation.
+ *   a user id — a tester's custom parlay, built from picks Oobee published.
+ *
+ * They share a table because they are the same object: a set of legs graded
+ * together. Splitting them would mean two settlement derivations, two odds
+ * calculations and two inspection surfaces for one idea.
+ *
+ * ---------------------------------------------------------------------------
+ * There is deliberately no `status` column, and no settled_at/settled_by.
+ *
+ * A parlay's result is not a fact anyone enters — it is a function of its
+ * legs, which the existing settle flow already grades one by one. Storing it
+ * would create a second place for the truth to live and therefore a way for
+ * the board and the record to disagree, which is the one thing this schema
+ * works hardest to prevent (see the note on pickProfit in lib/settlement.ts).
+ * Deriving it means an admin settling a single on /admin/settle silently and
+ * correctly updates every parlay that leg appears in, Oobee's and every
+ * tester's alike, with no second workflow to forget.
+ *
+ * `price` is the exception, and it is nullable for a real reason: a book
+ * rarely prices a parlay at the naive product of its legs — correlated legs
+ * price worse — so Oobee can record the price actually available. NULL means
+ * "derive it from the legs", which is what every user parlay does.
+ */
+export const parlays = pgTable(
+  "parlays",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** NULL is Oobee's own. A tester's parlay dies with their account. */
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
+    slateDate: date("slate_date")
+      .notNull()
+      .references(() => slates.date, { onDelete: "cascade" }),
+    /** Oobee's parlays are ranked on their board; a tester's are not. */
+    rank: integer("rank"),
+    /** Oobee may name a parlay ("Sunday three-leg"); testers do not. */
+    title: text("title"),
+    /** The book's actual parlay price. NULL derives it from the legs. */
+    price: integer("price"),
+    /** Oobee's stake. A tester's parlay is flat — see PARLAY_STAKE_UNITS. */
+    units: numeric("units", { precision: 5, scale: 2 }),
+    confidence: integer("confidence"),
+    evPct: numeric("ev_pct", { precision: 5, scale: 2 }),
+    reasoning: text("reasoning"),
+    book: text("book"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // A tester's list of their own parlays, newest first — the dashboard's
+    // only query. Oobee's rows have a null owner and sort out of it for free.
+    index("parlays_owner_idx").on(t.ownerId, t.slateDate),
+    index("parlays_slate_idx").on(t.slateDate),
+    // Ranks are unique among Oobee's parlays only. A partial index is what
+    // allows thirty testers to each have an unranked parlay on the same day
+    // without colliding with the board's rank 1.
+    uniqueIndex("parlays_oobee_rank_unique")
+      .on(t.slateDate, t.rank)
+      .where(sql`${t.ownerId} is null`),
+    // Ranked if and only if it is Oobee's. This is the invariant that keeps
+    // "whose parlay is this" answerable from one column instead of two.
+    check(
+      "parlays_rank_matches_owner",
+      sql`(${t.ownerId} is null) = (${t.rank} is not null)`,
+    ),
+    check(
+      "parlays_rank_range",
+      sql`${t.rank} is null or (${t.rank} >= 1 and ${t.rank} <= 15)`,
+    ),
+    check(
+      "parlays_price_valid",
+      sql`${t.price} is null or ${t.price} >= 100 or ${t.price} <= -100`,
+    ),
+    check(
+      "parlays_confidence_range",
+      sql`${t.confidence} is null or (${t.confidence} >= 0 and ${t.confidence} <= 100)`,
+    ),
+  ],
+);
+
+/**
+ * One leg. The pair is the whole fact, so it is the primary key — the same
+ * shape, and the same reasoning, as pick_follows.
+ *
+ * The key also enforces that a pick cannot appear twice in one parlay, which
+ * is not a style point: the same leg counted twice would square its odds and
+ * quietly invent money that no book would have paid.
+ *
+ * "At least two legs" is not expressible as a row constraint and lives in the
+ * action that writes them, inside the transaction that creates the parlay —
+ * see createParlay. scripts/verify.mjs asserts it, because a one-leg parlay
+ * is a single wearing a hat and would land in both records at once.
+ */
+export const parlayLegs = pgTable(
+  "parlay_legs",
+  {
+    parlayId: uuid("parlay_id")
+      .notNull()
+      .references(() => parlays.id, { onDelete: "cascade" }),
+    pickId: uuid("pick_id")
+      .notNull()
+      .references(() => picks.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.parlayId, t.pickId] }),
+    // "Which parlays is this pick in" — read when a leg settles and by the
+    // admin inspector, and what makes the ON DELETE CASCADE cheap.
+    index("parlay_legs_pick_idx").on(t.pickId),
+  ],
+);
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -362,6 +482,17 @@ export const pickFollowsRelations = relations(pickFollows, ({ one }) => ({
   pick: one(picks, { fields: [pickFollows.pickId], references: [picks.id] }),
 }));
 
+export const parlaysRelations = relations(parlays, ({ one, many }) => ({
+  owner: one(users, { fields: [parlays.ownerId], references: [users.id] }),
+  slate: one(slates, { fields: [parlays.slateDate], references: [slates.date] }),
+  legs: many(parlayLegs),
+}));
+
+export const parlayLegsRelations = relations(parlayLegs, ({ one }) => ({
+  parlay: one(parlays, { fields: [parlayLegs.parlayId], references: [parlays.id] }),
+  pick: one(picks, { fields: [parlayLegs.pickId], references: [picks.id] }),
+}));
+
 /* ------------------------------------------------------------------ types */
 
 export type User = typeof users.$inferSelect;
@@ -371,6 +502,9 @@ export type Pick = typeof picks.$inferSelect;
 export type NewPick = typeof picks.$inferInsert;
 export type Slate = typeof slates.$inferSelect;
 export type PickFollow = typeof pickFollows.$inferSelect;
+export type Parlay = typeof parlays.$inferSelect;
+export type NewParlay = typeof parlays.$inferInsert;
+export type ParlayLeg = typeof parlayLegs.$inferSelect;
 export type NewPickFollow = typeof pickFollows.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;

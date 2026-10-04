@@ -22,6 +22,8 @@ import bcrypt from "bcryptjs";
 import {
   auditLog,
   invitations,
+  parlayLegs,
+  parlays,
   pickFollows,
   picks,
   rateLimits,
@@ -52,7 +54,7 @@ function describeTarget(url: string): string {
 }
 
 /**
- * main() deletes every row in eight tables, including the whole pick history —
+ * main() deletes every row in ten tables, including the whole pick history —
  * which §10 of the FSD calls the company's entire asset, and which no backup
  * restores without losing a day. A stale DATABASE_URL in a shell is all it
  * takes, so seeding requires an opt-in that no deployed environment carries.
@@ -84,6 +86,8 @@ const db = drizzle(client, {
     slates,
     picks,
     pickFollows,
+    parlays,
+    parlayLegs,
     auditLog,
     rateLimits,
     invitations,
@@ -109,6 +113,11 @@ async function main() {
   // able to check that claim against this list rather than against two foreign
   // keys three files away.
   await db.delete(pickFollows);
+  // Legs before parlays before picks: each cascades from the next, but the
+  // list is the claim this function makes about itself and should be readable
+  // without chasing foreign keys.
+  await db.delete(parlayLegs);
+  await db.delete(parlays);
   await db.delete(picks);
   await db.delete(slates);
   await db.delete(sessions);
