@@ -1,8 +1,8 @@
 import "server-only";
 import { db } from "@/db";
-import { pickFollows, picks, users } from "@/db/schema";
-import type { Market, PickCategory, PickStatus } from "@/db/schema";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { pickFollows, picks, slates, users } from "@/db/schema";
+import type { Market, PickCategory, PickStatus, Role } from "@/db/schema";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { CATEGORY_LABELS } from "./board";
 import { FOLLOW_STAKE_UNITS } from "./follows";
 import { t } from "./i18n";
@@ -266,8 +266,14 @@ function splitByConsistency(
 
 const TESTER_ROWS_LIMIT = 200;
 
-/** Flat-staked view of a follow, in the shape the unit maths takes. */
-function asBetaRows(rows: FollowRow[]): RecordRow[] {
+/**
+ * Flat-staked view of a follow, in the shape the unit maths takes.
+ *
+ * Typed by the two columns it reads rather than by FollowRow, so the per-player
+ * detail below can hand it its own wider row without either shape having to
+ * know about the other — the same reason pickProfit is typed that way.
+ */
+function asBetaRows(rows: { price: number; status: PickStatus }[]): RecordRow[] {
   return rows.map((r) => ({
     price: r.price,
     units: FOLLOW_STAKE_UNITS,
@@ -497,4 +503,149 @@ export async function getSlateTakeRates(date: string): Promise<PickTakeRate[]> {
     .where(eq(picks.slateDate, date))
     .groupBy(picks.id)
     .orderBy(asc(picks.category), asc(picks.rank));
+}
+
+/* ------------------------------------------------------ one player's card */
+
+/**
+ * A single bet a tester took, with everything the pick itself says about it.
+ *
+ * `units` is the pick's own recommended stake and is shown for reference only
+ * — it is never what the tester's record is computed at. See FOLLOW_STAKE_UNITS.
+ */
+export interface FollowedPick {
+  pickId: string;
+  slateDate: string;
+  category: PickCategory;
+  market: Market;
+  rank: number;
+  league: string;
+  event: string;
+  selection: string;
+  price: number;
+  units: string;
+  status: PickStatus;
+  startsAt: Date;
+  finalScore: string | null;
+  takenAt: Date;
+}
+
+/** One slate day's worth of a tester's bets, newest day first. */
+export interface PlayerDay {
+  date: string;
+  picks: FollowedPick[];
+  record: TrackRecord;
+  /** Net units across every day up to and including this one, oldest-first. */
+  cumulativeUnits: number;
+}
+
+export interface PlayerFollows {
+  user: {
+    id: string;
+    email: string;
+    role: Role;
+    createdAt: Date;
+    lastLoginAt: Date | null;
+  };
+  opportunities: number;
+  consistency: number | null;
+  /** Everything they have taken, settled, flat-staked. */
+  record: TrackRecord;
+  /** Taken and not yet graded — what is riding right now. */
+  open: FollowedPick[];
+  /** Settled, grouped by slate day, newest first. */
+  days: PlayerDay[];
+}
+
+/**
+ * One tester's complete card: what is live for them now, and every bet they
+ * have taken before, day by day.
+ *
+ * Scoped to published slates for the same reason the cohort aggregates are —
+ * so a figure here and the same figure on the summary page can never disagree
+ * about which picks counted.
+ *
+ * Returns null for an id that is not an account, so the page can 404 rather
+ * than render an empty history for somebody who does not exist.
+ */
+export async function getPlayerFollows(userId: string): Promise<PlayerFollows | null> {
+  const [person] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+      lastLoginAt: users.lastLoginAt,
+      // Same correlated count as the cohort table, and qualified for the same
+      // reason: bare `created_at` is ambiguous across picks, slates and users.
+      opportunities: sql<number>`(
+        select count(*)::int from picks p
+        join slates s on s.date = p.slate_date and s.published_at is not null
+        where p.starts_at > ${users}.created_at
+      )`,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!person) return null;
+
+  const rows: FollowedPick[] = await db
+    .select({
+      pickId: picks.id,
+      slateDate: picks.slateDate,
+      category: picks.category,
+      market: picks.market,
+      rank: picks.rank,
+      league: picks.league,
+      event: picks.event,
+      selection: picks.selection,
+      price: picks.price,
+      units: picks.units,
+      status: picks.status,
+      startsAt: picks.startsAt,
+      finalScore: picks.finalScore,
+      takenAt: pickFollows.createdAt,
+    })
+    .from(pickFollows)
+    .innerJoin(picks, eq(picks.id, pickFollows.pickId))
+    .innerJoin(slates, eq(slates.date, picks.slateDate))
+    .where(and(eq(pickFollows.userId, userId), sql`${slates.publishedAt} is not null`))
+    .orderBy(desc(picks.slateDate), asc(picks.category), asc(picks.rank));
+
+  // "Current" is the pick's own grade, not the clock: a game that kicked off an
+  // hour ago is still riding as far as this tester is concerned until an admin
+  // settles it, and showing it as history would be claiming a result nobody
+  // has entered yet.
+  const open = rows.filter((r) => r.status === "pending");
+  const settled = rows.filter((r) => r.status !== "pending");
+
+  const byDay = bucket(settled, (r) => r.slateDate);
+
+  // Built oldest-first so the running total accumulates in the direction time
+  // runs, then reversed for display — newest day at the top.
+  const days: PlayerDay[] = [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .reduce<PlayerDay[]>((acc, [date, picksOnDay]) => {
+      const record = summarise(asBetaRows(picksOnDay));
+      const previous = acc.length > 0 ? acc[acc.length - 1].cumulativeUnits : 0;
+      acc.push({
+        date,
+        picks: picksOnDay,
+        record,
+        cumulativeUnits: previous + record.netUnits,
+      });
+      return acc;
+    }, [])
+    .reverse();
+
+  return {
+    user: person,
+    opportunities: person.opportunities,
+    consistency:
+      person.opportunities > 0 ? rows.length / person.opportunities : null,
+    record: summarise(asBetaRows(rows)),
+    open,
+    days,
+  };
 }

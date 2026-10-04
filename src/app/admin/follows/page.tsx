@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -378,7 +379,8 @@ export default async function AdminFollowsPage({
         <p className="mt-1 max-w-2xl text-xs text-fg-subtle">
           &ldquo;Of chances&rdquo; counts only the picks that were still ahead of
           kick-off when the account was created — somebody who joined on Tuesday
-          is not marked down for Monday&apos;s board.
+          is not marked down for Monday&apos;s board. Open a tester to see every
+          bet they have taken, day by day.
         </p>
 
         {analytics.testerRows.length === 0 ? (
@@ -409,7 +411,16 @@ export default async function AdminFollowsPage({
               <TableBody>
                 {analytics.testerRows.map((u) => (
                   <TableRow key={u.userId}>
-                    <TableCell className="text-fg">{u.email}</TableCell>
+                    <TableCell>
+                      {/* The row is the way into one player's card — their open
+                          bets and every day they have played. */}
+                      <Link
+                        href={`/admin/follows/${u.userId}`}
+                        className="text-fg underline-offset-4 transition-colors hover:text-brand hover:underline"
+                      >
+                        {u.email}
+                      </Link>
+                    </TableCell>
                     <TableCell className="num text-right text-fg">{u.follows}</TableCell>
                     <TableCell className="num text-right text-fg-muted">
                       {u.consistency === null ? "—" : formatRate(u.consistency)}
