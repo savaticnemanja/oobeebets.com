@@ -414,8 +414,8 @@ console.log("\nRole model");
   // Plural admins are the point of the change, so prove the model allows it
   // rather than trusting that dropping the enum value was enough.
   const [{ id: extraId }] = await sql`
-    insert into users (email, password_hash, role)
-    values (${"second-admin@example.com"}, ${"x"}, 'admin') returning id
+    insert into users (email, password_hash, role, username)
+    values (${"second-admin@example.com"}, ${"x"}, 'admin', 't_' || substr(md5(random()::text), 1, 12)) returning id
   `;
   const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
   check(n >= 2, "more than one admin can exist at once", `admins=${n}`);
@@ -541,8 +541,8 @@ let followedPickId = null;
   // deleted account, would be a row the analytics joins away silently — a
   // count that drifts from the truth with no error anywhere.
   const [throwaway] = await sql`
-    insert into users (email, password_hash, role)
-    values (${"fixture-follower@oobeebets.test"}, ${"x"}, 'user')
+    insert into users (email, password_hash, role, username)
+    values (${"fixture-follower@oobeebets.test"}, ${"x"}, 'user', 't_' || substr(md5(random()::text), 1, 12))
     on conflict (email) do update set role = 'user'
     returning id
   `;

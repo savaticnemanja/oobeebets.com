@@ -45,6 +45,8 @@ export const en = {
 
   /** Site chrome. */
   nav: {
+    home: "Home",
+    profile: "Profile",
     topPicks: "Our Top Picks",
     about: "About",
     picks: "Picks",

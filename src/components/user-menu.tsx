@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
-import { LogOut, Settings, Shield, Sparkles, User as UserIcon } from "lucide-react";
+import { CircleUser, House, LogOut, Settings, Shield, Sparkles, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +16,11 @@ import { t } from "@/lib/i18n";
 
 export function UserMenu({
   email,
+  username,
   isAdmin,
 }: {
   email: string;
+  username: string;
   isAdmin: boolean;
 }) {
   const initial = email.charAt(0).toUpperCase();
@@ -35,8 +37,21 @@ export function UserMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="truncate text-sm text-fg">{email}</span>
+          <span className="truncate text-xs text-fg-subtle">@{username}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href={`/u/${username}`}>
+            <CircleUser aria-hidden="true" />
+            {t().nav.profile}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/home">
+            <House aria-hidden="true" />
+            {t().nav.home}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/picks">
             <UserIcon aria-hidden="true" />

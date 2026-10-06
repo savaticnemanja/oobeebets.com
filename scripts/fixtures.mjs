@@ -37,8 +37,8 @@ export const TESTER_EMAIL = "fixture-tester@oobeebets.test";
 export async function ensureTester(sql, email = TESTER_EMAIL) {
   const passwordHash = await bcrypt.hash(randomBytes(24).toString("base64url"), 10);
   const [user] = await sql`
-    insert into users (email, password_hash, role, email_verified_at)
-    values (${email}, ${passwordHash}, 'user', now())
+    insert into users (email, password_hash, role, email_verified_at, username)
+    values (${email}, ${passwordHash}, 'user', now(), 't_' || substr(md5(random()::text), 1, 12))
     on conflict (email) do update set password_hash = ${passwordHash}
     returning id, email
   `;

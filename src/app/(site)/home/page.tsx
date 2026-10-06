@@ -1,0 +1,147 @@
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
+import { getAuth } from "@/lib/auth";
+import {
+  getFollowingCount,
+  getFollowingFeed,
+  getForYouFeed,
+  getWhoToFollow,
+} from "@/lib/social";
+import { Composer } from "@/components/social/composer";
+import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
+import { displayNameOf } from "@/components/social/identity";
+import { WhoToFollow } from "@/components/social/user-row";
+
+export const metadata: Metadata = {
+  title: "Home",
+  robots: { index: false, follow: false },
+};
+
+export const dynamic = "force-dynamic";
+
+type Tab = "for-you" | "following";
+
+/**
+ * The activity page. Two feeds, as on X:
+ *
+ *   For you   — everything recent, ranked by engagement (getForYouFeed). This
+ *               is the default curation, and the landing tab for anyone who
+ *               follows nobody yet, so a new tester's first look is a live
+ *               room rather than an empty page.
+ *   Following — the accounts you follow, newest first. Becomes the landing
+ *               tab the moment you follow one person.
+ *
+ * An explicit ?tab= always wins, so the choice survives "Show older posts".
+ */
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; before?: string; page?: string }>;
+}) {
+  const [auth, params] = await Promise.all([getAuth(), searchParams]);
+  if (!auth) redirect("/login?next=/home");
+  const viewerId = auth.user.id;
+
+  const followingCount = await getFollowingCount(viewerId);
+  const tab: Tab =
+    params.tab === "following" || params.tab === "for-you"
+      ? params.tab
+      : followingCount > 0
+        ? "following"
+        : "for-you";
+
+  const pageIndex = Math.max(0, Math.min(50, Number.parseInt(params.page ?? "0", 10) || 0));
+  const before = params.before && /^[0-9a-f-]{36}$/i.test(params.before) ? params.before : undefined;
+
+  const [feed, suggestions] = await Promise.all([
+    tab === "following" ? getFollowingFeed(viewerId, before) : getForYouFeed(viewerId, pageIndex),
+    getWhoToFollow(viewerId, 5),
+  ]);
+
+  const moreHref =
+    tab === "following"
+      ? feed.nextCursor && `/home?tab=following&before=${feed.nextCursor}`
+      : "nextPage" in feed && feed.nextPage !== null
+        ? `/home?tab=for-you&page=${feed.nextPage}`
+        : null;
+
+  const firstPage = !before && pageIndex === 0;
+  const viewerName = displayNameOf(auth.user);
+
+  return (
+    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-6">
+      <div className="min-h-dvh border-border sm:border-x">
+        <h1 className="px-4 pb-2 pt-4 text-xl font-semibold tracking-tight">Home</h1>
+        <FeedTabs
+          sticky
+          active={tab}
+          tabs={[
+            { key: "for-you", label: "For you", href: "/home?tab=for-you" },
+            { key: "following", label: "Following", href: "/home?tab=following" },
+          ]}
+        />
+
+        {firstPage && <Composer viewerName={viewerName} id="compose" />}
+
+        {/* Follows nobody: say why they're seeing what they're seeing, and
+            hand them the way out right here — the side rail is hidden on a
+            phone, which is where most testers are. */}
+        {tab === "for-you" && followingCount === 0 && firstPage && (
+          <div className="border-b border-border px-4 py-3">
+            <p className="flex items-start gap-2 text-sm text-fg-muted">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
+              <span>
+                You&apos;re seeing the most talked-about posts across oobee. Follow a few
+                people and your Following tab fills up with theirs.
+              </span>
+            </p>
+            {suggestions.length > 0 && (
+              <div className="-mx-4 mt-2 lg:hidden">
+                <WhoToFollow users={suggestions.slice(0, 3)} viewerId={viewerId} title="Start here" />
+              </div>
+            )}
+          </div>
+        )}
+
+        <FeedList
+          posts={feed.posts}
+          viewerId={viewerId}
+          isAdmin={auth.isAdmin}
+          moreHref={moreHref}
+          empty={
+            tab === "following" ? (
+              followingCount === 0 ? (
+                <>
+                  <EmptyFeed title="Your Following feed is empty">
+                    Follow people to see their posts here, newest first. Until then, For
+                    you has what everyone&apos;s talking about.
+                  </EmptyFeed>
+                  <div className="px-4 pb-6">
+                    <WhoToFollow users={suggestions} viewerId={viewerId} />
+                  </div>
+                </>
+              ) : (
+                <EmptyFeed title={firstPage ? "Nothing here yet" : "You're all caught up"}>
+                  {firstPage
+                    ? "The people you follow haven't posted yet. Say something yourself — it shows up here too."
+                    : "That's everything from the people you follow."}
+                </EmptyFeed>
+              )
+            ) : (
+              <EmptyFeed title={firstPage ? "Quiet in here" : "You're all caught up"}>
+                {firstPage ? "Nobody has posted yet. Be the first — what's your play today?" : null}
+              </EmptyFeed>
+            )
+          }
+        />
+      </div>
+
+      <aside className="hidden lg:block">
+        <div className="sticky top-[calc(4.5rem+var(--spacing-safe-top))] space-y-4 pt-4">
+          <WhoToFollow users={suggestions} viewerId={viewerId} />
+        </div>
+      </aside>
+    </div>
+  );
+}

@@ -14,6 +14,7 @@ import { idempotencyKey, sendEmail } from "@/lib/email/resend-client";
 import { inviteEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
 import { emailSchema, fieldErrorsFrom, onboardingSchema, type ActionState } from "@/lib/validation";
+import { mintUsername } from "@/lib/social";
 
 const ACCEPT_LIMIT = 10;
 const ACCEPT_WINDOW_MS = 15 * 60 * 1000;
@@ -195,13 +196,16 @@ export async function acceptInviteAction(
   const passwordHash = await hashPassword(password);
 
   let created: { id: string; email: string } | undefined;
-  try {
+  // Two attempts: a handle is minted free, but another signup can claim the
+  // same one in the instant before this insert. The second mint sees it taken.
+  for (let attempt = 0; attempt < 2 && !created; attempt++) try {
     [created] = await db
       .insert(users)
       .values({
         email: invite.email,
         passwordHash,
         displayName: name,
+        username: await mintUsername(name, invite.email),
         phone,
         monthlySpendBand: spendBand,
         role: "user",
@@ -215,6 +219,7 @@ export async function acceptInviteAction(
       // A concurrent submission of the same invite link won the race.
       return { ok: false, error: "This invite has already been used." };
     }
+    if (msg.includes("users_username_unique") && attempt === 0) continue;
     throw err;
   }
 

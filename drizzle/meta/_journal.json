@@ -64,6 +64,13 @@
       "when": 1791073347867,
       "tag": "0008_parlays",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791322602194,
+      "tag": "0009_social",
+      "breakpoints": true
     }
   ]
 }

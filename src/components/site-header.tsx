@@ -35,9 +35,16 @@ export async function SiteHeader() {
           {auth ? (
             <>
               <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+                <Link href="/home">{t().nav.home}</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
                 <Link href="/picks">{t().nav.picks}</Link>
               </Button>
-              <UserMenu email={auth.user.email} isAdmin={auth.isAdmin} />
+              <UserMenu
+                email={auth.user.email}
+                username={auth.user.username}
+                isAdmin={auth.isAdmin}
+              />
             </>
           ) : (
             <>

@@ -22,13 +22,17 @@ import bcrypt from "bcryptjs";
 import {
   auditLog,
   invitations,
+  linkPreviews,
   parlayLegs,
   parlays,
   pickFollows,
   picks,
+  postLikes,
+  posts,
   rateLimits,
   sessions,
   slates,
+  userFollows,
   users,
 } from "./schema";
 
@@ -113,6 +117,12 @@ async function main() {
   // able to check that claim against this list rather than against two foreign
   // keys three files away.
   await db.delete(pickFollows);
+  // The social tables all cascade from users and posts; listed for the same
+  // reason as everything else here.
+  await db.delete(postLikes);
+  await db.delete(userFollows);
+  await db.delete(posts);
+  await db.delete(linkPreviews);
   // Legs before parlays before picks: each cascades from the next, but the
   // list is the claim this function makes about itself and should be readable
   // without chasing foreign keys.
@@ -128,7 +138,14 @@ async function main() {
 
   const [created] = await db
     .insert(users)
-    .values({ email: ADMIN_EMAIL, passwordHash, role: "admin", emailVerifiedAt: new Date() })
+    .values({
+      email: ADMIN_EMAIL,
+      // The local part, reduced to what users_username_format accepts.
+      username: ADMIN_EMAIL.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 20).padEnd(3, "_"),
+      passwordHash,
+      role: "admin",
+      emailVerifiedAt: new Date(),
+    })
     .returning({ id: users.id, email: users.email, role: users.role });
 
   console.log("[seed] done — 1 account, no slates, no picks.");

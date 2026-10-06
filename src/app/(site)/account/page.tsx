@@ -6,6 +6,7 @@ import { getAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ProfileForm } from "@/components/social/profile-form";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -35,8 +36,26 @@ export default async function AccountPage() {
         </div>
       )}
 
+      {/* -------------------------------------------------------- profile */}
+      <Card className="mt-8 scroll-mt-20" id="profile">
+        <CardHeader>
+          <CardTitle>Public profile</CardTitle>
+          <CardDescription>
+            What other testers see on your profile and next to your posts. Your email
+            and phone number are never shown.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileForm
+            displayName={auth.user.displayName ?? ""}
+            username={auth.user.username}
+            bio={auth.user.bio ?? ""}
+          />
+        </CardContent>
+      </Card>
+
       {/* --------------------------------------------------------- access */}
-      <Card className="mt-8">
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle>Access</CardTitle>
           <CardDescription>Free during the beta — all 15 picks, every day.</CardDescription>

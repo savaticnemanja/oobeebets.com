@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   check,
   primaryKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -77,6 +78,16 @@ export const users = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name"),
+    /**
+     * The public handle — /u/<username>, and what @mentions resolve against.
+     * Stored lowercased; users_username_format enforces it, so the unique
+     * index is also case-insensitive without needing citext. Accounts that
+     * predate profiles were backfilled from their email in migration 0009,
+     * and new ones get one minted at creation (see mintUsername).
+     */
+    username: text("username").notNull(),
+    /** Shown on the public profile. Plain text, rendered with links. */
+    bio: text("bio"),
     phone: text("phone"),
     /** Nullable: legacy/seeded users predate onboarding; the app layer, not
      * the DB, enforces this for anyone who came through the invite flow. */
@@ -97,7 +108,10 @@ export const users = pgTable(
   (t) => [
     // Emails are stored lowercased by the app; the unique index enforces it.
     uniqueIndex("users_email_unique").on(t.email),
+    uniqueIndex("users_username_unique").on(t.username),
     index("users_role_idx").on(t.role),
+    check("users_username_format", sql`${t.username} ~ '^[a-z0-9_]{3,20}$'`),
+    check("users_bio_length", sql`${t.bio} is null or char_length(${t.bio}) <= 160`),
   ],
 );
 
@@ -424,6 +438,110 @@ export const parlayLegs = pgTable(
   ],
 );
 
+/* ----------------------------------------------------------------- social */
+
+/**
+ * A post on someone's public profile — and, with `parentId` set, a reply to
+ * another post. Replies are posts, the same as on X: they have their own
+ * likes, their own replies and their own page, and one table means one card,
+ * one query shape and one delete path for both.
+ *
+ * Deleting a post deletes the thread under it (cascade). That is blunter than
+ * X's "this post was deleted" tombstone, and deliberate for a small beta:
+ * a tombstone row is a second kind of post every query has to remember.
+ *
+ * `linkUrl` is the link the card is built from — the last URL in the body,
+ * picked once when the post is written so the feed never re-parses text.
+ * Its preview lives in link_previews, keyed by the URL, so a link shared by
+ * ten people is fetched once.
+ */
+export const posts = pgTable(
+  "posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parentId: uuid("parent_id").references((): AnyPgColumn => posts.id, {
+      onDelete: "cascade",
+    }),
+    body: text("body").notNull(),
+    linkUrl: text("link_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // A profile's timeline, and the Following feed (author in (...)).
+    index("posts_author_created_idx").on(t.authorId, t.createdAt),
+    // A post's replies, oldest first.
+    index("posts_parent_created_idx").on(t.parentId, t.createdAt),
+    // The For you feed scans recent top-level posts.
+    index("posts_created_idx").on(t.createdAt),
+    // Keep in step with POST_MAX_LENGTH in lib/social.ts.
+    check("posts_body_length", sql`char_length(${t.body}) between 1 and 280`),
+  ],
+);
+
+/** One row per like. The pair is the whole fact — same shape as pick_follows. */
+export const postLikes = pgTable(
+  "post_likes",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.postId] }),
+    // Counting a post's likes, and the cascade when it is deleted.
+    index("post_likes_post_idx").on(t.postId),
+  ],
+);
+
+/**
+ * Who follows whom. Named user_follows, not follows, because "follow" already
+ * means "I took this bet" in this codebase (pick_follows, lib/follows.ts).
+ */
+export const userFollows = pgTable(
+  "user_follows",
+  {
+    followerId: uuid("follower_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followeeId: uuid("followee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Leading column answers "who do I follow" — the Following feed.
+    primaryKey({ columns: [t.followerId, t.followeeId] }),
+    // "Who follows me" — follower counts and lists.
+    index("user_follows_followee_idx").on(t.followeeId),
+    check("user_follows_not_self", sql`${t.followerId} <> ${t.followeeId}`),
+  ],
+);
+
+/**
+ * Open Graph / Twitter card metadata for a URL, fetched server-side once and
+ * shared by every post that links it. A failed fetch is stored too (status
+ * "failed"), so a dead link is not re-fetched on every post that shares it;
+ * fetchedAt lets lib/link-preview.ts retry those after a while.
+ */
+export const linkPreviews = pgTable("link_previews", {
+  url: text("url").primaryKey(),
+  status: text("status", { enum: ["ok", "failed"] }).notNull(),
+  title: text("title"),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  siteName: text("site_name"),
+  /** twitter:card — "summary_large_image" draws the big image layout. */
+  cardType: text("card_type"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -506,6 +624,8 @@ export type Parlay = typeof parlays.$inferSelect;
 export type NewParlay = typeof parlays.$inferInsert;
 export type ParlayLeg = typeof parlayLegs.$inferSelect;
 export type NewPickFollow = typeof pickFollows.$inferInsert;
+export type Post = typeof posts.$inferSelect;
+export type LinkPreview = typeof linkPreviews.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type Role = (typeof roleEnum.enumValues)[number];

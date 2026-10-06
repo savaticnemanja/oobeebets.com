@@ -525,8 +525,8 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
 {
   // Promoting a second account has to grant the whole panel, not a subset —
   // there is no tier above admin to withhold anything any more.
-  await sql`insert into users (email, password_hash, role)
-            values (${secondAdmin}, ${"x"}, 'admin')`;
+  await sql`insert into users (email, password_hash, role, username)
+            values (${secondAdmin}, ${"x"}, 'admin', 't_' || substr(md5(random()::text), 1, 12))`;
 
   const ctx = await browser.newContext();
   await ctx.addCookies([await sessionCookie(secondAdmin)]);

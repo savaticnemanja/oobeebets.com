@@ -35,6 +35,7 @@ export const NAV_PUBLIC = [
 
 /** The signed-in surfaces. */
 export const NAV_APP = [
+  { href: "/home", label: t().nav.home },
   { href: "/picks", label: t().nav.picks },
   { href: "/top-picks", label: t().nav.topPicks },
   { href: "/my-bets", label: t().nav.myBets },
