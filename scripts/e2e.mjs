@@ -379,26 +379,23 @@ console.log("\nBuilding a parlay, and grading it from its legs");
   const page = await ctx.newPage();
   const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
 
-  await page.goto(`${APP_URL}/picks?category=parlay`);
-  await hydrated(page, 'button[role="checkbox"]');
-
-  const options = page.locator('button[role="checkbox"]');
-  const available = await options.count();
-  check(available >= 2, "the builder lists takeable picks", `options=${available}`);
-
-  // Save is refused until the ticket is actually a parlay.
-  const save = page.locator('button:has-text("Save parlay")');
-  check(await save.isDisabled(), "cannot save a parlay with no legs");
-  await options.nth(0).click();
-  check(await save.isDisabled(), "cannot save a one-leg parlay");
-
-  await options.nth(1).click();
-  // The slip prices the selection before it is saved, client-side.
-  const slip = await page.locator("text=/leg[s]? ·/").first().textContent();
-  check(/[+-]\d+/.test(slip ?? ""), "the slip shows a combined price before saving", slip?.trim());
-
-  await save.click();
-  await page.waitForTimeout(2500);
+  // Testers now build parlays from the odds feed on the Community tab, which
+  // needs a live provider this script does not have. What this section
+  // guards is the grading — a parlay graded from its legs, never stored — so
+  // the ticket is written directly from two of the board's picks, the shape
+  // every pre-feed tester parlay still has.
+  const two = await sql`
+    select id, slate_date from picks
+    where slate_date = (select max(slate_date) from picks where status = 'pending')
+      and status = 'pending'
+    order by category, rank limit 2
+  `;
+  check(two.length === 2, "two pending picks to build from", `picks=${two.length}`);
+  const [created] = await sql`
+    insert into parlays (owner_id, slate_date) values (${tester.id}, ${two[0].slate_date}) returning id
+  `;
+  await sql`insert into parlay_legs (parlay_id, pick_id) values
+    (${created.id}, ${two[0].id}), (${created.id}, ${two[1].id})`;
 
   const built = await sql`
     select p.id, count(l.pick_id)::int as legs
@@ -406,6 +403,12 @@ console.log("\nBuilding a parlay, and grading it from its legs");
     where p.owner_id = ${tester.id} group by p.id
   `;
   check(built.length === 1 && built[0].legs === 2, "a two-leg parlay is written", `parlays=${built.length} legs=${built[0]?.legs}`);
+
+  // The Community tab is on the board, and a parlay nobody shared is not on it.
+  await page.goto(`${APP_URL}/picks?category=community`);
+  check((await page.content()).includes("Community parlays"), "the Community parlays tab renders");
+  const [{ shared }] = await sql`select shared from parlays where id = ${created.id}`;
+  check(shared === false, "a parlay is private unless its builder shares it");
 
   const parlayId = built[0]?.id;
   const [ranked] = await sql`select rank, price from parlays where id = ${parlayId}`;

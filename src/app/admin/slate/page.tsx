@@ -3,6 +3,8 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { picks, slates } from "@/db/schema";
 import { PickComposer } from "@/components/admin/pick-composer";
+import { getSlateGames } from "@/lib/odds/board";
+import { ensureSlateOdds, getFeedStatus } from "@/lib/odds/sync";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
@@ -10,7 +12,7 @@ import {
   PARLAYS_PER_SLATE,
   PICKS_PER_SLATE,
   TAB_LABELS,
-  boardTabs,
+  adminBoardTabs,
   categoryFromParam,
   pickCategories,
   tabFromParam,
@@ -35,7 +37,8 @@ export default async function AdminSlatePage({
   const params = await searchParams;
   const date =
     params.date && isValidSlateDate(params.date) ? params.date : slateDateString();
-  const tab = tabFromParam(params.category);
+  const requestedTab = tabFromParam(params.category);
+  const tab = requestedTab === "community" ? "game" : requestedTab;
   const isParlayTab = tab === "parlay";
   const category = categoryFromParam(params.category);
 
@@ -65,6 +68,14 @@ export default async function AdminSlatePage({
     ? await Promise.all([getOobeeParlays(date), selectableLegs(date)])
     : [[], []];
 
+  // The pick composer chooses from the odds feed. Refreshed here only when
+  // the stored copy is stale, so reloading this screen does not spend credits.
+  if (!isParlayTab && !published) await ensureSlateOdds(date);
+  const [games, feed] =
+    !isParlayTab && !published
+      ? await Promise.all([getSlateGames(date), getFeedStatus()])
+      : [[], null];
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Publish slate</h1>
@@ -88,7 +99,7 @@ export default async function AdminSlatePage({
         aria-label="Board"
         className="mt-6 -mb-px flex items-center gap-1 border-b border-border"
       >
-        {boardTabs.map((c) => {
+        {adminBoardTabs.map((c) => {
           const isActive = c === tab;
           const [have, limit] =
             c === "parlay"
@@ -131,6 +142,8 @@ export default async function AdminSlatePage({
               category={category}
               pickCount={counts[category]}
               disabled={published}
+              games={games}
+              feed={feed ?? { configured: false, creditsRemaining: null, lastError: null }}
             />
           )}
         </div>

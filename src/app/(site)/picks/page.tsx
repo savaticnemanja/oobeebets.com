@@ -17,9 +17,13 @@ import {
   tabFromParam,
   visiblePicks,
 } from "@/lib/board";
-import { getOobeeParlays, getUserParlays, selectableLegs } from "@/lib/parlay-store";
+import { getCommunityParlays, getOobeeParlays, getUserParlays } from "@/lib/parlay-store";
 import { ParlayCard } from "@/components/parlay-card";
-import { DeleteParlayButton, ParlayBuilder } from "@/components/parlay-builder";
+import { DeleteParlayButton } from "@/components/parlay-builder";
+import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
+import { Avatar, displayNameOf } from "@/components/social/identity";
+import { getSlateGames } from "@/lib/odds/board";
+import { ensureSlateOdds, refreshResults } from "@/lib/odds/sync";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +61,9 @@ export default async function PicksPage({
   // the parlay tab it points at a different table entirely.
   const tab = tabFromParam(params.category);
   const isParlayTab = tab === "parlay";
+  const isCommunityTab = tab === "community";
+  // Grade anything whose game has finished before reading results.
+  await refreshResults();
   const category = categoryFromParam(params.category);
 
   const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
@@ -67,7 +74,7 @@ export default async function PicksPage({
   // Filtered in SQL rather than in memory: (slate_date, category) is the
   // leading edge of picks_slate_rank_unique, so the tab query is an index
   // range read, and the tab you are not looking at is never fetched.
-  const rows: Pick[] = visible && !isParlayTab
+  const rows: Pick[] = visible && !isParlayTab && !isCommunityTab
     ? await db
         .select()
         .from(picksTable)
@@ -134,21 +141,31 @@ export default async function PicksPage({
     return { taken: takenIds.has(p.id), open: followWindowOpen(p) };
   }
 
-  // The parlay tab reads a different table, so none of this is fetched for the
-  // two tabs that do not show it. The viewer's own parlays are filtered to the
-  // day on screen — their full history lives on /my-bets.
-  const [oobeeParlays, myParlays, buildable] = isParlayTab && visible
+  // The parlay tabs read other tables, so none of this is fetched for the tabs
+  // that do not show it. The viewer's own parlays are filtered to the day on
+  // screen — their full history lives on /my-bets.
+  const oobeeParlays = isParlayTab && visible ? await getOobeeParlays(date) : [];
+
+  // The Community tab needs no Oobee slate at all: it is built from the odds
+  // feed, which is refreshed here only if the stored copy is stale.
+  if (isCommunityTab) await ensureSlateOdds(date);
+  const [communityParlays, myParlays, games] = isCommunityTab
     ? await Promise.all([
-        getOobeeParlays(date),
+        getCommunityParlays(date),
         getUserParlays(auth.user.id),
-        published ? selectableLegs(date) : Promise.resolve([]),
+        getSlateGames(date),
       ])
     : [[], [], []];
 
   const myParlaysToday = myParlays.filter((p) => p.slateDate === date);
+  const othersShared = communityParlays.filter((p) => p.ownerId !== auth.user.id);
 
   /** What the heading counts — the parlay tab has its own table. */
-  const tabCount = isParlayTab ? oobeeParlays.length : view.length;
+  const tabCount = isParlayTab
+    ? oobeeParlays.length
+    : isCommunityTab
+      ? communityParlays.length
+      : view.length;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -171,7 +188,7 @@ export default async function PicksPage({
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-muted">
             <CalendarDays className="size-3.5" aria-hidden="true" />
             <span className="num">{formatSlateDate(date)}</span>
-            {slate?.publishedAt ? (
+            {slate?.publishedAt || isCommunityTab ? (
               <>
                 <span aria-hidden="true">·</span>
                 {/* Counted off whichever table this tab reads. Before, the
@@ -201,7 +218,7 @@ export default async function PicksPage({
           circles are discoverable on their own, but "it is one tap and we
           never ask for a stake" is not, and it is the part that decides
           whether a tester bothers. */}
-      {published && !isParlayTab && view.length > 0 && (
+      {published && !isParlayTab && !isCommunityTab && view.length > 0 && (
         <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
           <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span>
@@ -220,7 +237,12 @@ export default async function PicksPage({
           const isActive = c === tab;
           // The parlay count comes from its own table; the other two are in
           // the tally above. Zero renders as nothing either way.
-          const n = c === "parlay" ? oobeeParlays.length : (countFor.get(c) ?? 0);
+          const n =
+            c === "parlay"
+              ? oobeeParlays.length
+              : c === "community"
+                ? communityParlays.length
+                : (countFor.get(c) ?? 0);
           return (
             <Link
               key={c}
@@ -246,7 +268,74 @@ export default async function PicksPage({
       </nav>
 
       {/* ------------------------------------------------------- parlay tab */}
-      {isParlayTab ? (
+      {isCommunityTab ? (
+        <div className="mt-8 space-y-10">
+          <section aria-labelledby="build-heading">
+            <h2 id="build-heading" className="text-sm font-semibold tracking-tight">
+              Build a parlay
+            </h2>
+            <div className="mt-4">
+              <CommunityParlayBuilder games={games} />
+            </div>
+          </section>
+
+          {myParlaysToday.length > 0 && (
+            <section aria-labelledby="my-parlays-heading">
+              <h2 id="my-parlays-heading" className="text-sm font-semibold tracking-tight">
+                Your parlays today
+              </h2>
+              <p className="mt-1 text-xs text-fg-subtle">
+                Graded leg by leg as the games finish. Shared ones appear below for
+                everyone; private ones only here and on My bets.
+              </p>
+              <div className="mt-4 grid gap-3">
+                {myParlaysToday.map((pl) => (
+                  <ParlayCard key={pl.id} parlay={pl}>
+                    <div className="flex items-center gap-3">
+                      <ShareToggle parlayId={pl.id} shared={pl.shared} />
+                      {pl.open && <DeleteParlayButton parlayId={pl.id} />}
+                    </div>
+                  </ParlayCard>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section aria-labelledby="community-heading">
+            <h2 id="community-heading" className="text-sm font-semibold tracking-tight">
+              From the community
+            </h2>
+            {othersShared.length === 0 ? (
+              <p className="mt-2 text-sm text-fg-muted">
+                Nobody has shared a parlay for this day yet. Build one and be first.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {othersShared.map((pl) => (
+                  <ParlayCard key={pl.id} parlay={pl}>
+                    {pl.ownerUsername && (
+                      <Link
+                        href={`/u/${pl.ownerUsername}`}
+                        className="flex min-w-0 items-center gap-2 text-xs text-fg-muted hover:text-fg"
+                      >
+                        <Avatar
+                          name={displayNameOf({ displayName: pl.ownerDisplayName, username: pl.ownerUsername })}
+                          size="sm"
+                          className="size-6 text-[0.625rem]"
+                        />
+                        <span className="truncate">
+                          {displayNameOf({ displayName: pl.ownerDisplayName, username: pl.ownerUsername })}{" "}
+                          <span className="text-fg-subtle">@{pl.ownerUsername}</span>
+                        </span>
+                      </Link>
+                    )}
+                  </ParlayCard>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : isParlayTab ? (
         <div className="mt-8 space-y-10">
           {/* Oobee's own, ranked like the other two boards. */}
           <section aria-labelledby="oobee-parlays-heading">
@@ -273,34 +362,16 @@ export default async function PicksPage({
             )}
           </section>
 
-          {/* The tester's own. Only on a published board — there is nothing to
-              build from a draft, and the action refuses it regardless. */}
-          {published && (
-            <section aria-labelledby="my-parlays-heading">
-              <h2 id="my-parlays-heading" className="text-sm font-semibold tracking-tight">
-                Your parlays
-              </h2>
-              <p className="mt-1 text-xs text-fg-subtle">
-                Built from today&apos;s picks, graded leg by leg. These are yours
-                alone — nobody else sees them, and they never touch Oobee&apos;s
-                record.
-              </p>
-
-              {myParlaysToday.length > 0 && (
-                <div className="mt-4 grid gap-3">
-                  {myParlaysToday.map((pl) => (
-                    <ParlayCard key={pl.id} parlay={pl}>
-                      {pl.open && <DeleteParlayButton parlayId={pl.id} />}
-                    </ParlayCard>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-4">
-                <ParlayBuilder legs={buildable} />
-              </div>
-            </section>
-          )}
+          <p className="text-sm text-fg-muted">
+            Want your own?{" "}
+            <Link
+              href={date === today ? "/picks?category=community" : `/picks?date=${date}&category=community`}
+              className="text-brand hover:underline"
+            >
+              Build one on Community parlays
+            </Link>{" "}
+            from any line on today&apos;s games.
+          </p>
         </div>
       ) : view.length === 0 ? (
         <div className="card-hairline mt-8 p-10 text-center">

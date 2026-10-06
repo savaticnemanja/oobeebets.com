@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Layers, Ticket } from "lucide-react";
 import { getAuth } from "@/lib/auth";
+import { refreshResults } from "@/lib/odds/sync";
 import { getUserParlays } from "@/lib/parlay-store";
 import { getMySingles, summariseMyBets, type MyBets } from "@/lib/stats";
 import { MIN_SAMPLE_FOR_RATE, pickProfit } from "@/lib/settlement";
@@ -60,6 +61,7 @@ function RecordRow({ label, record }: { label: string; record: MyBets["singles"]
 export default async function MyBetsPage() {
   const auth = await getAuth();
   if (!auth) redirect("/login?next=/my-bets");
+  await refreshResults();
 
   const [singles, parlays] = await Promise.all([
     getMySingles(auth.user.id),

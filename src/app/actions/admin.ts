@@ -6,14 +6,19 @@ import { db } from "@/db";
 import { auditLog, picks, slates, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { canManageRole, requireAdmin, revokeAllSessions } from "@/lib/auth";
+import { fieldErrorsFrom, settleSchema, type ActionState } from "@/lib/validation";
+import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
+import { freezeLine } from "@/lib/odds/board";
+import { settleSelection, unsettleSelection } from "@/lib/odds/settle";
 import {
-  fieldErrorsFrom,
-  LEAGUE_SPORT,
-  pickSchema,
-  settleSchema,
-  type ActionState,
-} from "@/lib/validation";
-import { isValidSlateDate, zonedTimeToUtc } from "@/lib/slate-date";
+  LEAGUE_CONFIG,
+  eventLabel,
+  lineLabel,
+  marketCategory,
+  marketEnum,
+  type FeedLeague,
+} from "@/lib/odds/markets";
+import { formatOdds } from "@/lib/i18n/format";
 import {
   CATEGORY_LABELS,
   CATEGORY_NOUN,
@@ -57,28 +62,60 @@ function revalidateSlate() {
 
 /* ------------------------------------------------------------ create pick */
 
+const createPickSchema = z.object({
+  slateDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  /** The feed line the pick is made from — everything about the bet comes off it. */
+  lineId: z.string().uuid("Choose a line from the feed"),
+  /** The price the admin was looking at; a moved price is refused, not taken. */
+  expectedPrice: z.coerce.number().int(),
+  units: z.coerce.number().min(0.1).max(10).default(1),
+  confidence: z.coerce.number().int().min(0).max(100).optional(),
+  evPct: z.coerce.number().min(-100).max(100).optional(),
+  reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+/**
+ * Puts a pick on the board from a line in the odds feed.
+ *
+ * Nothing about the bet itself is typed any more — not the teams, not the
+ * kick-off, not the selection, not the price. All of it is copied off the
+ * feed line at this moment and frozen into a selection (lib/odds/board.ts),
+ * which is also what gets graded. What the admin still supplies is the
+ * opinion: the stake, the confidence, the edge and the write-up.
+ */
 export async function createPickAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const actor = await requireAdmin();
 
-  const parsed = pickSchema.safeParse(Object.fromEntries(formData));
+  const parsed = createPickSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { ok: false, error: "Check the fields", fieldErrors: fieldErrorsFrom(parsed.error) };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the fields", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
   const d = parsed.data;
+  if (!isValidSlateDate(d.slateDate)) return { ok: false, error: "Bad slate date" };
 
-  const startsAt = zonedTimeToUtc(d.startsAt);
-  if (Number.isNaN(startsAt.getTime())) {
-    return { ok: false, error: "Invalid kick-off time", fieldErrors: { startsAt: ["Invalid date"] } };
+  const frozen = await freezeLine(d.lineId, d.expectedPrice);
+  if (!frozen.ok) {
+    return {
+      ok: false,
+      error: frozen.movedTo !== undefined
+        ? `The price moved to ${formatOdds(frozen.movedTo)} — check it and add again.`
+        : frozen.error,
+    };
+  }
+  const { game, line, selectionId } = frozen;
+
+  // A pick belongs to the betting day its game is played on, whichever day's
+  // board the admin happened to have open.
+  if (slateDateString(game.commenceTime) !== d.slateDate) {
+    return { ok: false, error: "That game is on a different day's slate." };
   }
 
-  // A player prop is always market "prop" — derived here rather than trusted
-  // from the form, for the same reason sport is derived from league: one less
-  // pair of fields a forged request can put out of step.
-  const market = d.category === "prop" ? "prop" : d.market;
-  const limit = PICKS_PER_SLATE[d.category];
+  const category = marketCategory(line.marketKey);
+  const limit = PICKS_PER_SLATE[category];
+  const league = game.league as FeedLeague;
 
   // Rank is never typed in — a new pick always lands on the lowest free rank
   // *within its own category* (filling a gap left by a deleted pick, or
@@ -93,46 +130,57 @@ export async function createPickAction(
         .values({ date: d.slateDate })
         .onConflictDoNothing({ target: slates.date });
 
+      const [dupe] = await tx
+        .select({ id: picks.id })
+        .from(picks)
+        .where(and(eq(picks.slateDate, d.slateDate), eq(picks.selectionId, selectionId)))
+        .limit(1);
+      if (dupe) throw new Error("Already on the board");
+
       const free = await tx.execute<{ rank: number | null }>(sql`
         select min(t.rank) as rank
         from generate_series(1, ${limit}) as t(rank)
         where not exists (
           select 1 from ${picks} p
           where p.slate_date = ${d.slateDate}
-            and p.category = ${d.category}::pick_category
+            and p.category = ${category}::pick_category
             and p.rank = t.rank
         )
       `);
 
       if (free[0]?.rank == null) {
         throw new Error(
-          `Slate is full — ${limit} ${CATEGORY_NOUN[d.category]}s max`,
+          `Slate is full — ${limit} ${CATEGORY_NOUN[category]}s max`,
         );
       }
       nextRank = free[0].rank;
 
       await tx.insert(picks).values({
         slateDate: d.slateDate,
-        category: d.category,
+        category,
         rank: nextRank,
-        sport: LEAGUE_SPORT[d.league],
-        league: d.league,
-        event: `${d.awayTeam} vs ${d.homeTeam}`,
-        startsAt,
-        market,
-        selection: d.selection,
-        price: d.price,
-        book: d.book || null,
+        sport: LEAGUE_CONFIG[league]?.sport ?? "football",
+        league,
+        event: eventLabel(game),
+        startsAt: game.commenceTime,
+        market: marketEnum(line.marketKey),
+        selection: lineLabel(line),
+        price: line.price,
+        book: line.bookTitle,
         units: String(d.units),
         confidence: d.confidence ?? null,
         evPct: d.evPct !== undefined ? String(d.evPct) : null,
         reasoning: d.reasoning || null,
+        selectionId,
       });
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("Slate is full")) {
       return { ok: false, error: msg };
+    }
+    if (msg.includes("Already on the board")) {
+      return { ok: false, error: "That exact bet is already on today's board." };
     }
     if (msg.includes("picks_slate_rank_unique")) {
       return { ok: false, error: "Someone else just added a pick — try again." };
@@ -142,11 +190,15 @@ export async function createPickAction(
 
   await audit(actor, "pick.created", "pick", undefined, {
     slateDate: d.slateDate,
-    category: d.category,
+    category,
     rank: nextRank,
+    selectionId,
+    line: lineLabel(line),
+    price: line.price,
+    book: line.bookTitle,
   });
   revalidateSlate();
-  return { ok: true, message: `${CATEGORY_LABELS[d.category]} — rank ${nextRank} added.` };
+  return { ok: true, message: `${CATEGORY_LABELS[category]} — rank ${nextRank}: ${lineLabel(line)} ${formatOdds(line.price)}` };
 }
 
 /* ----------------------------------------------------------- reorder picks */
@@ -325,6 +377,19 @@ export async function settlePickAction(
   const [existing] = await db.select().from(picks).where(eq(picks.id, pickId)).limit(1);
   if (!existing) return { ok: false, error: "Pick not found" };
 
+  // A feed-backed pick is settled through its selection, which writes this
+  // pick and every community leg on the same bet in one go — settling the
+  // pick alone would leave the two disagreeing about one result.
+  if (existing.selectionId) {
+    await settleSelection(
+      existing.selectionId,
+      { status, finalScore: finalScore || null, voidReason: voidReason || null },
+      { id: actor.user.id, email: actor.user.email },
+    );
+    revalidateSlate();
+    return { ok: true, message: `Settled as ${status}.` };
+  }
+
   await db
     .update(picks)
     .set({
@@ -358,6 +423,12 @@ export async function unsettlePickAction(
 
   const [existing] = await db.select().from(picks).where(eq(picks.id, id.data)).limit(1);
   if (!existing) return { ok: false, error: "Pick not found" };
+
+  if (existing.selectionId) {
+    await unsettleSelection(existing.selectionId, { id: actor.user.id, email: actor.user.email });
+    revalidateSlate();
+    return { ok: true, message: "Reset to pending." };
+  }
 
   await db
     .update(picks)
@@ -430,3 +501,51 @@ export async function setUserRoleAction(
   return { ok: true, message: `${target.email} is now ${parsed.data.role}.` };
 }
 
+
+/* ----------------------------------------------- community legs (selections) */
+
+/**
+ * Settles a selection no Oobee pick points at — a community-parlay leg. Game
+ * lines grade themselves from the final score; this is for player props,
+ * which the feed cannot grade, and for corrections (a postponed game voids).
+ */
+export async function settleSelectionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const parsed = z
+    .object({
+      selectionId: z.string().uuid(),
+      status: z.enum(["won", "lost", "push", "void"]),
+      finalScore: z.string().trim().max(60).optional().or(z.literal("")),
+      voidReason: z.string().trim().max(300).optional().or(z.literal("")),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, error: "Check the fields" };
+  const { selectionId, status, finalScore, voidReason } = parsed.data;
+  if (status === "void" && !voidReason) {
+    return { ok: false, error: "A void needs a reason — it goes in the audit log." };
+  }
+  await settleSelection(
+    selectionId,
+    { status, finalScore: finalScore || null, voidReason: voidReason || null },
+    { id: actor.user.id, email: actor.user.email },
+  );
+  revalidateSlate();
+  revalidatePath("/my-bets");
+  return { ok: true, message: `Settled as ${status}.` };
+}
+
+export async function unsettleSelectionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const id = z.string().uuid().safeParse(formData.get("selectionId"));
+  if (!id.success) return { ok: false, error: "Bad selection id" };
+  await unsettleSelection(id.data, { id: actor.user.id, email: actor.user.email });
+  revalidateSlate();
+  revalidatePath("/my-bets");
+  return { ok: true, message: "Reset to pending." };
+}

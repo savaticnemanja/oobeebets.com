@@ -2,6 +2,9 @@ import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { picks } from "@/db/schema";
 import { SettleList } from "@/components/admin/settle-list";
+import { CommunityLegList } from "@/components/admin/community-leg-list";
+import { getPendingCommunityLegs } from "@/lib/odds/board";
+import { refreshResults } from "@/lib/odds/sync";
 import { Badge } from "@/components/ui/badge";
 import type { Metadata } from "next";
 
@@ -10,6 +13,11 @@ export const metadata: Metadata = { title: "Settle" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminSettlePage() {
+  // Game lines grade themselves from the final score; fetch any that are due
+  // first, so this page only lists what genuinely needs a person.
+  await refreshResults();
+  const communityLegs = await getPendingCommunityLegs();
+
   // Anything that has started and is still pending needs a result. Ordered
   // oldest-first so the longest-outstanding games get cleared first.
   const due = await db
@@ -38,7 +46,9 @@ export default async function AdminSettlePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settle</h1>
           <p className="mt-1.5 text-sm text-fg-muted">
-            One click per pick. Every result is written to the audit log and appears on
+            Game bets from the odds feed settle themselves from the final score. What
+            is left here is player props, hand-entered picks from before the feed,
+            and corrections. Every result is written to the audit log and appears on
             the public record immediately.
           </p>
         </div>
@@ -52,6 +62,19 @@ export default async function AdminSettlePage() {
           </h2>
           <div className="mt-3">
             <SettleList picks={due} emptyMessage="Nothing waiting — you're up to date." />
+          </div>
+        </section>
+
+        <section aria-labelledby="community-legs-heading">
+          <h2 id="community-legs-heading" className="text-sm font-semibold tracking-tight">
+            Community parlay legs
+          </h2>
+          <p className="mt-1 text-xs text-fg-subtle">
+            Player props testers put in their parlays. The feed has no player stats,
+            so these need a result from you.
+          </p>
+          <div className="mt-3">
+            <CommunityLegList legs={communityLegs} />
           </div>
         </section>
 

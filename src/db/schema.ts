@@ -6,6 +6,8 @@ import {
   integer,
   timestamp,
   date,
+  boolean,
+  unique,
   numeric,
   jsonb,
   index,
@@ -227,10 +229,23 @@ export const picks = pgTable(
     settledBy: uuid("settled_by").references(() => users.id, { onDelete: "set null" }),
     voidReason: text("void_reason"),
 
+    /**
+     * The odds-feed line this pick was made from. Since migration 0010 a pick
+     * can only be created from one: the game, kick-off, selection, price and
+     * book above are all copied off the selection at that moment rather than
+     * typed, and the result comes from settling the selection (see
+     * lib/odds/settle.ts), which writes this row's status too.
+     *
+     * NULL only on the handful of picks typed in by hand before the feed
+     * existed. They keep working exactly as they did, settled by hand.
+     */
+    selectionId: uuid("selection_id").references((): AnyPgColumn => selections.id),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    index("picks_selection_idx").on(t.selectionId),
     // NOTE: declared here as a plain index because drizzle-kit's schema
     // builder can't express DEFERRABLE — but in the live DB, as of migration
     // 0002 and re-keyed in 0006, this is actually a DEFERRABLE INITIALLY
@@ -372,10 +387,18 @@ export const parlays = pgTable(
     evPct: numeric("ev_pct", { precision: 5, scale: 2 }),
     reasoning: text("reasoning"),
     book: text("book"),
+    /**
+     * A tester's parlay on the Community parlays tab, for everyone to see.
+     * False for every parlay built before that tab existed — those were built
+     * as private, and stay private. Always false on Oobee's own.
+     */
+    shared: boolean("shared").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // The Community tab: shared parlays for one day.
+    index("parlays_shared_slate_idx").on(t.slateDate).where(sql`${t.shared}`),
     // A tester's list of their own parlays, newest first — the dashboard's
     // only query. Oobee's rows have a null owner and sort out of it for free.
     index("parlays_owner_idx").on(t.ownerId, t.slateDate),
@@ -542,6 +565,165 @@ export const linkPreviews = pgTable("link_previews", {
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* -------------------------------------------------------------- odds feed */
+
+/**
+ * A game, as the odds provider (The Odds API) describes it. The id is the
+ * provider's own event id, so a re-sync updates the same row rather than
+ * creating a second copy of the same fixture.
+ *
+ * Scores arrive from the provider's scores endpoint once the game is under
+ * way; `completed` is the provider saying they are final, and is what lets
+ * lib/odds/settle.ts grade every selection on this game.
+ */
+export const games = pgTable(
+  "games",
+  {
+    id: text("id").primaryKey(),
+    /** "NFL" | "MLB" — the leagues in lib/odds/config.ts. */
+    league: text("league").notNull(),
+    sportKey: text("sport_key").notNull(),
+    homeTeam: text("home_team").notNull(),
+    awayTeam: text("away_team").notNull(),
+    commenceTime: timestamp("commence_time", { withTimezone: true }).notNull(),
+    completed: boolean("completed").notNull().default(false),
+    homeScore: integer("home_score"),
+    awayScore: integer("away_score"),
+    scoresUpdatedAt: timestamp("scores_updated_at", { withTimezone: true }),
+    /** Player props are fetched per game, on demand; this is when last. */
+    propsSyncedAt: timestamp("props_synced_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("games_league_commence_idx").on(t.league, t.commenceTime)],
+);
+
+/**
+ * One price at one book for one outcome of one market — the raw feed.
+ *
+ * Rows are updated in place on every sync (the natural key below), so a line
+ * id stays valid while its price moves. A line that drops out of the feed is
+ * marked unavailable rather than deleted: the books pulled it, and nothing
+ * new may be built on it, but its history is not ours to erase.
+ *
+ * Nobody bets on a line directly. Picking one copies it into `selections`,
+ * which is frozen; this table is allowed to keep moving underneath.
+ */
+export const lines = pgTable(
+  "lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: text("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    /** Provider market key: h2h, spreads, totals, player_pass_yds, ... */
+    marketKey: text("market_key").notNull(),
+    /** Team name, "Over" / "Under", or "Yes" for a scorer prop. */
+    outcome: text("outcome").notNull(),
+    /** Player props only. */
+    player: text("player"),
+    /** The handicap or total. NULL on moneylines and yes/no props. */
+    point: numeric("point", { precision: 6, scale: 1 }),
+    /** American odds. */
+    price: integer("price").notNull(),
+    book: text("book").notNull(),
+    bookTitle: text("book_title").notNull(),
+    available: boolean("available").notNull().default(true),
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // NULLS NOT DISTINCT: a moneyline has no point and a game line no player,
+    // and without it two syncs of the same moneyline would be two rows.
+    unique("lines_natural_key")
+      .on(t.gameId, t.marketKey, t.outcome, t.player, t.point, t.book)
+      .nullsNotDistinct(),
+    index("lines_game_market_idx").on(t.gameId, t.marketKey),
+    check("lines_price_valid", sql`${t.price} >= 100 or ${t.price} <= -100`),
+  ],
+);
+
+/**
+ * A line frozen at the moment somebody picked it — the thing that is actually
+ * bet on and graded. Oobee's picks point here (picks.selection_id), and so do
+ * the legs of community parlays (parlay_selection_legs).
+ *
+ * Deduplicated on everything that defines the bet, price included: ten
+ * testers taking the same over at the same price share one row and are graded
+ * once. The same over at a moved price is a different bet and a different row.
+ *
+ * The result lives here and only here for feed-backed bets. Game markets are
+ * graded automatically from the final score; player props by an admin on
+ * /admin/settle, since the feed has no player stats.
+ */
+export const selections = pgTable(
+  "selections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: text("game_id")
+      .notNull()
+      .references(() => games.id),
+    marketKey: text("market_key").notNull(),
+    outcome: text("outcome").notNull(),
+    player: text("player"),
+    point: numeric("point", { precision: 6, scale: 1 }),
+    price: integer("price").notNull(),
+    book: text("book").notNull(),
+    bookTitle: text("book_title").notNull(),
+    status: pickStatusEnum("status").notNull().default("pending"),
+    finalScore: text("final_score"),
+    voidReason: text("void_reason"),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    /** NULL with a settledAt means the grader did it from the final score. */
+    settledBy: uuid("settled_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("selections_natural_key")
+      .on(t.gameId, t.marketKey, t.outcome, t.player, t.point, t.price, t.book)
+      .nullsNotDistinct(),
+    index("selections_game_idx").on(t.gameId),
+    index("selections_status_idx").on(t.status),
+    check("selections_price_valid", sql`${t.price} >= 100 or ${t.price} <= -100`),
+  ],
+);
+
+/**
+ * The legs of a community parlay: selections rather than Oobee's picks.
+ * A separate table from parlay_legs rather than a second nullable column on
+ * it, so neither table needs an "exactly one of these" constraint and every
+ * existing parlay keeps its exact shape.
+ */
+export const parlaySelectionLegs = pgTable(
+  "parlay_selection_legs",
+  {
+    parlayId: uuid("parlay_id")
+      .notNull()
+      .references(() => parlays.id, { onDelete: "cascade" }),
+    selectionId: uuid("selection_id")
+      .notNull()
+      .references(() => selections.id),
+  },
+  (t) => [
+    primaryKey({ columns: [t.parlayId, t.selectionId] }),
+    index("parlay_selection_legs_selection_idx").on(t.selectionId),
+  ],
+);
+
+/**
+ * When each slice of the feed was last fetched, so pages can trigger a sync
+ * without a stampede: whoever moves `syncedAt` forward first does the fetch,
+ * everyone else reads what is already there. Also keeps the provider's
+ * remaining-credit count, which /admin/slate shows.
+ */
+export const oddsSync = pgTable("odds_sync", {
+  /** e.g. "odds:MLB:2026-10-07", "props:<gameId>", "scores:NFL", "quota". */
+  key: text("key").primaryKey(),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull(),
+  creditsRemaining: integer("credits_remaining"),
+  creditsUsed: integer("credits_used"),
+  lastError: text("last_error"),
+});
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -625,6 +807,9 @@ export type NewParlay = typeof parlays.$inferInsert;
 export type ParlayLeg = typeof parlayLegs.$inferSelect;
 export type NewPickFollow = typeof pickFollows.$inferInsert;
 export type Post = typeof posts.$inferSelect;
+export type Game = typeof games.$inferSelect;
+export type Line = typeof lines.$inferSelect;
+export type Selection = typeof selections.$inferSelect;
 export type LinkPreview = typeof linkPreviews.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;

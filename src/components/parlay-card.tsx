@@ -94,7 +94,7 @@ export function ParlayCard({
       {/* ------------------------------------------------------------- legs */}
       <ol className="mt-3 space-y-1.5 border-l border-border pl-3">
         {legs.map((l) => (
-          <li key={l.pickId} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+          <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
             <span aria-hidden="true" className="text-xs">
               {SPORT_EMOJI[l.sport]}
             </span>
@@ -189,7 +189,7 @@ export function ParlayLegList({ legs }: { legs: ParlayView["legs"] }) {
   return (
     <ol className="space-y-0.5">
       {legs.map((l) => (
-        <li key={l.pickId} className="flex items-baseline gap-2 text-xs">
+        <li key={l.key} className="flex items-baseline gap-2 text-xs">
           <span
             className={cn(
               "text-fg",

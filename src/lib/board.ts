@@ -99,18 +99,26 @@ export function visiblePicks<T extends { rank: number; category: PickCategory }>
  * stops a parlay leaking into the singles record: anything iterating
  * `pickCategories` still sees exactly the two things that live in `picks`.
  */
-export const boardTabs = ["game", "prop", "parlay"] as const;
+export const boardTabs = ["game", "prop", "parlay", "community"] as const;
+
+/**
+ * The admin slate screen edits Oobee's board only. Community parlays belong
+ * to testers, so that tab is not one an admin publishes.
+ */
+export const adminBoardTabs = ["game", "prop", "parlay"] as const;
 
 export type BoardTab = (typeof boardTabs)[number];
 
 export const TAB_LABELS: Record<BoardTab, string> = {
   ...CATEGORY_LABELS,
   parlay: "Oobee parlays",
+  community: "Community parlays",
 };
 
 export const TAB_NOUN: Record<BoardTab, string> = {
   ...CATEGORY_NOUN,
   parlay: "parlay",
+  community: "community parlay",
 };
 
 /**

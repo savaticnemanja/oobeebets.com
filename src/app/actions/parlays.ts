@@ -4,7 +4,18 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, parlayLegs, parlays, picks, slates } from "@/db/schema";
+import {
+  auditLog,
+  games,
+  parlayLegs,
+  parlaySelectionLegs,
+  parlays,
+  picks,
+  selections,
+  slates,
+} from "@/db/schema";
+import { freezeLine } from "@/lib/odds/board";
+import { formatOdds } from "@/lib/i18n/format";
 import type { AuthContext } from "@/lib/auth";
 import { getAuth, requireAdmin } from "@/lib/auth";
 import {
@@ -13,7 +24,7 @@ import {
   parlayWindowOpen,
 } from "@/lib/parlays";
 import { PARLAYS_PER_SLATE } from "@/lib/board";
-import { isValidSlateDate } from "@/lib/slate-date";
+import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 
 /**
@@ -86,53 +97,107 @@ async function validateLegs(
   return { ok: true, legs: { slateDate: [...dates][0], ids } };
 }
 
-/** Writes the parlay and its legs together, or neither. */
-async function insertParlay(
-  values: typeof parlays.$inferInsert,
-  legIds: string[],
-): Promise<string> {
-  return db.transaction(async (tx) => {
-    const [row] = await tx.insert(parlays).values(values).returning({ id: parlays.id });
-    await tx.insert(parlayLegs).values(legIds.map((pickId) => ({ parlayId: row.id, pickId })));
-    return row.id;
-  });
-}
-
 /* ------------------------------------------------------- a tester's parlay */
 
+const communityLegsSchema = z
+  .array(z.object({ lineId: z.string().uuid(), price: z.number().int() }))
+  .min(MIN_PARLAY_LEGS, `A parlay needs at least ${MIN_PARLAY_LEGS} legs`)
+  .max(MAX_PARLAY_LEGS, `A parlay tops out at ${MAX_PARLAY_LEGS} legs`)
+  .refine((ls) => new Set(ls.map((l) => l.lineId)).size === ls.length, "A line can only be in a parlay once");
+
+export type CommunityParlayResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string; movedLineId?: string };
+
 /**
- * A tester builds a parlay out of picks on today's board.
+ * A tester builds a parlay from any line in the odds feed — the Community
+ * parlays tab.
  *
- * Nothing is asked for beyond which legs — no stake, no book, no price —
- * exactly as with the "I took this bet" circle, and for the same reason. The
- * price comes off the legs and the stake is flat at PARLAY_STAKE_UNITS.
+ * Each leg is frozen into a selection at the price the tester saw (see
+ * freezeLine); if any price has moved the whole ticket is refused and the
+ * builder refreshes, rather than saving a parlay at odds nobody chose.
  *
- * Note what this deliberately does *not* do: it does not mark those picks as
- * followed. A parlay is one bet, not three singles, and writing follow rows
- * here would double-count every leg in the singles record.
+ * One leg per game. A book prices legs from the same game together, at worse
+ * than the product of their odds (they are correlated), so a same-game ticket
+ * priced the naive way would show a payout no book would honour.
+ *
+ * Note what this deliberately does *not* do: it does not mark anything as
+ * followed. A parlay is one bet, not several singles.
  */
-export async function createUserParlayAction(pickIds: string[]): Promise<ActionState> {
+export async function createCommunityParlayAction(
+  legs: Array<{ lineId: string; price: number }>,
+  shared: boolean,
+): Promise<CommunityParlayResult> {
   const auth = await getAuth();
   if (!auth) {
     return { ok: false, error: "Your session expired — sign in again to build this." };
   }
 
-  const parsed = legIdsSchema.safeParse(pickIds);
+  const parsed = communityLegsSchema.safeParse(legs);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Bad request" };
   }
 
-  const checked = await validateLegs(parsed.data);
-  if (!checked.ok) return { ok: false, error: checked.error };
+  const frozen: Array<{ selectionId: string; gameId: string; slateDate: string }> = [];
+  for (const leg of parsed.data) {
+    const f = await freezeLine(leg.lineId, leg.price);
+    if (!f.ok) {
+      return {
+        ok: false,
+        error:
+          f.movedTo !== undefined
+            ? `A price moved (now ${formatOdds(f.movedTo)}) — the slip has been refreshed, check it and save again.`
+            : f.error,
+        movedLineId: leg.lineId,
+      };
+    }
+    frozen.push({ selectionId: f.selectionId, gameId: f.gameId, slateDate: slateDateString(f.game.commenceTime) });
+  }
 
-  await insertParlay(
-    { ownerId: auth.user.id, slateDate: checked.legs.slateDate },
-    checked.legs.ids,
-  );
+  if (new Set(frozen.map((f) => f.gameId)).size !== frozen.length) {
+    return { ok: false, error: "One leg per game — same-game legs are priced differently by the books." };
+  }
+  const dates = new Set(frozen.map((f) => f.slateDate));
+  if (dates.size > 1) {
+    return { ok: false, error: "Every leg has to be on the same day's slate." };
+  }
+  const slateDate = [...dates][0];
+
+  await db.transaction(async (tx) => {
+    // The day may have no Oobee slate yet; the row is only the date key the
+    // parlay hangs off, and creating it publishes nothing.
+    await tx.insert(slates).values({ date: slateDate }).onConflictDoNothing({ target: slates.date });
+    const [row] = await tx
+      .insert(parlays)
+      .values({ ownerId: auth.user.id, slateDate, shared: Boolean(shared) })
+      .returning({ id: parlays.id });
+    await tx
+      .insert(parlaySelectionLegs)
+      .values(frozen.map((f) => ({ parlayId: row.id, selectionId: f.selectionId })));
+  });
 
   revalidatePath("/picks");
   revalidatePath("/my-bets");
-  return { ok: true, message: `${parsed.data.length}-leg parlay saved.` };
+  return {
+    ok: true,
+    message: `${frozen.length}-leg parlay saved${shared ? " and shared to Community" : ""}.`,
+  };
+}
+
+/** Flip a tester's own parlay between shared and private. */
+export async function setParlaySharedAction(parlayId: string, shared: boolean): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) return { ok: false, error: "Your session expired — sign in again." };
+  if (!z.string().uuid().safeParse(parlayId).success) return { ok: false, error: "Bad request" };
+  const updated = await db
+    .update(parlays)
+    .set({ shared: Boolean(shared), updatedAt: new Date() })
+    .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, auth.user.id)))
+    .returning({ id: parlays.id });
+  if (updated.length === 0) return { ok: false, error: "Parlay not found" };
+  revalidatePath("/picks");
+  revalidatePath("/my-bets");
+  return { ok: true, message: shared ? "Shared to Community." : "Made private." };
 }
 
 /**
@@ -161,11 +226,20 @@ export async function deleteUserParlayAction(parlayId: string): Promise<ActionSt
 
   if (!owned) return { ok: false, error: "Parlay not found" };
 
-  const legs = await db
-    .select({ startsAt: picks.startsAt, status: picks.status })
-    .from(parlayLegs)
-    .innerJoin(picks, eq(picks.id, parlayLegs.pickId))
-    .where(eq(parlayLegs.parlayId, parlayId));
+  const [pickLegs, selectionLegs] = await Promise.all([
+    db
+      .select({ startsAt: picks.startsAt, status: picks.status })
+      .from(parlayLegs)
+      .innerJoin(picks, eq(picks.id, parlayLegs.pickId))
+      .where(eq(parlayLegs.parlayId, parlayId)),
+    db
+      .select({ startsAt: games.commenceTime, status: selections.status })
+      .from(parlaySelectionLegs)
+      .innerJoin(selections, eq(selections.id, parlaySelectionLegs.selectionId))
+      .innerJoin(games, eq(games.id, selections.gameId))
+      .where(eq(parlaySelectionLegs.parlayId, parlayId)),
+  ]);
+  const legs = [...pickLegs, ...selectionLegs];
 
   if (!parlayWindowOpen(legs)) {
     return { ok: false, error: "This one is locked in — a leg has already started." };
