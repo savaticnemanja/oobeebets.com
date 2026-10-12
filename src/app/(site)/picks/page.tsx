@@ -168,7 +168,7 @@ export default async function PicksPage({
       : view.length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <div className="shell py-10">
       {params.welcome === "1" && (
         <div
           role="status"
@@ -231,7 +231,7 @@ export default async function PicksPage({
       {/* -------------------------------------------------------------- tabs */}
       <nav
         aria-label="Board"
-        className="mt-8 -mb-px flex items-center gap-1 border-b border-border"
+        className="mt-8 -mb-px flex items-center gap-1 overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
       >
         {boardTabs.map((c) => {
           const isActive = c === tab;
@@ -253,7 +253,7 @@ export default async function PicksPage({
               }
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "relative inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                "relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive ? "text-brand" : "text-fg-muted hover:text-fg",
               )}
             >

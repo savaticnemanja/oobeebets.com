@@ -10,6 +10,7 @@ import { EmptyFeed } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { PostCard } from "@/components/social/post-card";
 import { Button } from "@/components/ui/button";
+import { SocialShell } from "@/components/social/social-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,7 @@ export default async function PostPage({ params }: { params: Params }) {
   ]);
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl border-border sm:border-x">
+    <SocialShell viewerId={viewerId}>
       <div className="flex items-center gap-4 px-4 py-2.5">
         <Link
           href="/home"
@@ -107,6 +108,6 @@ export default async function PostPage({ params }: { params: Params }) {
       ) : (
         replies.map((r) => <PostCard key={r.id} post={r} viewerId={viewerId} isAdmin={isAdmin} />)
       )}
-    </div>
+    </SocialShell>
   );
 }

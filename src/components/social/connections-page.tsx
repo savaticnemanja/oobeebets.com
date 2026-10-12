@@ -6,6 +6,7 @@ import { getProfile, listConnections } from "@/lib/social";
 import { EmptyFeed, FeedTabs } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { UserRow } from "@/components/social/user-row";
+import { SocialShell } from "@/components/social/social-shell";
 
 /** /u/<username>/followers and /u/<username>/following — one page, two directions. */
 export async function ConnectionsPage({
@@ -25,7 +26,7 @@ export async function ConnectionsPage({
   const self = viewerId === profile.id;
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl border-border sm:border-x">
+    <SocialShell viewerId={viewerId}>
       <div className="flex items-center gap-4 px-4 py-2.5">
         <Link
           href={base}
@@ -63,6 +64,6 @@ export async function ConnectionsPage({
       ) : (
         people.map((u) => <UserRow key={u.id} user={u} viewerId={viewerId} />)
       )}
-    </div>
+    </SocialShell>
   );
 }

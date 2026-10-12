@@ -13,7 +13,7 @@ export const metadata: Metadata = {
  */
 export default function TermsPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+    <div className="shell py-16 [&>*]:max-w-2xl">
       <h1 className="text-3xl font-semibold tracking-tight">Terms of service</h1>
       <p className="mt-2 text-xs uppercase tracking-wider text-pending">
         Draft — must be reviewed by a lawyer before launch

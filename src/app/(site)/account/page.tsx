@@ -20,7 +20,7 @@ export default async function AccountPage() {
   if (!auth) redirect("/login?next=/account");
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
+    <div className="shell py-12 [&>*]:max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Account</h1>
       <p className="mt-1.5 text-sm text-fg-muted">{auth.user.email}</p>
 

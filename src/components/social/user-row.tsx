@@ -30,6 +30,7 @@ export function UserRow({
           </div>
           {viewerId && viewerId !== user.id && (
             <FollowButton
+              className="shrink-0"
               userId={user.id}
               username={user.username}
               following={user.viewerFollows}

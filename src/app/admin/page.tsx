@@ -133,7 +133,7 @@ export default async function AdminOverviewPage() {
       </div>
 
       {/* ------------------------------------------------------------ stats */}
-      <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <dl className="mt-4 grid gap-3 sm:grid-cols-3">
         <StatTile label="Registered users" value={userCount} />
         <StatTile
           label="Net units (all time)"

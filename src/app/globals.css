@@ -13,6 +13,19 @@
    from everyone permanently — see the note on `viewport` in app/layout.tsx. */
 @custom-variant touch (@media (pointer: coarse));
 
+/* The one page width. Header, footer and every page body sit in it, so the
+   left edge stays put as you move around; narrower reading or form columns
+   go inside it (left-aligned) rather than re-centring at their own width. */
+@utility shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--container-6xl);
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    oobee bets design tokens
    Brand rules from the product brief, non-negotiable:

@@ -75,7 +75,7 @@ export function NameLine({
 }) {
   const inner = (
     <>
-      <span className="flex min-w-0 items-center gap-1">
+      <span className="flex min-w-0 max-w-full items-center gap-1">
         <span className="truncate font-semibold text-fg group-hover/name:underline">
           {displayNameOf(user)}
         </span>

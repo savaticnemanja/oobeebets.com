@@ -12,6 +12,7 @@ import { Composer } from "@/components/social/composer";
 import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { WhoToFollow } from "@/components/social/user-row";
+import { SocialShell } from "@/components/social/social-shell";
 
 export const metadata: Metadata = {
   title: "Home",
@@ -70,78 +71,70 @@ export default async function HomePage({
   const viewerName = displayNameOf(auth.user);
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-6">
-      <div className="min-h-dvh border-border sm:border-x">
-        <h1 className="px-4 pb-2 pt-4 text-xl font-semibold tracking-tight">Home</h1>
-        <FeedTabs
-          sticky
-          active={tab}
-          tabs={[
-            { key: "for-you", label: "For you", href: "/home?tab=for-you" },
-            { key: "following", label: "Following", href: "/home?tab=following" },
-          ]}
-        />
+    <SocialShell viewerId={viewerId} suggestions={suggestions}>
+      <h1 className="px-4 pb-2 pt-4 text-xl font-semibold tracking-tight">Home</h1>
+      <FeedTabs
+        sticky
+        active={tab}
+        tabs={[
+          { key: "for-you", label: "For you", href: "/home?tab=for-you" },
+          { key: "following", label: "Following", href: "/home?tab=following" },
+        ]}
+      />
 
-        {firstPage && <Composer viewerName={viewerName} id="compose" />}
+      {firstPage && <Composer viewerName={viewerName} id="compose" />}
 
-        {/* Follows nobody: say why they're seeing what they're seeing, and
-            hand them the way out right here — the side rail is hidden on a
-            phone, which is where most testers are. */}
-        {tab === "for-you" && followingCount === 0 && firstPage && (
-          <div className="border-b border-border px-4 py-3">
-            <p className="flex items-start gap-2 text-sm text-fg-muted">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
-              <span>
-                You&apos;re seeing the most talked-about posts across oobee. Follow a few
-                people and your Following tab fills up with theirs.
-              </span>
-            </p>
-            {suggestions.length > 0 && (
-              <div className="-mx-4 mt-2 lg:hidden">
-                <WhoToFollow users={suggestions.slice(0, 3)} viewerId={viewerId} title="Start here" />
-              </div>
-            )}
-          </div>
-        )}
+      {/* Follows nobody: say why they're seeing what they're seeing, and
+          hand them the way out right here — the side rail is hidden on a
+          phone, which is where most testers are. */}
+      {tab === "for-you" && followingCount === 0 && firstPage && (
+        <div className="border-b border-border px-4 py-3">
+          <p className="flex items-start gap-2 text-sm text-fg-muted">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
+            <span>
+              You&apos;re seeing the most talked-about posts across oobee. Follow a few
+              people and your Following tab fills up with theirs.
+            </span>
+          </p>
+          {suggestions.length > 0 && (
+            <div className="mt-3 lg:hidden">
+              <WhoToFollow users={suggestions.slice(0, 3)} viewerId={viewerId} title="Start here" />
+            </div>
+          )}
+        </div>
+      )}
 
-        <FeedList
-          posts={feed.posts}
-          viewerId={viewerId}
-          isAdmin={auth.isAdmin}
-          moreHref={moreHref}
-          empty={
-            tab === "following" ? (
-              followingCount === 0 ? (
-                <>
-                  <EmptyFeed title="Your Following feed is empty">
-                    Follow people to see their posts here, newest first. Until then, For
-                    you has what everyone&apos;s talking about.
-                  </EmptyFeed>
-                  <div className="px-4 pb-6">
-                    <WhoToFollow users={suggestions} viewerId={viewerId} />
-                  </div>
-                </>
-              ) : (
-                <EmptyFeed title={firstPage ? "Nothing here yet" : "You're all caught up"}>
-                  {firstPage
-                    ? "The people you follow haven't posted yet. Say something yourself — it shows up here too."
-                    : "That's everything from the people you follow."}
+      <FeedList
+        posts={feed.posts}
+        viewerId={viewerId}
+        isAdmin={auth.isAdmin}
+        moreHref={moreHref}
+        empty={
+          tab === "following" ? (
+            followingCount === 0 ? (
+              <>
+                <EmptyFeed title="Your Following feed is empty">
+                  Follow people to see their posts here, newest first. Until then, For
+                  you has what everyone&apos;s talking about.
                 </EmptyFeed>
-              )
+                <div className="px-4 pb-6">
+                  <WhoToFollow users={suggestions} viewerId={viewerId} />
+                </div>
+              </>
             ) : (
-              <EmptyFeed title={firstPage ? "Quiet in here" : "You're all caught up"}>
-                {firstPage ? "Nobody has posted yet. Be the first — what's your play today?" : null}
+              <EmptyFeed title={firstPage ? "Nothing here yet" : "You're all caught up"}>
+                {firstPage
+                  ? "The people you follow haven't posted yet. Say something yourself — it shows up here too."
+                  : "That's everything from the people you follow."}
               </EmptyFeed>
             )
-          }
-        />
-      </div>
-
-      <aside className="hidden lg:block">
-        <div className="sticky top-[calc(4.5rem+var(--spacing-safe-top))] space-y-4 pt-4">
-          <WhoToFollow users={suggestions} viewerId={viewerId} />
-        </div>
-      </aside>
-    </div>
+          ) : (
+            <EmptyFeed title={firstPage ? "Quiet in here" : "You're all caught up"}>
+              {firstPage ? "Nobody has posted yet. Be the first — what's your play today?" : null}
+            </EmptyFeed>
+          )
+        }
+      />
+    </SocialShell>
   );
 }

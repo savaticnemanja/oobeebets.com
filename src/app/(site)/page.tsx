@@ -31,7 +31,7 @@ export default function HomePage() {
       />
 
       {/* ------------------------------------------------------------ hero */}
-      <section className="relative mx-auto max-w-6xl px-4 pb-16 pt-20 sm:px-6 sm:pt-28">
+      <section className="shell relative pb-16 pt-20 sm:pt-28">
         <Reveal>
           <div className="flex items-center gap-2">
             <PulseDot />
@@ -71,7 +71,7 @@ export default function HomePage() {
       {/* ------------------------------------------------------ how it works */}
       <section
         aria-labelledby="how-heading"
-        className="mx-auto max-w-6xl px-4 py-16 sm:px-6"
+        className="shell py-16"
       >
         <Reveal>
           <h2 id="how-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -111,7 +111,7 @@ export default function HomePage() {
       </section>
 
       {/* -------------------------------------------------------------- about */}
-      <section aria-labelledby="about-heading" className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+      <section aria-labelledby="about-heading" className="shell py-16">
         <Reveal>
           <div className="card-hairline overflow-hidden">
             <div className="grid gap-8 p-6 sm:p-10 md:grid-cols-2">

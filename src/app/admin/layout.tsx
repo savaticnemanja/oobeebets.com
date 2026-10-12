@@ -35,9 +35,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <Logo href="/admin" />
-            <Badge variant="brand">{auth.user.role}</Badge>
+            <Badge variant="brand" className="hidden sm:inline-flex">{auth.user.role}</Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/picks">View site</Link>
             </Button>
