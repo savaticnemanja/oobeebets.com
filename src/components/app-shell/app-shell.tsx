@@ -11,13 +11,16 @@ import { SITE } from "@/lib/site";
  * the sidebar shows labels, from `sm` it is icons only, and on a phone it
  * gives way to a top bar and a bottom tab bar.
  *
- * Pages decide their own middle: feeds use SocialShell (600px column plus the
- * right rail), boards and settings take the width they need.
+ * Widths: the sidebar is 275px from `xl` (72px as an icon rail below it), and
+ * the content beside it is at most 1050px, so the whole layout tops out at
+ * 1325px and centres. Pages decide their own middle within that: feeds use
+ * SocialShell (600px column plus the right rail), boards and settings take
+ * the width they need.
  */
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[80rem] justify-center pl-safe-left pr-safe-right">
-      <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[17rem] xl:items-stretch xl:px-3">
+    <div className="mx-auto flex w-full max-w-[1325px] justify-center pl-safe-left pr-safe-right">
+      <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[275px] xl:items-stretch xl:px-3">
         <div className="flex h-16 items-center xl:px-3">
           <Link href="/home" aria-label="Home" className="grid size-12 place-items-center rounded-full transition-colors hover:bg-white/[0.07] xl:hidden">
             <Mark className="size-7 text-brand" />
@@ -42,7 +45,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       </header>
 
       {/* Bottom padding clears the phone's tab bar. */}
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[calc(3.5rem+var(--spacing-safe-bottom))] sm:max-w-[62rem] sm:pb-0">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[calc(3.5rem+var(--spacing-safe-bottom))] sm:max-w-[1050px] sm:pb-0">
         <MobileTopBar user={user} />
         <main id="main" className="flex-1">
           {children}
