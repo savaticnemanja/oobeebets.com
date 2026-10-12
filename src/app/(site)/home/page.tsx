@@ -26,17 +26,13 @@ type Tab = "for-you" | "following";
 /**
  * The activity page. Two feeds, as on X:
  *
- *   For you   — everything recent, ranked by engagement (getHomeForYou). This
- *               is the default curation, and the landing tab for anyone who
- *               follows nobody yet, so a new tester's first look is a live
- *               room rather than an empty page.
- *   Following — the accounts you follow, newest first. Becomes the landing
- *               tab the moment you follow one person.
+ *   For you   — everything recent, ranked by engagement (getHomeForYou). The
+ *               landing tab for everyone, as on X.
+ *   Following — the accounts you follow, newest first. Only via ?tab=following.
  *
  * Both carry replies and shared Community parlays as well as posts — see
  * lib/home-feed.ts for how parlays page alongside them.
  *
- * An explicit ?tab= always wins, so the choice survives "Show older posts".
  */
 export default async function HomePage({
   searchParams,
@@ -48,12 +44,7 @@ export default async function HomePage({
   const viewerId = auth.user.id;
 
   const followingCount = await getFollowingCount(viewerId);
-  const tab: Tab =
-    params.tab === "following" || params.tab === "for-you"
-      ? params.tab
-      : followingCount > 0
-        ? "following"
-        : "for-you";
+  const tab: Tab = params.tab === "following" ? "following" : "for-you";
 
   const pageIndex = Math.max(0, Math.min(50, Number.parseInt(params.page ?? "0", 10) || 0));
   const before = params.before && /^[0-9a-f-]{36}$/i.test(params.before) ? params.before : undefined;
