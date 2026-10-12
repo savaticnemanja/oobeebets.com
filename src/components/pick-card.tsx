@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { FollowToggle } from "@/components/follow-toggle";
 import type { ViewerFollow } from "@/lib/follows";
-import { PICK_STATE, pickState, type PickState } from "@/components/pick-state";
+import { PICK_STATE, pickBadge, pickState, type PickState } from "@/components/pick-state";
 import type { Pick, PickStatus, Sport } from "@/db/schema";
 import {
   formatKickoff,
@@ -106,6 +106,7 @@ export function PickCard({
   // Rendered per request (the board is force-dynamic), so "now" is fresh.
   // eslint-disable-next-line react-hooks/purity
   const state = pickState(pick, Date.now());
+  const badge = pickBadge(state);
 
   return (
     <article
@@ -127,7 +128,7 @@ export function PickCard({
               pick.status === "lost" && !featured && "border-miss/20",
             ),
       )}
-      aria-label={`Pick ${pick.rank}: ${pick.selection} at ${formatOdds(pick.price)}, ${STATUS_LABEL[pick.status]}`}
+      aria-label={`Pick ${pick.rank}: ${pick.selection} at ${formatOdds(pick.price)}, ${badge.label}`}
     >
       {eyebrow}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -138,7 +139,12 @@ export function PickCard({
           <span aria-hidden="true">{SPORT_EMOJI[pick.sport]}</span>
           <span className="truncate text-xs text-fg-muted">{pick.league}</span>
         </div>
-        <Badge variant={STATUS_VARIANT[pick.status]}>{STATUS_LABEL[pick.status]}</Badge>
+        <Badge variant={badge.variant}>
+          {badge.live && (
+            <span className="size-1.5 rounded-full bg-pending motion-safe:animate-pulse" aria-hidden="true" />
+          )}
+          {badge.label}
+        </Badge>
       </div>
 
       {/* The check circle sits to the left of the selection, on the same line
