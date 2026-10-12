@@ -12,6 +12,9 @@ import { ParlayCard } from "@/components/parlay-card";
 import { DeleteParlayButton } from "@/components/parlay-builder";
 import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
 import { LoadMore } from "@/components/load-more";
+import { SocialShell } from "@/components/social/social-shell";
+import { InfoTip } from "@/components/ui/info-tip";
+import { ScrollActiveTab } from "@/components/ui/scroll-active-tab";
 import { getSlateGames } from "@/lib/odds/board";
 import { ensureSlateOdds, refreshResults } from "@/lib/odds/sync";
 import { slateDateString } from "@/lib/slate-date";
@@ -35,6 +38,9 @@ export const dynamic = "force-dynamic";
  * date to pick. Older days load as you scroll (see board-days.tsx, which
  * renders both this first chunk and every later one). Today keeps its
  * top-pick hero and, on Community parlays, the builder and your own tickets.
+ *
+ * Laid out like Home: the 600px column with hairlines either side, and every
+ * pick, ticket and day heading a full-width row rather than a boxed card.
  *
  * Testers see published days; admins also see drafts (with a badge).
  */
@@ -82,28 +88,32 @@ export default async function PicksPage({
   const tabHref = (c: string) => `/picks?category=${c}`;
 
   return (
-    <div className="shell py-10">
+    <SocialShell>
       {/* -------------------------------------------------------------- head */}
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">The board</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">
-        Every day&apos;s picks, newest first, graded against the final score. All free during our beta.
-      </p>
-
-      {/* Said once, at the top, rather than as a label on fifteen cards. */}
-      {(tab === "game" || tab === "prop") && first.todayPicks > 0 && publishedToday && (
-        <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
-          <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            Took one of these? Tap its circle. That&apos;s the whole thing — no stake,
-            no book, no odds — and it locks when the game starts.
-          </span>
-        </p>
-      )}
+      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <h1 className="text-xl font-bold tracking-tight">The board</h1>
+        <InfoTip label="About the board">
+          <p>
+            Every day&apos;s picks, newest first, graded against the final score. All free during
+            our beta.
+          </p>
+          {(tab === "game" || tab === "prop") && (
+            <p className="flex items-start gap-2">
+              <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                Took one of these? Tap its circle. That&apos;s the whole thing — no stake, no book,
+                no odds — and it locks when the game starts.
+              </span>
+            </p>
+          )}
+        </InfoTip>
+      </div>
 
       {/* -------------------------------------------------------------- tabs */}
+      {/* Home's tab strip, but scrollable: four labels don't fit a phone. */}
       <nav
         aria-label="Board"
-        className="mt-6 -mb-px flex items-center gap-1 overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
+        className="relative flex overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
       >
         {boardTabs.map((c) => {
           const isActive = c === tab;
@@ -115,62 +125,65 @@ export default async function PicksPage({
               href={tabHref(c)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive ? "text-brand" : "text-fg-muted hover:text-fg",
+                "flex flex-1 shrink-0 justify-center whitespace-nowrap px-4 py-3.5 text-sm transition-colors hover:bg-surface/60",
+                isActive ? "font-semibold text-fg" : "text-fg-muted",
               )}
             >
-              {TAB_LABELS[c]}
-              {n > 0 && <span className="num text-xs text-fg-subtle">{n}</span>}
-              {isActive && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />}
+              <span className="relative inline-flex items-center gap-1.5">
+                {TAB_LABELS[c]}
+                {n > 0 && <span className="num text-xs font-normal text-fg-subtle">{n}</span>}
+                {isActive && (
+                  <span className="absolute -bottom-3.5 left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
+                )}
+              </span>
             </Link>
           );
         })}
+        <ScrollActiveTab />
       </nav>
 
       {/* ----------------------------------------------- community: builder */}
       {isCommunityTab && (
-        <div className="mt-8 space-y-10">
-          <section aria-labelledby="build-heading">
-            <h2 id="build-heading" className="text-sm font-semibold tracking-tight">
+        <>
+          <section aria-labelledby="build-heading" className="border-b border-border px-4 py-4">
+            <h2 id="build-heading" className="text-base font-bold tracking-tight">
               Build a parlay
             </h2>
-            <div className="mt-4">
+            <div className="mt-3">
               <CommunityParlayBuilder games={games} />
             </div>
           </section>
 
           {myParlaysToday.length > 0 && (
             <section aria-labelledby="my-parlays-heading">
-              <h2 id="my-parlays-heading" className="text-sm font-semibold tracking-tight">
-                Your parlays today
-              </h2>
-              <p className="mt-1 text-xs text-fg-subtle">
-                Graded leg by leg as the games finish. Shared ones appear below for
-                everyone; private ones only here and on My bets.
-              </p>
-              <div className="mt-4 grid gap-3">
-                {myParlaysToday.map((pl) => (
-                  <ParlayCard key={pl.id} parlay={pl}>
-                    <div className="flex items-center gap-3">
-                      <ShareToggle parlayId={pl.id} shared={pl.shared} />
-                      {pl.open && <DeleteParlayButton parlayId={pl.id} />}
-                    </div>
-                  </ParlayCard>
-                ))}
+              <div className="border-b border-border px-4 py-3">
+                <h2 id="my-parlays-heading" className="text-base font-bold tracking-tight">
+                  Your parlays today
+                </h2>
+                <p className="mt-0.5 text-xs text-fg-subtle">
+                  Graded leg by leg as the games finish. Shared ones appear below for
+                  everyone; private ones only here and on My bets.
+                </p>
               </div>
+              {myParlaysToday.map((pl) => (
+                <ParlayCard key={pl.id} parlay={pl} variant="row">
+                  <div className="flex items-center gap-3">
+                    <ShareToggle parlayId={pl.id} shared={pl.shared} />
+                    {pl.open && <DeleteParlayButton parlayId={pl.id} />}
+                  </div>
+                </ParlayCard>
+              ))}
             </section>
           )}
-        </div>
+        </>
       )}
 
       {/* --------------------------------------------------------- the days */}
-      <div className="mt-6">
-        {first.node}
-        <LoadMore key={tab} next={first.next} load={loadBoardAction.bind(null, tab)} />
-      </div>
+      {first.node}
+      <LoadMore key={tab} next={first.next} load={loadBoardAction.bind(null, tab)} />
 
       {tab === "parlay" && (
-        <p className="mt-10 text-sm text-fg-muted">
+        <p className="px-4 py-6 text-sm text-fg-muted">
           Want your own?{" "}
           <Link href={tabHref("community")} className="text-brand hover:underline">
             Build one on Community parlays
@@ -178,6 +191,6 @@ export default async function PicksPage({
           from any line on today&apos;s games.
         </p>
       )}
-    </div>
+    </SocialShell>
   );
 }

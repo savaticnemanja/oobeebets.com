@@ -1,5 +1,4 @@
 import "server-only";
-import Link from "next/link";
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
@@ -13,9 +12,8 @@ import { slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
 import { PickCard, TopPickCard } from "@/components/pick-card";
-import { Avatar, displayNameOf } from "@/components/social/identity";
+import { ParlayRow } from "@/components/social/parlay-row";
 import { Badge } from "@/components/ui/badge";
-import { Reveal } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 
 /** Days per chunk. Infinite scroll loads the next chunk from the last day shown. */
@@ -138,7 +136,7 @@ export async function loadBoardDays({
   const oobeeOn = new Map<string, ParlayView[]>(
     isParlayTab ? await Promise.all(visibleDays.map(async (d) => [d, await getOobeeParlays(d)] as const)) : [],
   );
-  const communityOn = new Map<string, ParlayView[]>(
+  const communityOn = new Map<string, Awaited<ReturnType<typeof getCommunityParlays>>>(
     isCommunityTab ? await Promise.all(days.map(async (d) => [d, await getCommunityParlays(d)] as const)) : [],
   );
 
@@ -151,19 +149,25 @@ export async function loadBoardDays({
 
     if (isCommunityTab) {
       // Today's own parlays are listed above the board with their controls.
-      const list = (communityOn.get(d) ?? []).filter((pl) => !(isToday && pl.ownerId === auth.user.id));
+      const list = (communityOn.get(d) ?? []).filter(({ parlay: pl }) => !(isToday && pl.ownerId === auth.user.id));
       return (
         <DaySection key={d} date={d} today={today}>
           {list.length === 0 ? (
             <Empty>{isToday ? "Nobody has shared a parlay today yet. Build one and be first." : "No shared parlays this day."}</Empty>
           ) : (
-            <div className="grid gap-3">
-              {list.map((pl) => (
-                <ParlayCard key={pl.id} parlay={pl}>
-                  <Owner parlay={pl} />
-                </ParlayCard>
-              ))}
-            </div>
+            // Drawn exactly as Home draws a shared parlay: who, when, the ticket.
+            list.map(({ parlay: pl, ownerRole }) => (
+              <ParlayRow
+                key={pl.id}
+                parlay={pl}
+                owner={{
+                  id: pl.ownerId!,
+                  username: pl.ownerUsername!,
+                  displayName: pl.ownerDisplayName,
+                  role: ownerRole,
+                }}
+              />
+            ))
           )}
         </DaySection>
       );
@@ -176,13 +180,7 @@ export async function loadBoardDays({
           {list.length === 0 ? (
             <Empty>{isToday ? "None up yet today — they go out with the rest of the board." : "No Oobee parlays this day."}</Empty>
           ) : (
-            <div className="grid gap-3">
-              {list.map((pl, i) => (
-                <Reveal key={pl.id} delay={Math.min(i * 0.03, 0.2)}>
-                  <ParlayCard parlay={pl} featured={isToday && pl.rank === 1} />
-                </Reveal>
-              ))}
-            </div>
+            list.map((pl) => <ParlayCard key={pl.id} parlay={pl} featured={isToday && pl.rank === 1} variant="row" />)
           )}
         </DaySection>
       );
@@ -201,20 +199,10 @@ export async function loadBoardDays({
           </Empty>
         ) : (
           <>
-            {top && (
-              <Reveal>
-                <TopPickCard pick={top} follow={followFor(top)} />
-              </Reveal>
-            )}
-            {rest.length > 0 && (
-              <div className={cn("grid gap-3 sm:grid-cols-2", top && "mt-3")}>
-                {rest.map((p, i) => (
-                  <Reveal key={p!.id} delay={Math.min(i * 0.02, 0.2)}>
-                    <PickCard pick={p!} follow={followFor(p!)} />
-                  </Reveal>
-                ))}
-              </div>
-            )}
+            {top && <TopPickCard pick={top} follow={followFor(top)} variant="row" />}
+            {rest.map((p) => (
+              <PickCard key={p!.id} pick={p!} follow={followFor(p!)} variant="row" />
+            ))}
           </>
         )}
       </DaySection>
@@ -252,8 +240,8 @@ function DaySection({
   const units = settled.reduce((sum, p) => sum + pickProfit(p), 0);
 
   return (
-    <section aria-labelledby={`day-${date}-heading`} id={`day-${date}`} className="mt-8 scroll-mt-20">
-      <div className="sticky top-[calc(3.5rem+var(--spacing-safe-top))] z-20 -mx-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-0 sm:-mx-6 sm:px-6">
+    <section aria-labelledby={`day-${date}-heading`} id={`day-${date}`} className="scroll-mt-20">
+      <div className="sticky top-[calc(3.5rem+var(--spacing-safe-top))] z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-0">
         <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">
           {name && <span>{name}</span>}
           <span className={cn("num", name ? "text-sm font-normal text-fg-muted" : "")}>{formatSlateDate(date)}</span>
@@ -271,28 +259,11 @@ function DaySection({
           </p>
         )}
       </div>
-      <div className="mt-4">{children}</div>
+      {children}
     </section>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-fg-muted">{children}</p>;
-}
-
-/** Who shared a Community parlay, in the ticket's action slot. */
-function Owner({ parlay }: { parlay: ParlayView }) {
-  if (!parlay.ownerUsername) return null;
-  const name = displayNameOf({ displayName: parlay.ownerDisplayName, username: parlay.ownerUsername });
-  return (
-    <Link
-      href={`/u/${parlay.ownerUsername}`}
-      className="flex min-w-0 items-center gap-2 text-xs text-fg-muted hover:text-fg"
-    >
-      <Avatar name={name} size="sm" className="size-6 text-[0.625rem]" />
-      <span className="truncate">
-        {name} <span className="text-fg-subtle">@{parlay.ownerUsername}</span>
-      </span>
-    </Link>
-  );
+  return <p className="border-b border-border px-4 py-8 text-center text-sm text-fg-muted">{children}</p>;
 }

@@ -24,11 +24,14 @@ export function ParlayCard({
   parlay,
   featured,
   className,
+  variant = "card",
   children,
 }: {
   parlay: ParlayView;
   featured?: boolean;
   className?: string;
+  /** "row": a full-width timeline row with a hairline under it, as on Home. */
+  variant?: "card" | "row";
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -44,11 +47,15 @@ export function ParlayCard({
   return (
     <article
       className={cn(
-        "card-hairline group relative overflow-hidden p-4 transition-all duration-300",
-        "hover:border-border-strong",
-        featured && "border-brand/25 bg-brand/5 p-5",
-        status === "won" && !featured && "border-hit/20",
-        status === "lost" && !featured && "border-miss/20",
+        "group relative overflow-hidden",
+        variant === "row"
+          ? cn("border-b border-border px-4 py-3 transition-colors hover:bg-surface/60", featured && "bg-brand/5 py-4")
+          : cn(
+              "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
+              featured && "border-brand/25 bg-brand/5 p-5",
+              status === "won" && !featured && "border-hit/20",
+              status === "lost" && !featured && "border-miss/20",
+            ),
         className,
       )}
       aria-label={`${legs.length}-leg parlay at ${price === null ? "no price" : formatOdds(price)}, ${STATUS_LABEL[status]}`}

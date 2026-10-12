@@ -50,15 +50,23 @@ function KickoffTime({ at }: { at: Date }) {
  * `follow` is the viewer's own "I took this bet" state. Left undefined, the
  * card renders no check circle at all — which is the right answer for an admin
  * previewing an unpublished draft, where there is nothing to take yet.
+ *
+ * `variant="row"` draws it as a timeline row rather than a boxed card — full
+ * width, a hairline underneath, as posts are on Home. The board uses it.
+ * `eyebrow` is a line above the header, for the top pick's label.
  */
 export function PickCard({
   pick,
   featured,
   follow,
+  variant = "card",
+  eyebrow,
 }: {
   pick: Pick;
   featured?: boolean;
   follow?: ViewerFollow;
+  variant?: "card" | "row";
+  eyebrow?: React.ReactNode;
 }) {
   const profit = pickProfit(pick);
   const settled = pick.status !== "pending";
@@ -66,14 +74,19 @@ export function PickCard({
   return (
     <article
       className={cn(
-        "card-hairline group relative overflow-hidden p-4 transition-all duration-300",
-        "hover:border-border-strong",
-        featured && "border-hit/25 bg-hit-dim/30 p-5",
-        pick.status === "won" && !featured && "border-hit/20",
-        pick.status === "lost" && !featured && "border-miss/20",
+        "group relative overflow-hidden",
+        variant === "row"
+          ? cn("border-b border-border px-4 py-3 transition-colors hover:bg-surface/60", featured && "bg-hit-dim/20 py-4")
+          : cn(
+              "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
+              featured && "border-hit/25 bg-hit-dim/30 p-5",
+              pick.status === "won" && !featured && "border-hit/20",
+              pick.status === "lost" && !featured && "border-miss/20",
+            ),
       )}
       aria-label={`Pick ${pick.rank}: ${pick.selection} at ${formatOdds(pick.price)}, ${STATUS_LABEL[pick.status]}`}
     >
+      {eyebrow}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="num rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-[0.6875rem] text-fg-subtle">
@@ -187,8 +200,32 @@ export function PickCard({
  * per board, so the heading names which board: two sections both calling
  * themselves "top pick of the day" would be a lie on one of the two tabs.
  */
-export function TopPickCard({ pick, follow }: { pick: Pick; follow?: ViewerFollow }) {
+export function TopPickCard({
+  pick,
+  follow,
+  variant = "card",
+}: {
+  pick: Pick;
+  follow?: ViewerFollow;
+  variant?: "card" | "row";
+}) {
   const heading = pick.category === "prop" ? "Top prop of the day" : "Top pick of the day";
+  if (variant === "row") {
+    return (
+      <PickCard
+        pick={pick}
+        follow={follow}
+        featured
+        variant="row"
+        eyebrow={
+          <p className="mb-3 flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-hit">
+            <TrendingUp className="size-4" aria-hidden="true" />
+            {heading}
+          </p>
+        }
+      />
+    );
+  }
   return (
     <section aria-labelledby="potd-heading" className="relative">
       <div className="mb-3 flex items-center gap-2">

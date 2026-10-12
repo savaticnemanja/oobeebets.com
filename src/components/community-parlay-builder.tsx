@@ -78,7 +78,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
   const tooFew = legs.length < MIN_PARLAY_LEGS;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <div>
         <p className="mb-3 text-xs text-fg-subtle">
           Every game still to start today. Tap a price to add it; tap another line on
@@ -91,26 +91,28 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
           onPick={toggle}
           isSelected={(id) => legs.some((l) => l.option.lineId === id)}
         />
+        {/* The slip sits below every game — the builder lives in the 600px
+            board column, too narrow for the two side by side — so this bar
+            keeps the ticket in view and jumps to it. Fixed on a phone, above
+            the tab bar and beside the post button; on a wider screen it rides
+            the bottom of the column. */}
+        {legs.length > 0 && (
+          <a
+            href="#parlay-slip"
+            className="fixed bottom-[calc(4.875rem+var(--spacing-safe-bottom))] left-4 right-[5.5rem] z-30 flex items-center justify-between rounded-full bg-brand px-5 py-3 text-sm font-semibold text-black shadow-lg sm:sticky sm:inset-x-auto sm:bottom-4 sm:mt-3"
+          >
+            <span>
+              Slip · {legs.length} leg{legs.length === 1 ? "" : "s"}
+            </span>
+            <span className="num">{price === null || tooFew ? `Add ${MIN_PARLAY_LEGS - legs.length} more` : formatOdds(price)}</span>
+          </a>
+        )}
       </div>
-
-      {/* On a phone the slip sits below every game; this bar keeps the
-          ticket in view and jumps to it. */}
-      {legs.length > 0 && (
-        <a
-          href="#parlay-slip"
-          className="fixed inset-x-4 bottom-[calc(1rem+var(--spacing-safe-bottom))] z-30 flex items-center justify-between rounded-full bg-brand px-5 py-3 text-sm font-semibold text-black shadow-lg lg:hidden"
-        >
-          <span>
-            Slip · {legs.length} leg{legs.length === 1 ? "" : "s"}
-          </span>
-          <span className="num">{price === null || tooFew ? `Add ${MIN_PARLAY_LEGS - legs.length} more` : formatOdds(price)}</span>
-        </a>
-      )}
 
       <aside
         id="parlay-slip"
         aria-label="Parlay slip"
-        className="card-hairline h-fit scroll-mt-20 p-4 lg:sticky lg:top-4"
+        className="card-hairline h-fit scroll-mt-20 p-4"
       >
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Layers className="size-4 text-brand" aria-hidden="true" />

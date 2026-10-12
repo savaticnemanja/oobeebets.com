@@ -284,15 +284,20 @@ export async function getAllUserParlays(limit = 200): Promise<ParlayView[]> {
 
 /**
  * The Community tab: every parlay a tester chose to share for one slate day,
- * newest first, with who built it.
+ * newest first, with who built it — role included, for the badge, since the
+ * board draws these as timeline rows just like Home does.
  */
-export async function getCommunityParlays(slateDate: string, limit = 100): Promise<ParlayView[]> {
+export async function getCommunityParlays(
+  slateDate: string,
+  limit = 100,
+): Promise<Array<{ parlay: ParlayView; ownerRole: Role }>> {
   const rows = await db
     .select({
       ...PARLAY_COLUMNS,
       ownerEmail: sql<string | null>`null`,
       ownerUsername: users.username,
       ownerDisplayName: users.displayName,
+      ownerRole: users.role,
     })
     .from(parlays)
     .innerJoin(users, eq(users.id, parlays.ownerId))
@@ -300,7 +305,9 @@ export async function getCommunityParlays(slateDate: string, limit = 100): Promi
     .orderBy(desc(parlays.createdAt))
     .limit(limit);
 
-  return hydrate(rows);
+  const views = await hydrate(rows);
+  const roles = new Map(rows.map((r) => [r.id, r.ownerRole]));
+  return views.map((parlay) => ({ parlay, ownerRole: roles.get(parlay.id) ?? "user" }));
 }
 
 /**
