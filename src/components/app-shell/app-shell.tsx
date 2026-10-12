@@ -3,6 +3,7 @@ import { Feather } from "lucide-react";
 import { Logo, Mark } from "@/components/brand/logo";
 import { BottomNav, SidebarNav } from "@/components/app-shell/app-nav";
 import { MobileTopBar, SidebarAccount, type ShellUser } from "@/components/app-shell/account-controls";
+import { ScrollChrome } from "@/components/app-shell/scroll-chrome";
 import { WhoToFollow } from "@/components/social/user-row";
 import { getWhoToFollow } from "@/lib/social";
 import { SITE } from "@/lib/site";
@@ -73,15 +74,17 @@ export async function AppShell({
         </aside>
       </div>
 
-      {/* X's compose button floats above the tab bar on a phone. */}
+      {/* X's compose button floats above the tab bar on a phone, and drops
+          with it when the bars slide away. */}
       <Link
         href="/home#compose"
         aria-label="Post"
-        className="fixed bottom-[calc(4.5rem+var(--spacing-safe-bottom))] right-4 z-40 grid size-14 place-items-center rounded-full bg-brand text-black shadow-lg shadow-brand/20 transition-colors hover:bg-brand-bright sm:hidden"
+        className="fixed bottom-[calc(4.5rem+var(--spacing-safe-bottom))] right-4 z-40 grid size-14 translate-y-[calc(var(--chrome-p,0)*(3.5rem+1px+var(--spacing-safe-bottom)))] place-items-center rounded-full bg-brand text-black shadow-lg shadow-brand/20 transition-colors hover:bg-brand-bright sm:hidden"
       >
         <Feather className="size-6" aria-hidden="true" />
       </Link>
       <BottomNav username={user.username} isAdmin={user.isAdmin} />
+      <ScrollChrome />
     </div>
   );
 }

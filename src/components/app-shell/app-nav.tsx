@@ -89,7 +89,8 @@ export function BottomNav({ username, isAdmin }: { username: string; isAdmin: bo
   return (
     <nav
       aria-label={t().nav.mobileNav}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-black/85 pb-safe-bottom backdrop-blur-xl sm:hidden"
+      // Slides down as the top bar slides up (scroll-chrome.tsx).
+      className="fixed inset-x-0 bottom-0 z-40 translate-y-[calc(var(--chrome-p,0)*100%)] border-t border-border bg-black/85 pb-safe-bottom backdrop-blur-xl sm:hidden"
     >
       <ul className="flex h-14 items-stretch justify-around">
         {items(username, isAdmin).bottom.map(({ href, label, icon: Icon }) => {

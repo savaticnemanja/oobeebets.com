@@ -99,7 +99,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
         {legs.length > 0 && (
           <a
             href="#parlay-slip"
-            className="fixed bottom-[calc(4.875rem+var(--spacing-safe-bottom))] left-4 right-[5.5rem] z-30 flex items-center justify-between rounded-full bg-brand px-5 py-3 text-sm font-semibold text-black shadow-lg sm:sticky sm:inset-x-auto sm:bottom-4 sm:mt-3"
+            className="fixed bottom-[calc(4.875rem+var(--spacing-safe-bottom))] left-4 right-[5.5rem] z-30 flex translate-y-[calc(var(--chrome-p,0)*(3.5rem+1px+var(--spacing-safe-bottom)))] items-center justify-between rounded-full bg-brand px-5 py-3 text-sm font-semibold text-black shadow-lg sm:sticky sm:inset-x-auto sm:bottom-4 sm:mt-3"
           >
             <span>
               Slip · {legs.length} leg{legs.length === 1 ? "" : "s"}

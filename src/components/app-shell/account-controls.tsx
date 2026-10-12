@@ -77,7 +77,11 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
   const { pending, signOut } = useSignOut();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-black/80 pt-safe-top backdrop-blur-xl sm:hidden">
+    <header
+      data-chrome-top
+      // Slid up by ScrollChrome as you scroll down; see scroll-chrome.tsx.
+      className="sticky top-0 z-40 translate-y-[calc(var(--chrome-hide,0px)*-1)] border-b border-border bg-black/80 pt-safe-top backdrop-blur-xl sm:hidden"
+    >
       <div className="relative flex h-14 items-center px-4">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger aria-label={t().nav.openMenu} className="rounded-full">

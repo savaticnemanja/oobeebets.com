@@ -20,7 +20,7 @@ export function FeedTabs({
       aria-label="Feed"
       className={cn(
         "flex border-b border-border bg-black/80 backdrop-blur-xl",
-        sticky && "sticky top-[calc(3.5rem+var(--spacing-safe-top))] z-30 sm:top-0",
+        sticky && "sticky top-[calc(3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 sm:top-0",
       )}
     >
       {tabs.map((tab) => {
