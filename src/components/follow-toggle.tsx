@@ -1,7 +1,7 @@
 "use client";
 
 import { useOptimistic, useTransition } from "react";
-import { Circle, CircleCheck } from "lucide-react";
+import { Circle, CircleCheck, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { setPickFollowAction } from "@/app/actions/follows";
 import { FOLLOW_LABELS, type ViewerFollow } from "@/lib/follows";
@@ -32,12 +32,15 @@ export function FollowToggle({
   selection,
   follow,
   featured,
+  started,
 }: {
   pickId: string;
   /** Named in the control's label, so a screen reader knows which bet. */
   selection: string;
   follow: ViewerFollow;
   featured?: boolean;
+  /** Kicked off but not yet graded: an untaken circle shows a lock instead. */
+  started?: boolean;
 }) {
   const [taken, setTaken] = useOptimistic(follow.taken);
   const [pending, startTransition] = useTransition();
@@ -69,7 +72,22 @@ export function FollowToggle({
   // Past kick-off the fact is fixed, so it renders as a statement rather than a
   // control: still visible, so a tester can see what they logged, but there is
   // nothing left to press.
+  //
+  // While the game is under way and the pick still open, an untaken circle
+  // would look like a control that simply doesn't respond — so it becomes a
+  // lock, which says why. Once graded, the faded circle is history enough.
   if (!follow.open) {
+    if (started && !taken) {
+      return (
+        <span
+          className={cn("grid shrink-0 place-items-center text-pending", box)}
+          title={FOLLOW_LABELS.started}
+        >
+          <Lock className={featured ? "size-5" : "size-4"} aria-hidden="true" />
+          <span className="sr-only">{FOLLOW_LABELS.started}</span>
+        </span>
+      );
+    }
     const label = taken ? FOLLOW_LABELS.closedTaken : FOLLOW_LABELS.closedUntaken;
     return (
       <span

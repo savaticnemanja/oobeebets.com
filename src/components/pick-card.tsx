@@ -1,4 +1,4 @@
-import { TrendingUp } from "lucide-react";
+import { Lock, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
@@ -36,12 +36,23 @@ const STATUS_VARIANT: Record<PickStatus, "hit" | "miss" | "pending" | "default" 
 /** Result is never colour-only — the word ships with it. */
 const STATUS_LABEL: Record<PickStatus, string> = t().status;
 
-function KickoffTime({ at }: { at: Date }) {
-  return (
-    <time dateTime={at.toISOString()} className="num text-xs text-fg-subtle">
+function KickoffTime({ at, started }: { at: Date; started?: boolean }) {
+  const time = (
+    <time dateTime={at.toISOString()} className="num">
       {formatKickoff(at)} {timeZoneLabel()}
     </time>
   );
+  // Under way and not yet graded: say so, next to the lock on the circle —
+  // otherwise nothing explains why the circle no longer takes a tap.
+  if (started) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-pending">
+        <Lock className="size-3" aria-hidden="true" />
+        <span>Started {time} · locked</span>
+      </span>
+    );
+  }
+  return <span className="text-xs text-fg-subtle">{time}</span>;
 }
 
 /* ------------------------------------------------------------------ export */
@@ -70,6 +81,9 @@ export function PickCard({
 }) {
   const profit = pickProfit(pick);
   const settled = pick.status !== "pending";
+  // Rendered per request (the board is force-dynamic), so "now" is fresh.
+  // eslint-disable-next-line react-hooks/purity
+  const started = !settled && pick.startsAt.getTime() <= Date.now();
 
   return (
     <article
@@ -109,6 +123,7 @@ export function PickCard({
             selection={pick.selection}
             follow={follow}
             featured={featured}
+            started={started}
           />
         )}
         {/* The fixture reads as the selection's subtitle, so it is inside this
@@ -186,7 +201,7 @@ export function PickCard({
       )}
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <KickoffTime at={pick.startsAt} />
+        <KickoffTime at={pick.startsAt} started={started} />
         {pick.finalScore && (
           <span className="num text-xs text-fg-subtle">Final {pick.finalScore}</span>
         )}

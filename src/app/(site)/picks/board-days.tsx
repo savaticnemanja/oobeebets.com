@@ -107,8 +107,15 @@ export async function loadBoardDays({
           .orderBy(asc(picksTable.rank))
       : [];
   // Admins preview whole slates; everyone else sees each day's top VISIBLE_PICKS.
+  // Which picks a viewer sees is decided by rank; the order they're listed in
+  // is by kick-off, so a day reads like the schedule it is. Rank breaks ties.
   const picksOn = new Map(
-    visibleDays.map((d) => [d, visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin)]),
+    visibleDays.map((d) => [
+      d,
+      visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin).sort(
+        (a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.rank - b.rank,
+      ),
+    ]),
   );
   const shownPicks = [...picksOn.values()].flat();
 
@@ -186,9 +193,10 @@ export async function loadBoardDays({
       );
     }
 
-    // Pick tabs. Today leads with its top pick; earlier days are shown as they
-    // were graded, every rank in the grid.
-    const [top, ...rest] = isToday ? dayPicks : [undefined, ...dayPicks];
+    // Pick tabs. Today leads with its top pick, then the rest by kick-off;
+    // earlier days list every pick by kick-off.
+    const top = isToday ? dayPicks.find((p) => p.rank === 1) : undefined;
+    const rest = dayPicks.filter((p) => p !== top);
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
         {dayPicks.length === 0 ? (
@@ -201,7 +209,7 @@ export async function loadBoardDays({
           <>
             {top && <TopPickCard pick={top} follow={followFor(top)} variant="row" />}
             {rest.map((p) => (
-              <PickCard key={p!.id} pick={p!} follow={followFor(p!)} variant="row" />
+              <PickCard key={p.id} pick={p} follow={followFor(p)} variant="row" />
             ))}
           </>
         )}

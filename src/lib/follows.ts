@@ -75,4 +75,5 @@ export const FOLLOW_LABELS = {
   took: "You took this bet",
   closedTaken: "You took this bet — locked at kick-off",
   closedUntaken: "Kick-off has passed",
+  started: "Locked — this game has started",
 } as const;
