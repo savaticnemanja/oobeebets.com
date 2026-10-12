@@ -1,23 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { CalendarDays, Circle } from "lucide-react";
+import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
+import { Circle } from "lucide-react";
 import { db } from "@/db";
-import { pickFollows, picks as picksTable, slates } from "@/db/schema";
+import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import {
   CATEGORY_NOUN,
   PICKS_PER_SLATE,
-  TAB_NOUN,
   TAB_LABELS,
   boardTabs,
   categoryFromParam,
   tabFromParam,
   visiblePicks,
 } from "@/lib/board";
-import { getCommunityParlays, getOobeeParlays, getUserParlays } from "@/lib/parlay-store";
+import { getCommunityParlays, getOobeeParlays, getUserParlays, type ParlayView } from "@/lib/parlay-store";
 import { ParlayCard } from "@/components/parlay-card";
 import { DeleteParlayButton } from "@/components/parlay-builder";
 import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
@@ -25,17 +24,17 @@ import { Avatar, displayNameOf } from "@/components/social/identity";
 import { getSlateGames } from "@/lib/odds/board";
 import { ensureSlateOdds, refreshResults } from "@/lib/odds/sync";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
+import { pickProfit } from "@/lib/settlement";
 import { PickCard, TopPickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
-import { SlateDatePicker } from "@/components/slate-date-picker";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Today's picks",
-  description: `All ${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props for today — free during our beta.`,
+  title: "Picks",
+  description: `All ${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props, day by day — free during our beta.`,
   robots: { index: false, follow: false },
 };
 
@@ -43,129 +42,162 @@ export const metadata: Metadata = {
 // and whether they're an admin.
 export const dynamic = "force-dynamic";
 
+/** Days per page. "Show older days" pages back from the last one shown. */
+const DAYS_PER_PAGE = 5;
+
+/** Whole days between two YYYY-MM-DD slate dates (a minus b). */
+function dayDiff(a: string, b: string): number {
+  return Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
+}
+
+/**
+ * The board, day by day: today first, then every earlier day newest first,
+ * each under its own heading — so the record reads as one list rather than a
+ * date to pick. Today keeps its top-pick hero and the parlay builder; earlier
+ * days show their board as it was graded, with the day's record in the
+ * heading.
+ *
+ * Testers see published days; admins also see drafts (with a badge).
+ */
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; category?: string; welcome?: string }>;
+  searchParams: Promise<{ category?: string; before?: string; welcome?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
 
   const today = slateDateString();
-  const requested = params.date && isValidSlateDate(params.date) ? params.date : today;
+  // `before` pages back: everything strictly older than that day.
+  const before = params.before && isValidSlateDate(params.before) && params.before <= today ? params.before : null;
+  const firstPage = before === null;
 
-  // Only admins can browse history — everyone else always sees today's board.
-  const date = auth.isAdmin ? requested : today;
-  // Three tabs, two of which are pick categories. `category` stays the thing
-  // the picks query filters on; `tab` is what the reader is looking at, and on
-  // the parlay tab it points at a different table entirely.
+  // Three kinds of tab: two pick categories, Oobee's parlays, and the
+  // Community parlays that read a different table entirely.
   const tab = tabFromParam(params.category);
   const isParlayTab = tab === "parlay";
   const isCommunityTab = tab === "community";
+  const category = categoryFromParam(params.category);
   // Grade anything whose game has finished before reading results.
   await refreshResults();
-  const category = categoryFromParam(params.category);
 
-  const [slate] = await db.select().from(slates).where(eq(slates.date, date)).limit(1);
+  /* ------------------------------------------------------------ the days */
 
-  // Admins preview drafts; nobody else sees an unpublished slate exists.
-  const visible = Boolean(slate?.publishedAt) || auth.isAdmin;
-
-  // Filtered in SQL rather than in memory: (slate_date, category) is the
-  // leading edge of picks_slate_rank_unique, so the tab query is an index
-  // range read, and the tab you are not looking at is never fetched.
-  const rows: Pick[] = visible && !isParlayTab && !isCommunityTab
+  // Which days this page shows. The pick tabs follow slates (published ones,
+  // plus drafts for admins); Community follows the days anyone shared a
+  // parlay, since it needs no Oobee slate. Today always leads page one, so
+  // there is somewhere to say "nothing yet".
+  const upTo = before ? lt(slates.date, before) : lte(slates.date, today);
+  const dayRows: { date: string }[] = isCommunityTab
     ? await db
-        .select()
-        .from(picksTable)
-        .where(and(eq(picksTable.slateDate, date), eq(picksTable.category, category)))
-        .orderBy(asc(picksTable.rank))
-    : [];
-
-  // Counts for the tab labels — cheap, and the alternative is a tab that
-  // claims nothing is there until you click it.
-  const tallies = visible
-    ? await db
-        .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
-        .from(picksTable)
-        .where(eq(picksTable.slateDate, date))
-        .groupBy(picksTable.category)
-    : [];
-  const countFor = new Map(tallies.map((t) => [t.category, t.n]));
-
-  // Admins preview the whole slate; everyone else sees the top VISIBLE_PICKS.
-  const view = visiblePicks(rows, auth.isAdmin);
-  const [top, ...rest] = view;
-
-  // Only the admin date picker consumes this, and only admins can browse to
-  // another date at all — so a tester's board does not pay for the query.
-  const availableDates = auth.isAdmin
-    ? await db
+        .selectDistinct({ date: parlaysTable.slateDate })
+        .from(parlaysTable)
+        .where(
+          and(
+            eq(parlaysTable.shared, true),
+            before ? lt(parlaysTable.slateDate, before) : lte(parlaysTable.slateDate, today),
+          ),
+        )
+        .orderBy(desc(parlaysTable.slateDate))
+        .limit(DAYS_PER_PAGE + 1)
+    : await db
         .select({ date: slates.date })
         .from(slates)
-        .where(sql`${slates.publishedAt} is not null`)
-        .orderBy(sql`${slates.date} desc`)
-        .limit(30)
+        .where(and(upTo, auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`))
+        .orderBy(desc(slates.date))
+        .limit(DAYS_PER_PAGE + 1);
+
+  const found = dayRows.map((d) => d.date);
+  const withToday = firstPage && !found.includes(today) ? [today, ...found] : found;
+  const days = withToday.slice(0, DAYS_PER_PAGE);
+  const olderFrom = withToday.length > DAYS_PER_PAGE || found.length > DAYS_PER_PAGE ? days.at(-1)! : null;
+
+  const slateRows = days.length
+    ? await db.select({ date: slates.date, publishedAt: slates.publishedAt }).from(slates).where(inArray(slates.date, days))
     : [];
+  const publishedOn = new Set(slateRows.filter((s) => s.publishedAt).map((s) => s.date));
+  const draftOn = new Set(slateRows.filter((s) => !s.publishedAt).map((s) => s.date));
+  // Admins preview drafts; nobody else sees an unpublished slate exists.
+  const visibleDays = days.filter((d) => publishedOn.has(d) || auth.isAdmin);
+
+  /* ----------------------------------------------------------- pick tabs */
+
+  // One query for every day on the page. (slate_date, category) is the
+  // leading edge of picks_slate_rank_unique, so this is an index range read,
+  // and the tab you are not looking at is never fetched.
+  const rows: Pick[] =
+    !isParlayTab && !isCommunityTab && visibleDays.length
+      ? await db
+          .select()
+          .from(picksTable)
+          .where(and(inArray(picksTable.slateDate, visibleDays), eq(picksTable.category, category)))
+          .orderBy(asc(picksTable.rank))
+      : [];
+  // Admins preview whole slates; everyone else sees each day's top VISIBLE_PICKS.
+  const picksOn = new Map(
+    visibleDays.map((d) => [d, visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin)]),
+  );
+  const shownPicks = [...picksOn.values()].flat();
 
   // Which of these picks this viewer has already ticked off. Keyed on
-  // (user_id, pick_id) in that order, so this is an index-only scan over at
-  // most fifteen keys — see the note on pick_follows in db/schema.ts.
-  const published = Boolean(slate?.publishedAt);
-  const takenIds =
-    published && view.length > 0
-      ? new Set(
-          (
-            await db
-              .select({ pickId: pickFollows.pickId })
-              .from(pickFollows)
-              .where(
-                and(
-                  eq(pickFollows.userId, auth.user.id),
-                  inArray(
-                    pickFollows.pickId,
-                    view.map((p) => p.id),
-                  ),
-                ),
-              )
-          ).map((r) => r.pickId),
-        )
-      : new Set<string>();
+  // (user_id, pick_id) in that order — see the note on pick_follows in
+  // db/schema.ts.
+  const takenIds = shownPicks.length
+    ? new Set(
+        (
+          await db
+            .select({ pickId: pickFollows.pickId })
+            .from(pickFollows)
+            .where(and(eq(pickFollows.userId, auth.user.id), inArray(pickFollows.pickId, shownPicks.map((p) => p.id))))
+        ).map((r) => r.pickId),
+      )
+    : new Set<string>();
 
   /**
-   * An unpublished draft gets no control at all: an admin previewing tomorrow's
-   * board has nothing to take yet, and the action refuses it anyway.
+   * An unpublished draft gets no control at all: an admin previewing a board
+   * has nothing to take yet, and the action refuses it anyway.
    */
   function followFor(p: Pick): ViewerFollow | undefined {
-    if (!published) return undefined;
+    if (!publishedOn.has(p.slateDate)) return undefined;
     return { taken: takenIds.has(p.id), open: followWindowOpen(p) };
   }
 
-  // The parlay tabs read other tables, so none of this is fetched for the tabs
-  // that do not show it. The viewer's own parlays are filtered to the day on
-  // screen — their full history lives on /my-bets.
-  const oobeeParlays = isParlayTab && visible ? await getOobeeParlays(date) : [];
+  // Counts for today's tab labels — the alternative is a tab that claims
+  // nothing is there until you click it.
+  const tallies =
+    publishedOn.has(today) || auth.isAdmin
+      ? await db
+          .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
+          .from(picksTable)
+          .where(eq(picksTable.slateDate, today))
+          .groupBy(picksTable.category)
+      : [];
+  const countFor = new Map(tallies.map((t) => [t.category, t.n]));
 
-  // The Community tab needs no Oobee slate at all: it is built from the odds
-  // feed, which is refreshed here only if the stored copy is stale.
-  if (isCommunityTab) await ensureSlateOdds(date);
-  const [communityParlays, myParlays, games] = isCommunityTab
+  /* --------------------------------------------------------- parlay tabs */
+
+  const oobeeOn = new Map<string, ParlayView[]>(
+    isParlayTab ? await Promise.all(visibleDays.map(async (d) => [d, await getOobeeParlays(d)] as const)) : [],
+  );
+
+  // The builder and "your parlays today" only lead page one. The odds feed
+  // is refreshed here only if the stored copy is stale.
+  const showBuilder = isCommunityTab && firstPage;
+  if (showBuilder) await ensureSlateOdds(today);
+  const [communityLists, myParlays, games] = isCommunityTab
     ? await Promise.all([
-        getCommunityParlays(date),
-        getUserParlays(auth.user.id),
-        getSlateGames(date),
+        Promise.all(days.map(async (d) => [d, await getCommunityParlays(d)] as const)),
+        showBuilder ? getUserParlays(auth.user.id) : Promise.resolve([]),
+        showBuilder ? getSlateGames(today) : Promise.resolve([]),
       ])
     : [[], [], []];
+  const communityOn = new Map(communityLists);
+  const myParlaysToday = myParlays.filter((p) => p.slateDate === today);
 
-  const myParlaysToday = myParlays.filter((p) => p.slateDate === date);
-  const othersShared = communityParlays.filter((p) => p.ownerId !== auth.user.id);
+  /* ------------------------------------------------------------- render */
 
-  /** What the heading counts — the parlay tab has its own table. */
-  const tabCount = isParlayTab
-    ? oobeeParlays.length
-    : isCommunityTab
-      ? communityParlays.length
-      : view.length;
+  const tabHref = (c: string) => `/picks?category=${c}`;
+  const hasTodayPicks = (picksOn.get(today)?.length ?? 0) > 0;
 
   return (
     <div className="shell py-10">
@@ -180,51 +212,14 @@ export default async function PicksPage({
       )}
 
       {/* -------------------------------------------------------------- head */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {date === today ? "Today's board" : formatSlateDate(date)}
-          </h1>
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-muted">
-            <CalendarDays className="size-3.5" aria-hidden="true" />
-            <span className="num">{formatSlateDate(date)}</span>
-            {slate?.publishedAt || isCommunityTab ? (
-              <>
-                <span aria-hidden="true">·</span>
-                {/* Counted off whichever table this tab reads. Before, the
-                    parlay tab reported the picks query it never ran, which
-                    rendered as "0 game bets" above a board full of parlays. */}
-                <span>
-                  {tabCount} {TAB_NOUN[tab]}
-                  {tabCount === 1 ? "" : "s"}, free
-                </span>
-              </>
-            ) : null}
-            {!slate?.publishedAt && countFor.size > 0 && (
-              <Badge variant="pending">Draft — admin preview</Badge>
-            )}
-          </p>
-        </div>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">The board</h1>
+      <p className="mt-1.5 text-sm text-fg-muted">
+        Every day&apos;s picks, newest first, graded against the final score. All free during our beta.
+      </p>
 
-        <div className="flex items-center gap-2">
-          {auth.isAdmin && (
-            <SlateDatePicker
-              dates={availableDates.map((d) => d.date)}
-              current={date}
-              today={today}
-              keep={{ category: params.category }}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* -------------------------------------------------------------- hint */}
-      {/* Said once, at the top, rather than as a label on fifteen cards. The
-          circles are discoverable on their own, but "it is one tap and we
-          never ask for a stake" is not, and it is the part that decides
-          whether a tester bothers. */}
-      {published && !isParlayTab && !isCommunityTab && view.length > 0 && (
-        <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
+      {/* Said once, at the top, rather than as a label on fifteen cards. */}
+      {firstPage && !isParlayTab && !isCommunityTab && hasTodayPicks && publishedOn.has(today) && (
+        <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-fg-subtle">
           <Circle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span>
             Took one of these? Tap its circle. That&apos;s the whole thing — no stake,
@@ -236,26 +231,16 @@ export default async function PicksPage({
       {/* -------------------------------------------------------------- tabs */}
       <nav
         aria-label="Board"
-        className="mt-8 -mb-px flex items-center gap-1 overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
+        className="mt-6 -mb-px flex items-center gap-1 overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
       >
         {boardTabs.map((c) => {
           const isActive = c === tab;
-          // The parlay count comes from its own table; the other two are in
-          // the tally above. Zero renders as nothing either way.
-          const n =
-            c === "parlay"
-              ? oobeeParlays.length
-              : c === "community"
-                ? communityParlays.length
-                : (countFor.get(c) ?? 0);
+          // Today's count; the parlay tabs count their own tables.
+          const n = c === "parlay" || c === "community" ? 0 : (countFor.get(c) ?? 0);
           return (
             <Link
               key={c}
-              href={
-                date === today
-                  ? `/picks?category=${c}`
-                  : `/picks?date=${date}&category=${c}`
-              }
+              href={tabHref(c)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors",
@@ -264,16 +249,22 @@ export default async function PicksPage({
             >
               {TAB_LABELS[c]}
               {n > 0 && <span className="num text-xs text-fg-subtle">{n}</span>}
-              {isActive && (
-                <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />
-              )}
+              {isActive && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />}
             </Link>
           );
         })}
       </nav>
 
-      {/* ------------------------------------------------------- parlay tab */}
-      {isCommunityTab ? (
+      {!firstPage && (
+        <p className="mt-6 text-sm">
+          <Link href={tabHref(tab)} className="text-brand hover:underline">
+            ← Back to today
+          </Link>
+        </p>
+      )}
+
+      {/* ----------------------------------------------- community: builder */}
+      {showBuilder && (
         <div className="mt-8 space-y-10">
           <section aria-labelledby="build-heading">
             <h2 id="build-heading" className="text-sm font-semibold tracking-tight">
@@ -305,121 +296,180 @@ export default async function PicksPage({
               </div>
             </section>
           )}
-
-          <section aria-labelledby="community-heading">
-            <h2 id="community-heading" className="text-sm font-semibold tracking-tight">
-              From the community
-            </h2>
-            {othersShared.length === 0 ? (
-              <p className="mt-2 text-sm text-fg-muted">
-                Nobody has shared a parlay for this day yet. Build one and be first.
-              </p>
-            ) : (
-              <div className="mt-4 grid gap-3">
-                {othersShared.map((pl) => (
-                  <ParlayCard key={pl.id} parlay={pl}>
-                    {pl.ownerUsername && (
-                      <Link
-                        href={`/u/${pl.ownerUsername}`}
-                        className="flex min-w-0 items-center gap-2 text-xs text-fg-muted hover:text-fg"
-                      >
-                        <Avatar
-                          name={displayNameOf({ displayName: pl.ownerDisplayName, username: pl.ownerUsername })}
-                          size="sm"
-                          className="size-6 text-[0.625rem]"
-                        />
-                        <span className="truncate">
-                          {displayNameOf({ displayName: pl.ownerDisplayName, username: pl.ownerUsername })}{" "}
-                          <span className="text-fg-subtle">@{pl.ownerUsername}</span>
-                        </span>
-                      </Link>
-                    )}
-                  </ParlayCard>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
-      ) : isParlayTab ? (
-        <div className="mt-8 space-y-10">
-          {/* Oobee's own, ranked like the other two boards. */}
-          <section aria-labelledby="oobee-parlays-heading">
-            <h2
-              id="oobee-parlays-heading"
-              className="text-sm font-semibold tracking-tight"
-            >
-              Oobee parlays
-            </h2>
-            {oobeeParlays.length === 0 ? (
-              <p className="mt-2 text-sm text-fg-muted">
-                {date === today
-                  ? "None up yet today — they go out with the rest of the board."
-                  : "None published for this day."}
-              </p>
-            ) : (
-              <div className="mt-4 grid gap-3">
-                {oobeeParlays.map((pl, i) => (
-                  <Reveal key={pl.id} delay={Math.min(i * 0.03, 0.2)}>
-                    <ParlayCard parlay={pl} featured={pl.rank === 1} />
-                  </Reveal>
-                ))}
-              </div>
-            )}
-          </section>
+      )}
 
-          <p className="text-sm text-fg-muted">
-            Want your own?{" "}
-            <Link
-              href={date === today ? "/picks?category=community" : `/picks?date=${date}&category=community`}
-              className="text-brand hover:underline"
-            >
-              Build one on Community parlays
-            </Link>{" "}
-            from any line on today&apos;s games.
-          </p>
-        </div>
-      ) : view.length === 0 ? (
-        <div className="card-hairline mt-8 p-10 text-center">
-          <h2 className="text-lg font-semibold tracking-tight">
-            {date === today
-              ? `No ${CATEGORY_NOUN[category]}s up yet`
-              : "Nothing published for this day"}
-          </h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-fg-muted">
-            {date === today
-              ? "Picks go out before the first kick-off. Check back shortly, or flip to the other tab."
-              : "Try another date."}
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* ------------------------------------------------- top pick hero */}
-          {top && (
-            <div className="mt-8">
-              <Reveal>
-                <TopPickCard pick={top} follow={followFor(top)} />
-              </Reveal>
-            </div>
-          )}
+      {/* --------------------------------------------------------- the days */}
+      <div className="mt-6">
+        {days.map((d) => {
+          const isToday = d === today;
+          const draft = draftOn.has(d);
+          const dayPicks = picksOn.get(d) ?? [];
 
-          {/* ----------------------------------------------------- the board */}
-          {rest.length > 0 && (
-            <section aria-labelledby="board-heading" className="mt-10">
-              <h2 id="board-heading" className="text-sm font-semibold tracking-tight">
-                The rest of the board
-              </h2>
+          if (isCommunityTab) {
+            // Today's own parlays are already listed above with their controls.
+            const list = (communityOn.get(d) ?? []).filter((pl) => !(isToday && pl.ownerId === auth.user.id));
+            return (
+              <DaySection key={d} date={d} today={today}>
+                {list.length === 0 ? (
+                  <Empty>{isToday ? "Nobody has shared a parlay today yet. Build one and be first." : "No shared parlays this day."}</Empty>
+                ) : (
+                  <div className="grid gap-3">
+                    {list.map((pl) => (
+                      <ParlayCard key={pl.id} parlay={pl}>
+                        <Owner parlay={pl} />
+                      </ParlayCard>
+                    ))}
+                  </div>
+                )}
+              </DaySection>
+            );
+          }
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {rest.map((p, i) => (
-                  <Reveal key={p.id} delay={Math.min(i * 0.02, 0.2)}>
-                    <PickCard pick={p} follow={followFor(p)} />
-                  </Reveal>
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+          if (isParlayTab) {
+            const list = oobeeOn.get(d) ?? [];
+            return (
+              <DaySection key={d} date={d} today={today} draft={draft && auth.isAdmin}>
+                {list.length === 0 ? (
+                  <Empty>{isToday ? "None up yet today — they go out with the rest of the board." : "No Oobee parlays this day."}</Empty>
+                ) : (
+                  <div className="grid gap-3">
+                    {list.map((pl, i) => (
+                      <Reveal key={pl.id} delay={Math.min(i * 0.03, 0.2)}>
+                        <ParlayCard parlay={pl} featured={isToday && pl.rank === 1} />
+                      </Reveal>
+                    ))}
+                  </div>
+                )}
+              </DaySection>
+            );
+          }
+
+          // Pick tabs. Today leads with its top pick; earlier days are shown as
+          // they were graded, every rank in the grid.
+          const [top, ...rest] = isToday ? dayPicks : [undefined, ...dayPicks];
+          return (
+            <DaySection key={d} date={d} today={today} draft={draft && auth.isAdmin} picks={dayPicks}>
+              {dayPicks.length === 0 ? (
+                <Empty>
+                  {isToday
+                    ? `No ${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
+                    : `No ${CATEGORY_NOUN[category]}s this day.`}
+                </Empty>
+              ) : (
+                <>
+                  {top && (
+                    <Reveal>
+                      <TopPickCard pick={top} follow={followFor(top)} />
+                    </Reveal>
+                  )}
+                  {rest.length > 0 && (
+                    <div className={cn("grid gap-3 sm:grid-cols-2", top && "mt-3")}>
+                      {rest.map((p, i) => (
+                        <Reveal key={p!.id} delay={Math.min(i * 0.02, 0.2)}>
+                          <PickCard pick={p!} follow={followFor(p!)} />
+                        </Reveal>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </DaySection>
+          );
+        })}
+      </div>
+
+      {olderFrom && (
+        <Link
+          href={`${tabHref(tab)}&before=${olderFrom}`}
+          className="mt-10 block rounded-lg border border-border py-3 text-center text-sm text-brand transition-colors hover:bg-surface/60"
+        >
+          Show older days
+        </Link>
+      )}
+
+      {isParlayTab && firstPage && (
+        <p className="mt-10 text-sm text-fg-muted">
+          Want your own?{" "}
+          <Link href={tabHref("community")} className="text-brand hover:underline">
+            Build one on Community parlays
+          </Link>{" "}
+          from any line on today&apos;s games.
+        </p>
       )}
     </div>
+  );
+}
+
+/**
+ * One day of the board. The heading sticks while you scroll through that day
+ * (under the phone's top bar, at the very top beside the sidebar), and on a
+ * day with graded picks carries its record: won–lost(–push) and net units.
+ */
+function DaySection({
+  date,
+  today,
+  draft,
+  picks,
+  children,
+}: {
+  date: string;
+  today: string;
+  draft?: boolean;
+  picks?: Pick[];
+  children: React.ReactNode;
+}) {
+  const diff = dayDiff(today, date);
+  const name = diff === 0 ? "Today" : diff === 1 ? "Yesterday" : null;
+
+  const settled = (picks ?? []).filter((p) => p.status !== "pending");
+  const won = settled.filter((p) => p.status === "won").length;
+  const lost = settled.filter((p) => p.status === "lost").length;
+  const pushed = settled.filter((p) => p.status === "push").length;
+  const units = settled.reduce((sum, p) => sum + pickProfit(p), 0);
+
+  return (
+    <section aria-labelledby={`day-${date}-heading`} id={`day-${date}`} className="mt-8 scroll-mt-20">
+      <div className="sticky top-[calc(3.5rem+var(--spacing-safe-top))] z-20 -mx-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-0 sm:-mx-6 sm:px-6">
+        <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">
+          {name && <span>{name}</span>}
+          <span className={cn("num", name ? "text-sm font-normal text-fg-muted" : "")}>{formatSlateDate(date)}</span>
+          {draft && <Badge variant="pending">Draft — admin preview</Badge>}
+        </h2>
+        {settled.length > 0 && (
+          <p className="num text-sm text-fg-muted">
+            {won}–{lost}
+            {pushed > 0 ? `–${pushed}` : ""}
+            <span className="mx-1.5 text-fg-subtle" aria-hidden="true">·</span>
+            <span className={cn(units > 0 ? "text-hit" : units < 0 ? "text-miss" : "")}>
+              {units > 0 ? "+" : ""}
+              {units.toFixed(2)}u
+            </span>
+          </p>
+        )}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-fg-muted">{children}</p>;
+}
+
+/** Who shared a Community parlay, in the ticket's action slot. */
+function Owner({ parlay }: { parlay: ParlayView }) {
+  if (!parlay.ownerUsername) return null;
+  const name = displayNameOf({ displayName: parlay.ownerDisplayName, username: parlay.ownerUsername });
+  return (
+    <Link
+      href={`/u/${parlay.ownerUsername}`}
+      className="flex min-w-0 items-center gap-2 text-xs text-fg-muted hover:text-fg"
+    >
+      <Avatar name={name} size="sm" className="size-6 text-[0.625rem]" />
+      <span className="truncate">
+        {name} <span className="text-fg-subtle">@{parlay.ownerUsername}</span>
+      </span>
+    </Link>
   );
 }
