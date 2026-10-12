@@ -1,9 +1,9 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { games, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
+import { games, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, userFollows, users } from "@/db/schema";
 import { LEAGUE_CONFIG, eventLabel, lineLabel, marketCategory, marketEnum, type FeedLeague } from "./odds/markets";
-import type { Market, PickCategory, PickStatus, Sport } from "@/db/schema";
+import type { Market, PickCategory, PickStatus, Role, Sport } from "@/db/schema";
 import { PARLAY_STAKE_UNITS, parlayPrice, parlayProfit, parlayStatus, parlayWindowOpen } from "./parlays";
 
 /**
@@ -301,6 +301,50 @@ export async function getCommunityParlays(slateDate: string, limit = 100): Promi
     .limit(limit);
 
   return hydrate(rows);
+}
+
+/**
+ * Shared parlays for the Home feed, newest first, each with who built it.
+ *
+ * `followingOf` narrows to the people a viewer follows, plus the viewer — the
+ * Following tab. `from` (inclusive) and `to` (exclusive) bound created_at, which
+ * is how the feed pages these alongside posts without a cursor of their own.
+ * The owner's role rides along for the verified badge next to their name.
+ */
+export async function getFeedParlays(opts: {
+  followingOf?: string;
+  from?: Date | null;
+  to?: Date | null;
+  limit: number;
+  offset?: number;
+}): Promise<Array<{ parlay: ParlayView; ownerRole: Role }>> {
+  const rows = await db
+    .select({
+      ...PARLAY_COLUMNS,
+      ownerEmail: sql<string | null>`null`,
+      ownerUsername: users.username,
+      ownerDisplayName: users.displayName,
+      ownerRole: users.role,
+    })
+    .from(parlays)
+    .innerJoin(users, eq(users.id, parlays.ownerId))
+    .where(
+      and(
+        eq(parlays.shared, true),
+        opts.followingOf
+          ? sql`(${parlays.ownerId} = ${opts.followingOf} or ${parlays.ownerId} in (select ${userFollows.followeeId} from ${userFollows} where ${userFollows.followerId} = ${opts.followingOf}))`
+          : undefined,
+        opts.from ? gte(parlays.createdAt, opts.from) : undefined,
+        opts.to ? lt(parlays.createdAt, opts.to) : undefined,
+      ),
+    )
+    .orderBy(desc(parlays.createdAt), desc(parlays.id))
+    .limit(opts.limit)
+    .offset(opts.offset ?? 0);
+
+  const roles = new Map(rows.map((r) => [r.id, r.ownerRole]));
+  const views = await hydrate(rows);
+  return views.map((parlay) => ({ parlay, ownerRole: roles.get(parlay.id) ?? "user" }));
 }
 
 /** One parlay by id, graded. Null when it does not exist. */

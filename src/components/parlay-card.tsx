@@ -23,10 +23,12 @@ import { CATEGORY_LABELS } from "@/lib/board";
 export function ParlayCard({
   parlay,
   featured,
+  className,
   children,
 }: {
   parlay: ParlayView;
   featured?: boolean;
+  className?: string;
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -47,6 +49,7 @@ export function ParlayCard({
         featured && "border-brand/25 bg-brand/5 p-5",
         status === "won" && !featured && "border-hit/20",
         status === "lost" && !featured && "border-miss/20",
+        className,
       )}
       aria-label={`${legs.length}-leg parlay at ${price === null ? "no price" : formatOdds(price)}, ${STATUS_LABEL[status]}`}
     >

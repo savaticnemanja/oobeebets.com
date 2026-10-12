@@ -160,15 +160,14 @@ function page(rows: Row[], limit: number): FeedPage {
 /* ----------------------------------------------------------------- feeds */
 
 /**
- * Following: top-level posts from the accounts the viewer follows, plus their
- * own, newest first. Replies stay on their threads, as on X's default view —
- * a feed of half-conversations reads as noise.
+ * Following: posts and replies from the accounts the viewer follows, plus
+ * their own, newest first. A reply carries its "Replying to" line and opens
+ * its thread, so it reads as a pointer into a conversation, not half of one.
  */
 export async function getFollowingFeed(viewerId: string, before?: string): Promise<FeedPage> {
   const rows = await selectPosts(viewerId)
     .where(
       and(
-        isNull(posts.parentId),
         sql`(${posts.authorId} = ${viewerId} or ${posts.authorId} in (select ${userFollows.followeeId} from ${userFollows} where ${userFollows.followerId} = ${viewerId}))`,
         olderThan(before),
       ),
@@ -180,13 +179,13 @@ export async function getFollowingFeed(viewerId: string, before?: string): Promi
 
 /**
  * For you: the default curation, and the whole feed for anyone who follows
- * nobody yet. Every top-level post from the last 30 days, ranked by HOT_SCORE.
+ * nobody yet. Every post and reply from the last 30 days, ranked by HOT_SCORE.
  * Paged by offset rather than cursor, because a ranking that moves while you
  * read has no stable "older than this one".
  */
 export async function getForYouFeed(viewerId: string | null, pageIndex = 0): Promise<FeedPage & { nextPage: number | null }> {
   const rows = await selectPosts(viewerId)
-    .where(and(isNull(posts.parentId), sql`${posts.createdAt} > now() - interval '30 days'`))
+    .where(sql`${posts.createdAt} > now() - interval '30 days'`)
     .orderBy(desc(HOT_SCORE), desc(posts.createdAt))
     .limit(FEED_PAGE_SIZE + 1)
     .offset(pageIndex * FEED_PAGE_SIZE);

@@ -13,6 +13,7 @@ import { FollowButton } from "@/components/social/follow-button";
 import { PostBody } from "@/components/social/post-body";
 import { Button } from "@/components/ui/button";
 import { SocialShell } from "@/components/social/social-shell";
+import { postItems } from "@/lib/home-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +127,7 @@ export default async function ProfilePage({
       />
 
       <FeedList
-        posts={feed.posts}
+        items={postItems(feed.posts)}
         viewerId={viewerId}
         isAdmin={auth?.isAdmin ?? false}
         moreHref={feed.nextCursor && `${base}?tab=${tab}&before=${feed.nextCursor}`}

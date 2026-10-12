@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { FeedPost } from "@/lib/social";
+import type { FeedItem } from "@/lib/home-feed";
 import { PostCard } from "@/components/social/post-card";
+import { ParlayRow } from "@/components/social/parlay-row";
 import { cn } from "@/lib/utils";
 
 /** The tab strip under a page title: For you / Following, Posts / Replies / Likes. */
@@ -46,26 +47,31 @@ export function FeedTabs({
   );
 }
 
+/** A timeline: posts, and on Home, shared parlays between them. */
 export function FeedList({
-  posts,
+  items,
   viewerId,
   isAdmin,
   moreHref,
   empty,
 }: {
-  posts: FeedPost[];
+  items: FeedItem[];
   viewerId: string | null;
   isAdmin: boolean;
   /** Link to the next page, when there is one. */
   moreHref?: string | null;
   empty?: React.ReactNode;
 }) {
-  if (posts.length === 0) return <>{empty}</>;
+  if (items.length === 0) return <>{empty}</>;
   return (
     <div>
-      {posts.map((p) => (
-        <PostCard key={p.id} post={p} viewerId={viewerId} isAdmin={isAdmin} />
-      ))}
+      {items.map((item) =>
+        item.kind === "post" ? (
+          <PostCard key={item.post.id} post={item.post} viewerId={viewerId} isAdmin={isAdmin} />
+        ) : (
+          <ParlayRow key={item.parlay.id} parlay={item.parlay} owner={item.owner} />
+        ),
+      )}
       {moreHref && (
         <Link
           href={moreHref}

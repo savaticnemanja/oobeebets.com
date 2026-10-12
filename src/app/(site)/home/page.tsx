@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { getAuth } from "@/lib/auth";
-import {
-  getFollowingCount,
-  getFollowingFeed,
-  getForYouFeed,
-  getWhoToFollow,
-} from "@/lib/social";
+import { getFollowingCount, getWhoToFollow } from "@/lib/social";
+import { getHomeFollowing, getHomeForYou } from "@/lib/home-feed";
 import { Composer } from "@/components/social/composer";
 import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
@@ -26,12 +22,15 @@ type Tab = "for-you" | "following";
 /**
  * The activity page. Two feeds, as on X:
  *
- *   For you   — everything recent, ranked by engagement (getForYouFeed). This
+ *   For you   — everything recent, ranked by engagement (getHomeForYou). This
  *               is the default curation, and the landing tab for anyone who
  *               follows nobody yet, so a new tester's first look is a live
  *               room rather than an empty page.
  *   Following — the accounts you follow, newest first. Becomes the landing
  *               tab the moment you follow one person.
+ *
+ * Both carry replies and shared Community parlays as well as posts — see
+ * lib/home-feed.ts for how parlays page alongside them.
  *
  * An explicit ?tab= always wins, so the choice survives "Show older posts".
  */
@@ -56,14 +55,14 @@ export default async function HomePage({
   const before = params.before && /^[0-9a-f-]{36}$/i.test(params.before) ? params.before : undefined;
 
   const [feed, suggestions] = await Promise.all([
-    tab === "following" ? getFollowingFeed(viewerId, before) : getForYouFeed(viewerId, pageIndex),
+    tab === "following" ? getHomeFollowing(viewerId, before) : getHomeForYou(viewerId, pageIndex),
     getWhoToFollow(viewerId, 5),
   ]);
 
   const moreHref =
-    tab === "following"
+    "nextCursor" in feed
       ? feed.nextCursor && `/home?tab=following&before=${feed.nextCursor}`
-      : "nextPage" in feed && feed.nextPage !== null
+      : feed.nextPage !== null
         ? `/home?tab=for-you&page=${feed.nextPage}`
         : null;
 
@@ -105,7 +104,7 @@ export default async function HomePage({
       )}
 
       <FeedList
-        posts={feed.posts}
+        items={feed.items}
         viewerId={viewerId}
         isAdmin={auth.isAdmin}
         moreHref={moreHref}
