@@ -44,7 +44,6 @@ const browser = await chromium.launch();
 // page rather than the surface it is named after.
 const SHOTS = [
   { name: "01-landing", path: "/", user: null, full: true },
-  { name: "02-top-picks", path: "/top-picks", user: TESTER_EMAIL, full: true },
   { name: "03-picks", path: "/picks", user: TESTER_EMAIL, full: false },
   // The board is two tabs; a shot of only the default one reviews half of it.
   { name: "03b-picks-props", path: "/picks?category=prop", user: TESTER_EMAIL, full: false },

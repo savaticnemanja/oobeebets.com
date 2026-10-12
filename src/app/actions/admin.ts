@@ -55,7 +55,6 @@ async function audit(
 function revalidateSlate() {
   revalidatePath("/");
   revalidatePath("/picks");
-  revalidatePath("/top-picks");
   revalidatePath("/admin/slate");
   revalidatePath("/admin/settle");
 }

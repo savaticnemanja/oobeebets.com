@@ -100,7 +100,6 @@ export async function setPickFollowAction(
   // page, it is force-dynamic, and nobody should pay for an analytics
   // re-render on a tester's tap.
   revalidatePath("/picks");
-  revalidatePath("/top-picks");
 
   // Not audited. The audit log is for operator actions on the record — publish,
   // settle, void, role changes — and a tester ticking a box is ordinary product

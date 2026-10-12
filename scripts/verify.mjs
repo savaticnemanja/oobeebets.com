@@ -8,7 +8,7 @@
  * Checks the things that would actually cost money if they broke:
  *   1. Settlement maths — every stat on the site is a sum of this.
  *   2. Board visibility — picks past the free limit must not be in the
- *      response at all, on either /picks tab or either /top-picks tab, and
+ *      response at all, on either /picks tab, and
  *      the board's own contract, called directly. Each /picks tab must also
  *      serve its own board and nothing from the other one.
  *   3. Access control — /admin must not be reachable by a normal user.
@@ -271,44 +271,6 @@ for (const category of pickCategories) {
   const res = await fetch(`${APP_URL}/picks`, { redirect: "manual" });
   const { ok, location } = redirectsToLogin(res);
   check(ok, "(anonymous) is gated".padEnd(22), `-> ${res.status} ${location}`);
-}
-
-// No public picks anywhere — /top-picks was the deliberate public teaser,
-// now gated the same as /picks.
-{
-  const res = await fetch(`${APP_URL}/top-picks`, { redirect: "manual" });
-  const { ok, location } = redirectsToLogin(res);
-  check(ok, "(anonymous) /top-picks is gated".padEnd(22), `-> ${res.status} ${location}`);
-}
-
-/* ------------------------------------------- 2a. the same limit, per sport */
-
-/**
- * /top-picks filters the slate by sport and the free limit is a cut on rank,
- * which runs across the whole slate rather than within one sport. So an
- * MLB-heavy top 15 leaves the NFL tab holding fewer than 15 rows, and "the
- * first 15 rows for this sport" would quietly serve ranks past the limit.
- * A signed-in tester must never see a rank above the game board's own limit on
- * either tab. /top-picks is game bets only — props are ranked separately and
- * have their own tab on /picks — so the cut here is VISIBLE_PICKS.game.
- */
-console.log("\nBoard visibility on /top-picks (per-sport tabs share one rank cut)");
-
-for (const sport of ["mlb", "nfl"]) {
-  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
-  const html = await (
-    await fetch(`${APP_URL}/top-picks?sport=${sport}`, {
-      headers: { cookie: `oobee_session=${token}` },
-    })
-  ).text();
-  const served = [...servedRanks(html)];
-  const over = served.filter((r) => r > VISIBLE_PICKS.game);
-  check(
-    over.length === 0,
-    `tester /top-picks?sport=${sport}`.padEnd(30),
-    `served=${served.length}` + (over.length ? ` OVER-SERVED:${over.join(",")}` : ""),
-  );
-  await cleanup();
 }
 
 /* --------------------------------------------------- 2b. the board's own contract */

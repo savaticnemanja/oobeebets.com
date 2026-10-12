@@ -192,17 +192,6 @@ console.log("\nSigned-out visitors are gated");
   await ctx.close();
 }
 
-{
-  // No public picks anywhere — /top-picks used to be the deliberate public
-  // teaser, but it's gated the same as /picks now.
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  await page.goto(`${APP_URL}/top-picks`);
-  await page.waitForURL("**/login**", { timeout: 15000 });
-  check(page.url().includes("/login"), "signed-out /top-picks bounces to /login", page.url());
-  await ctx.close();
-}
-
 /* --------------------------------------------------------- 2. settle flow */
 
 console.log("\nSettling a pick");

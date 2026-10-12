@@ -47,7 +47,6 @@ export const en = {
   nav: {
     home: "Home",
     profile: "Profile",
-    topPicks: "Our Top Picks",
     about: "About",
     picks: "Picks",
     myBets: "My bets",

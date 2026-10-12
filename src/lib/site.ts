@@ -26,8 +26,8 @@ export function appUrl(path = "/"): string {
 
 /**
  * Shown to every visitor, so everything here has to open without a session.
- * /picks and /top-picks are both gated now — advertising them to a signed-out
- * visitor just bounces them to /login — so they live in NAV_APP.
+ * /picks is gated now — advertising it to a signed-out
+ * visitor just bounces them to /login — so it lives in NAV_APP.
  */
 export const NAV_PUBLIC = [
   { href: "/about", label: t().nav.about },
@@ -37,7 +37,6 @@ export const NAV_PUBLIC = [
 export const NAV_APP = [
   { href: "/home", label: t().nav.home },
   { href: "/picks", label: t().nav.picks },
-  { href: "/top-picks", label: t().nav.topPicks },
   { href: "/my-bets", label: t().nav.myBets },
   { href: "/account", label: t().nav.account },
 ] as const;

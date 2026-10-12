@@ -124,8 +124,7 @@ const OUTCOMES = ["won", "lost", "won", "push", "lost", "won", "void", "won"];
  * Creates a published slate on `date`: both boards, each filled to its own
  * limit and each ranked from 1.
  *
- * Odd ranks are MLB, even are NFL, so both /top-picks tabs have something in
- * them. Ranks 1..settled started three hours ago and carry a result; the rest
+ * Odd ranks are MLB, even are NFL, so both sports have something in them. Ranks 1..settled started three hours ago and carry a result; the rest
  * start in the future and stay pending, which is what the settle flow needs to
  * find.
  *
