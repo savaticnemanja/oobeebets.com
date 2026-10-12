@@ -173,9 +173,6 @@ export function PickCard({
       {eyebrow}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="num rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-[0.6875rem] text-fg-subtle">
-            #{pick.rank}
-          </span>
           <span aria-hidden="true">{SPORT_EMOJI[pick.sport]}</span>
           <span className="truncate text-xs text-fg-muted">{pick.league}</span>
         </div>
