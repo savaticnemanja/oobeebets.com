@@ -1,9 +1,10 @@
-import { Lock, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { FollowToggle } from "@/components/follow-toggle";
 import type { ViewerFollow } from "@/lib/follows";
+import { PICK_STATE, pickState, type PickState } from "@/components/pick-state";
 import type { Pick, PickStatus, Sport } from "@/db/schema";
 import {
   formatKickoff,
@@ -36,23 +37,44 @@ const STATUS_VARIANT: Record<PickStatus, "hit" | "miss" | "pending" | "default" 
 /** Result is never colour-only — the word ships with it. */
 const STATUS_LABEL: Record<PickStatus, string> = t().status;
 
-function KickoffTime({ at, started }: { at: Date; started?: boolean }) {
+/**
+ * The line under a card: when it starts, and once it can't be taken any more,
+ * why — "Started … · locked", or the result with the final score. Same icon
+ * and colour as the circle beside the selection.
+ */
+function StatusLine({
+  at,
+  state,
+  finalScore,
+  taken,
+}: {
+  at: Date;
+  state: PickState | null;
+  finalScore: string | null;
+  taken?: boolean;
+}) {
   const time = (
     <time dateTime={at.toISOString()} className="num">
       {formatKickoff(at)} {timeZoneLabel()}
     </time>
   );
-  // Under way and not yet graded: say so, next to the lock on the circle —
-  // otherwise nothing explains why the circle no longer takes a tap.
-  if (started) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-pending">
-        <Lock className="size-3" aria-hidden="true" />
+  if (!state) return <span className="text-xs text-fg-subtle">{time}</span>;
+  const s = PICK_STATE[state];
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs", s.color)}>
+      <s.icon className="size-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+      {state === "started" ? (
         <span>Started {time} · locked</span>
-      </span>
-    );
-  }
-  return <span className="text-xs text-fg-subtle">{time}</span>;
+      ) : (
+        <>
+          <span className="font-medium">{s.label}</span>
+          {finalScore && <span className="num">· Final {finalScore}</span>}
+          <span className="text-fg-subtle">· {time}</span>
+        </>
+      )}
+      {taken && <span className="text-brand">· You took it</span>}
+    </span>
+  );
 }
 
 /* ------------------------------------------------------------------ export */
@@ -83,14 +105,21 @@ export function PickCard({
   const settled = pick.status !== "pending";
   // Rendered per request (the board is force-dynamic), so "now" is fresh.
   // eslint-disable-next-line react-hooks/purity
-  const started = !settled && pick.startsAt.getTime() <= Date.now();
+  const state = pickState(pick, Date.now());
 
   return (
     <article
       className={cn(
         "group relative overflow-hidden",
         variant === "row"
-          ? cn("border-b border-border px-4 py-3 transition-colors hover:bg-surface/60", featured && "bg-hit-dim/20 py-4")
+          ? cn(
+              "border-b border-border px-4 py-3 transition-colors hover:bg-surface/60",
+              featured && "bg-hit-dim/20 py-4",
+              // The row's answer to the card's tinted border: a thin bar down
+              // the left edge, so a graded day scans as a column of results.
+              pick.status === "won" && "shadow-[inset_2px_0_0_var(--color-hit)]",
+              pick.status === "lost" && "shadow-[inset_2px_0_0_var(--color-miss)]",
+            )
           : cn(
               "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
               featured && "border-hit/25 bg-hit-dim/30 p-5",
@@ -123,7 +152,7 @@ export function PickCard({
             selection={pick.selection}
             follow={follow}
             featured={featured}
-            started={started}
+            state={state}
           />
         )}
         {/* The fixture reads as the selection's subtitle, so it is inside this
@@ -201,10 +230,7 @@ export function PickCard({
       )}
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <KickoffTime at={pick.startsAt} started={started} />
-        {pick.finalScore && (
-          <span className="num text-xs text-fg-subtle">Final {pick.finalScore}</span>
-        )}
+        <StatusLine at={pick.startsAt} state={state} finalScore={pick.finalScore} taken={follow?.taken} />
       </div>
     </article>
   );

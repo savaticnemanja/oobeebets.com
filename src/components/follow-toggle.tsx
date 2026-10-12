@@ -1,11 +1,12 @@
 "use client";
 
 import { useOptimistic, useTransition } from "react";
-import { Circle, CircleCheck, Lock } from "lucide-react";
+import { Circle, CircleCheck } from "lucide-react";
 import { toast } from "sonner";
 import { setPickFollowAction } from "@/app/actions/follows";
 import { FOLLOW_LABELS, type ViewerFollow } from "@/lib/follows";
 import { cn } from "@/lib/utils";
+import { PICK_STATE, type PickState } from "@/components/pick-state";
 
 /**
  * The check circle on the left of a pick card:
@@ -32,15 +33,15 @@ export function FollowToggle({
   selection,
   follow,
   featured,
-  started,
+  state,
 }: {
   pickId: string;
   /** Named in the control's label, so a screen reader knows which bet. */
   selection: string;
   follow: ViewerFollow;
   featured?: boolean;
-  /** Kicked off but not yet graded: an untaken circle shows a lock instead. */
-  started?: boolean;
+  /** Under way or graded: the circle shows why it's locked (see pick-state.ts). */
+  state?: PickState | null;
 }) {
   const [taken, setTaken] = useOptimistic(follow.taken);
   const [pending, startTransition] = useTransition();
@@ -73,18 +74,32 @@ export function FollowToggle({
   // control: still visible, so a tester can see what they logged, but there is
   // nothing left to press.
   //
-  // While the game is under way and the pick still open, an untaken circle
-  // would look like a control that simply doesn't respond — so it becomes a
-  // lock, which says why. Once graded, the faded circle is history enough.
+  // A bare circle there would look like a control that simply doesn't
+  // respond, so it shows the reason instead — a lock while the game is on,
+  // then the result — in the colour the time line under the card uses for
+  // the same thing. If you took the bet, that icon sits in your cyan ring.
   if (!follow.open) {
-    if (started && !taken) {
+    if (state) {
+      const s = PICK_STATE[state];
+      const reason = state === "started" ? FOLLOW_LABELS.started : s.label;
+      const label = taken ? `${FOLLOW_LABELS.took} — ${reason}` : reason;
       return (
-        <span
-          className={cn("grid shrink-0 place-items-center text-pending", box)}
-          title={FOLLOW_LABELS.started}
-        >
-          <Lock className={featured ? "size-5" : "size-4"} aria-hidden="true" />
-          <span className="sr-only">{FOLLOW_LABELS.started}</span>
+        <span className={cn("grid shrink-0 place-items-center", box)} title={label}>
+          <span
+            className={cn(
+              "grid place-items-center rounded-full",
+              featured ? "size-6" : "size-5",
+              taken && "border-[1.5px] border-brand bg-brand/15",
+              s.color,
+            )}
+          >
+            <s.icon
+              className={cn(taken ? (featured ? "size-3.5" : "size-3") : featured ? "size-5" : "size-4")}
+              strokeWidth={taken ? 3 : 2.25}
+              aria-hidden="true"
+            />
+          </span>
+          <span className="sr-only">{label}</span>
         </span>
       );
     }
