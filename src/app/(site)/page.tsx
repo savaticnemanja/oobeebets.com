@@ -4,6 +4,8 @@ import { ArrowRight, CheckCircle2, Eye, ListChecks, ShieldCheck } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Reveal, Stagger, StaggerItem, PulseDot } from "@/components/ui/motion";
 import { SITE, appUrl } from "@/lib/site";
+import { getAuth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: `${SITE.name} — ${SITE.tagline}`,
@@ -11,7 +13,10 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Signed in, the front page is the feed — as on X.
+  if (await getAuth()) redirect("/home");
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",

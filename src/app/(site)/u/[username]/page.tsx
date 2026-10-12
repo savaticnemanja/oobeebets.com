@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getProfile, getProfilePosts, type ProfileTab } from "@/lib/social";
@@ -53,7 +53,9 @@ export default async function ProfilePage({
   searchParams: Promise<{ tab?: string; before?: string }>;
 }) {
   const [{ username }, query, auth] = await Promise.all([params, searchParams, getAuth()]);
-  const viewerId = auth?.user.id ?? null;
+  // Signed out, only the landing page, About and the legal pages are open.
+  if (!auth) redirect(`/login?next=/u/${encodeURIComponent(username)}`);
+  const viewerId = auth.user.id;
 
   const profile = await getProfile(decodeURIComponent(username), viewerId);
   if (!profile) notFound();

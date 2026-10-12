@@ -110,7 +110,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
       <aside
         id="parlay-slip"
         aria-label="Parlay slip"
-        className="card-hairline h-fit scroll-mt-20 p-4 lg:sticky lg:top-[calc(4.5rem+var(--spacing-safe-top))]"
+        className="card-hairline h-fit scroll-mt-20 p-4 lg:sticky lg:top-4"
       >
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Layers className="size-4 text-brand" aria-hidden="true" />

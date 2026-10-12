@@ -16,7 +16,7 @@ export default async function InvitePage({
   params: Promise<{ token: string }>;
 }) {
   const auth = await getAuth();
-  if (auth) redirect("/picks");
+  if (auth) redirect("/home");
 
   const { token } = await params;
   const invite = await lookupInvite(hashToken(token));

@@ -90,7 +90,7 @@ export function InstallPrompt() {
       role="dialog"
       aria-label="Install oobee bets"
       className={cn(
-        "fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md",
+        "fixed inset-x-4 bottom-[calc(1rem+var(--bottom-bar,0px))] z-50 mx-auto max-w-md",
         "card-hairline bg-surface-2/95 p-4 backdrop-blur-md brand-glow",
         "[animation:var(--animate-rise)]",
       )}

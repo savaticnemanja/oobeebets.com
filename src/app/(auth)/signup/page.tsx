@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function SignupPage() {
   const auth = await getAuth();
-  if (auth) redirect("/picks");
+  if (auth) redirect("/home");
 
   return (
     <>

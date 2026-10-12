@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { clientIp, createSession, destroySession, fakeVerify, rateLimit, verifyPassword } from "@/lib/auth";
 import { loginSchema, fieldErrorsFrom, type ActionState } from "@/lib/validation";
+import { safeNextPath } from "@/lib/beta-gate";
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -79,7 +80,9 @@ export async function loginAction(
     .where(eq(users.id, user.id));
 
   await createSession(user.id);
-  redirect(user.role === "user" ? "/picks" : "/admin");
+  // Back to wherever sent them to sign in — the form has always carried
+  // ?next=, but this used to drop it on the floor — else to the feed.
+  redirect(safeNextPath(formData.get("next")?.toString()) ?? "/home");
 }
 
 export async function logoutAction(): Promise<void> {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getProfile, listConnections } from "@/lib/social";
@@ -17,7 +17,9 @@ export async function ConnectionsPage({
   direction: "followers" | "following";
 }) {
   const auth = await getAuth();
-  const viewerId = auth?.user.id ?? null;
+  // Signed out, only the landing page, About and the legal pages are open.
+  if (!auth) redirect(`/login?next=/u/${encodeURIComponent(username)}/${direction}`);
+  const viewerId = auth.user.id;
   const profile = await getProfile(decodeURIComponent(username), viewerId);
   if (!profile) notFound();
 

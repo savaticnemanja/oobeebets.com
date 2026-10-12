@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getAncestors, getPost, getReplies } from "@/lib/social";
@@ -57,8 +57,10 @@ export default async function PostPage({ params }: { params: Params }) {
   if (!UUID.test(id)) notFound();
 
   const auth = await getAuth();
-  const viewerId = auth?.user.id ?? null;
-  const isAdmin = auth?.isAdmin ?? false;
+  // Signed out, only the landing page, About and the legal pages are open.
+  if (!auth) redirect(`/login?next=/p/${id}`);
+  const viewerId = auth.user.id;
+  const isAdmin = auth.isAdmin;
 
   const post = await getPost(id, viewerId);
   if (!post) notFound();

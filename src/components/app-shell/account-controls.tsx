@@ -1,0 +1,120 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { LogOut, MoreHorizontal, Settings, User } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Avatar } from "@/components/social/identity";
+import { Mark } from "@/components/brand/logo";
+import { drawerItems } from "@/components/app-shell/app-nav";
+import { logoutAction } from "@/app/actions/auth";
+import { t } from "@/lib/i18n";
+
+export interface ShellUser {
+  name: string;
+  username: string;
+  isAdmin: boolean;
+}
+
+/** Sign-out from inside a menu. See the note in UserMenu on why not a <form>. */
+function useSignOut() {
+  const [pending, start] = useTransition();
+  return { pending, signOut: () => start(async () => { await logoutAction(); }) };
+}
+
+/** The account button at the foot of the sidebar: avatar, then name and handle from `xl`. */
+export function SidebarAccount({ user }: { user: ShellUser }) {
+  const { pending, signOut } = useSignOut();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={t().nav.accountMenu}
+        className="flex w-full items-center justify-center gap-3 rounded-full p-2 text-left transition-colors hover:bg-surface-2 xl:justify-start xl:p-3"
+      >
+        <Avatar name={user.name} />
+        <span className="hidden min-w-0 flex-1 xl:block">
+          <span className="block truncate text-sm font-semibold text-fg">{user.name}</span>
+          <span className="block truncate text-sm text-fg-subtle">@{user.username}</span>
+        </span>
+        <MoreHorizontal className="hidden size-4 text-fg-muted xl:block" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="min-w-56">
+        <DropdownMenuItem asChild>
+          <Link href={`/u/${user.username}`}>
+            <User aria-hidden="true" />
+            {t().nav.profile}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/account">
+            <Settings aria-hidden="true" />
+            {t().nav.account}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={pending} onSelect={signOut}>
+          <LogOut aria-hidden="true" />
+          {t().nav.signOut} @{user.username}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * The phone's top bar: avatar on the left opens a drawer with everything the
+ * bottom bar has no room for; the mark sits in the middle, as on X.
+ */
+export function MobileTopBar({ user }: { user: ShellUser }) {
+  const [open, setOpen] = useState(false);
+  const { pending, signOut } = useSignOut();
+
+  return (
+    <header className="sticky top-0 z-40 border-b border-border bg-black/80 pt-safe-top backdrop-blur-xl sm:hidden">
+      <div className="relative flex h-14 items-center px-4">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger aria-label={t().nav.openMenu} className="rounded-full">
+            <Avatar name={user.name} size="sm" className="size-8" />
+          </DialogTrigger>
+          {/* A sheet from the left edge rather than the centred card. */}
+          <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[80vw] max-w-xs translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 pt-[calc(1.5rem+var(--spacing-safe-top))]">
+            <DialogTitle className="sr-only">Navigation</DialogTitle>
+            <Avatar name={user.name} />
+            <p className="mt-3 truncate font-semibold text-fg">{user.name}</p>
+            <p className="truncate text-sm text-fg-subtle">@{user.username}</p>
+            <nav aria-label={t().nav.mobileNav} className="mt-6 flex flex-col">
+              {drawerItems(user.username, user.isAdmin).map(({ href, label, icon: Icon }) => (
+                <DialogClose asChild key={href}>
+                  <Link href={href} className="flex items-center gap-4 py-3 text-lg font-semibold text-fg transition-colors hover:text-brand">
+                    <Icon className="size-5" aria-hidden="true" />
+                    {label}
+                  </Link>
+                </DialogClose>
+              ))}
+            </nav>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={signOut}
+              className="mt-4 flex w-full items-center gap-4 border-t border-border pt-4 text-base text-fg-muted transition-colors hover:text-fg"
+            >
+              <LogOut className="size-5" aria-hidden="true" />
+              {t().nav.signOut}
+            </button>
+          </DialogContent>
+        </Dialog>
+
+        <Link href="/home" aria-label="Home" className="absolute left-1/2 -translate-x-1/2">
+          <Mark className="text-brand" />
+        </Link>
+      </div>
+    </header>
+  );
+}

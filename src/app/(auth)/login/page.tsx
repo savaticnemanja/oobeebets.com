@@ -15,7 +15,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const auth = await getAuth();
-  if (auth) redirect("/picks");
+  if (auth) redirect("/home");
 
   const { next } = await searchParams;
 
