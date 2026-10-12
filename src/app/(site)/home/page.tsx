@@ -11,6 +11,8 @@ import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { WhoToFollow } from "@/components/social/user-row";
 import { SocialShell } from "@/components/social/social-shell";
+import { LoadMore } from "@/components/load-more";
+import { loadHomeAction } from "@/app/actions/feeds";
 
 export const metadata: Metadata = {
   title: "Home",
@@ -61,18 +63,16 @@ export default async function HomePage({
     getWhoToFollow(viewerId, 5),
   ]);
 
-  const moreHref =
-    "nextCursor" in feed
-      ? feed.nextCursor && `/home?tab=following&before=${feed.nextCursor}`
-      : feed.nextPage !== null
-        ? `/home?tab=for-you&page=${feed.nextPage}`
-        : null;
+  // The cursor for infinite scroll: the oldest post's id on Following, the
+  // next page number on the ranked For you.
+  const next =
+    "nextCursor" in feed ? feed.nextCursor : feed.nextPage !== null ? String(feed.nextPage) : null;
 
   const firstPage = !before && pageIndex === 0;
   const viewerName = displayNameOf(auth.user);
 
   return (
-    <SocialShell viewerId={viewerId} suggestions={suggestions}>
+    <SocialShell>
       {/* Once, straight after onboarding: where they landed, and where the picks are. */}
       {params.welcome === "1" && (
         <div role="status" className="m-4 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand">
@@ -119,7 +119,7 @@ export default async function HomePage({
         items={feed.items}
         viewerId={viewerId}
         isAdmin={auth.isAdmin}
-        moreHref={moreHref}
+        more={<LoadMore key={tab} next={next} load={loadHomeAction.bind(null, tab)} />}
         empty={
           tab === "following" ? (
             followingCount === 0 ? (

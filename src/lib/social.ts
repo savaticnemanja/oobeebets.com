@@ -1,5 +1,6 @@
 import "server-only";
 import { randomInt } from "node:crypto";
+import { cache } from "react";
 import { and, desc, asc, eq, inArray, isNull, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
@@ -382,7 +383,10 @@ export async function listConnections(
  * has been posting. Admins rise to the top — on a beta this small, the house
  * account is the one with something to say on day one.
  */
-export async function getWhoToFollow(viewerId: string | null, limit = 5): Promise<UserListItem[]> {
+export const getWhoToFollow = cache(async function getWhoToFollow(
+  viewerId: string | null,
+  limit = 5,
+): Promise<UserListItem[]> {
   const rows = await db
     .select(userListColumns(viewerId))
     .from(users)
@@ -402,7 +406,9 @@ export async function getWhoToFollow(viewerId: string | null, limit = 5): Promis
     )
     .limit(limit);
   return rows.map(toListItem);
-}
+});
+// cache(): the shell's side rail and Home's inline "Start here" ask for the
+// same list in the same request; this makes that one query.
 
 /* -------------------------------------------------------------- handles */
 

@@ -13,6 +13,8 @@ import { FollowButton } from "@/components/social/follow-button";
 import { PostBody } from "@/components/social/post-body";
 import { Button } from "@/components/ui/button";
 import { SocialShell } from "@/components/social/social-shell";
+import { LoadMore } from "@/components/load-more";
+import { loadProfileAction } from "@/app/actions/feeds";
 import { postItems } from "@/lib/home-feed";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +71,7 @@ export default async function ProfilePage({
   const base = `/u/${profile.username}`;
 
   return (
-    <SocialShell viewerId={viewerId}>
+    <SocialShell>
       {/* ------------------------------------------------------- header */}
       <div className="h-28 border-b border-border bg-gradient-to-br from-brand/25 via-surface-2 to-surface sm:h-36" />
       <div className="px-4 pb-3">
@@ -132,7 +134,13 @@ export default async function ProfilePage({
         items={await postItems(feed.posts, viewerId)}
         viewerId={viewerId}
         isAdmin={auth?.isAdmin ?? false}
-        moreHref={feed.nextCursor && `${base}?tab=${tab}&before=${feed.nextCursor}`}
+        more={
+          <LoadMore
+            key={`${profile.id}:${tab}`}
+            next={feed.nextCursor}
+            load={loadProfileAction.bind(null, profile.id, tab)}
+          />
+        }
         empty={
           <EmptyFeed
             title={

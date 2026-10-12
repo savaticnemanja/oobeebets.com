@@ -53,14 +53,14 @@ export function FeedList({
   items,
   viewerId,
   isAdmin,
-  moreHref,
+  more,
   empty,
 }: {
   items: FeedItem[];
   viewerId: string | null;
   isAdmin: boolean;
-  /** Link to the next page, when there is one. */
-  moreHref?: string | null;
+  /** What follows the list — the infinite-scroll loader, when there is more. */
+  more?: React.ReactNode;
   empty?: React.ReactNode;
 }) {
   if (items.length === 0) return <>{empty}</>;
@@ -80,15 +80,7 @@ export function FeedList({
           <ParlayRow key={item.parlay.id} parlay={item.parlay} owner={item.owner} />
         ),
       )}
-      {moreHref && (
-        <Link
-          href={moreHref}
-          scroll={false}
-          className="block py-4 text-center text-sm text-brand transition-colors hover:bg-surface/60"
-        >
-          Show older posts
-        </Link>
-      )}
+      {more}
     </div>
   );
 }

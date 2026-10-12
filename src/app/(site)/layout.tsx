@@ -21,6 +21,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <div className="[--bottom-bar:calc(3.5rem+var(--spacing-safe-bottom))] sm:[--bottom-bar:0px]">
         <AppShell
           user={{
+            id: auth.user.id,
             name: displayNameOf(auth.user),
             username: auth.user.username,
             isAdmin: auth.isAdmin,

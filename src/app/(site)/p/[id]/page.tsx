@@ -70,7 +70,7 @@ export default async function PostPage({ params }: { params: Params }) {
   ]);
 
   return (
-    <SocialShell viewerId={viewerId}>
+    <SocialShell>
       <div className="flex items-center gap-4 px-4 py-2.5">
         <Link
           href="/home"

@@ -3,7 +3,10 @@ import { Feather } from "lucide-react";
 import { Logo, Mark } from "@/components/brand/logo";
 import { BottomNav, SidebarNav } from "@/components/app-shell/app-nav";
 import { MobileTopBar, SidebarAccount, type ShellUser } from "@/components/app-shell/account-controls";
+import { WhoToFollow } from "@/components/social/user-row";
+import { getWhoToFollow } from "@/lib/social";
 import { SITE } from "@/lib/site";
+import { cn } from "@/lib/utils";
 
 /**
  * The signed-in layout, after X: a sticky sidebar on the left with the mark,
@@ -13,11 +16,19 @@ import { SITE } from "@/lib/site";
  *
  * Widths: the sidebar is 275px from `xl` (72px as an icon rail below it), and
  * the content beside it is at most 1050px, so the whole layout tops out at
- * 1325px and centres. Pages decide their own middle within that: feeds use
- * SocialShell (600px column plus the right rail), boards and settings take
- * the width they need.
+ * 1325px and centres. From `lg` that content is the page plus a 350px right
+ * rail — Who to follow, then the small print — on every page, as on X. Below
+ * `lg` there is no rail and the small print closes the page instead.
  */
-export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
+export async function AppShell({
+  user,
+  children,
+}: {
+  user: ShellUser & { id: string };
+  children: React.ReactNode;
+}) {
+  const suggestions = await getWhoToFollow(user.id, 5);
+
   return (
     <div className="mx-auto flex w-full max-w-[1325px] justify-center pl-safe-left pr-safe-right">
       <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[275px] xl:items-stretch xl:px-3">
@@ -44,13 +55,22 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         </div>
       </header>
 
-      {/* Bottom padding clears the phone's tab bar. */}
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[calc(3.5rem+var(--spacing-safe-bottom))] sm:max-w-[1050px] sm:pb-0">
-        <MobileTopBar user={user} />
-        <main id="main" className="flex-1">
-          {children}
-        </main>
-        <LegalNote />
+      <div className="flex min-w-0 flex-1 gap-8 sm:max-w-[1050px]">
+        {/* Bottom padding clears the phone's tab bar. */}
+        <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[calc(3.5rem+var(--spacing-safe-bottom))] sm:pb-0">
+          <MobileTopBar user={user} />
+          <main id="main" className="flex-1">
+            {children}
+          </main>
+          <LegalNote className="lg:hidden" />
+        </div>
+
+        <aside aria-label="Sidebar" className="hidden w-[21.875rem] shrink-0 lg:block">
+          <div className="sticky top-0 space-y-4 pt-3">
+            <WhoToFollow users={suggestions} viewerId={user.id} />
+            <LegalNote className="px-4 py-0" />
+          </div>
+        </aside>
       </div>
 
       {/* X's compose button floats above the tab bar on a phone. */}
@@ -68,11 +88,12 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
 
 /**
  * The footer's obligations in X's small print style: the 18+ line and the
- * help links stay on every signed-in page, not only the marketing ones.
+ * help links stay on every signed-in page, not only the marketing ones —
+ * under Who to follow in the rail, or at the end of the page without one.
  */
-function LegalNote() {
+function LegalNote({ className }: { className?: string }) {
   return (
-    <footer className="px-4 py-6 text-xs leading-relaxed text-fg-subtle">
+    <footer className={cn("px-4 py-6 text-xs leading-relaxed text-fg-subtle", className)}>
       <p>
         <strong className="text-fg-muted">18+ only.</strong> {SITE.name} sells information and
         opinion, not wagers. Every pick can lose; never stake what you cannot afford to lose.
