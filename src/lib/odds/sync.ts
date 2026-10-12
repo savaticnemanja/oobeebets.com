@@ -33,6 +33,13 @@ const ODDS_TTL_MIN = () => minutes("ODDS_TTL_MINUTES", 30);
 const PROPS_TTL_MIN = () => minutes("PROPS_TTL_MINUTES", 120);
 /** Scores: 2 credits per league per refresh, and only while a bet awaits one. */
 const SCORES_TTL_MIN = () => minutes("SCORES_TTL_MINUTES", 20);
+/**
+ * Once every game a league is waiting on started over six hours ago, it should
+ * long be over; one that still isn't is postponed or suspended, and the feed
+ * may not report it for days. Asking every 20 minutes for all three days of
+ * the window would spend ~280 credits on one rainout, so back off to this.
+ */
+const SCORES_STALE_TTL_MIN = () => minutes("SCORES_STALE_TTL_MINUTES", 180);
 
 /**
  * Four books keep the cost at one region's worth (the provider bills each
@@ -290,12 +297,16 @@ export async function ensureGameProps(gameId: string): Promise<void> {
  * Final scores, for leagues that have a bet waiting on one. A league is only
  * asked once one of its games with a pending selection kicked off more than
  * two hours ago — before that no game can be over, and with nothing pending
- * there is nothing to grade. Then grades everything gradable.
+ * there is nothing to grade. Then grades everything gradable, and returns how
+ * many bets that settled.
  */
-export async function ensureScores(): Promise<void> {
+export async function ensureScores(): Promise<number> {
   if (feedConfigured()) {
     const waiting = await db
-      .selectDistinct({ league: games.league })
+      .select({
+        league: games.league,
+        newest: sql<Date>`max(${games.commenceTime})`.mapWith((v) => new Date(v)),
+      })
       .from(selections)
       .innerJoin(games, eq(games.id, selections.gameId))
       .where(
@@ -305,14 +316,17 @@ export async function ensureScores(): Promise<void> {
           sql`${games.commenceTime} < now() - interval '2 hours'`,
           sql`${games.commenceTime} > now() - interval '3 days'`,
         ),
-      );
+      )
+      .groupBy(games.league);
 
     await Promise.all(
-      waiting.map(async ({ league }) => {
+      waiting.map(async ({ league, newest }) => {
         const config = LEAGUE_CONFIG[league as FeedLeague];
         if (!config) return;
         const key = `scores:${league}`;
-        if (!(await claim(key, SCORES_TTL_MIN()))) return;
+        const stale = Date.now() - newest.getTime() > 6 * 60 * 60 * 1000;
+        const ttl = stale ? SCORES_STALE_TTL_MIN() : SCORES_TTL_MIN();
+        if (!(await claim(key, ttl))) return;
         try {
           const scores = await call<ApiScore[]>(`/sports/${config.sportKey}/scores`, {
             daysFrom: "3",
@@ -329,14 +343,14 @@ export async function ensureScores(): Promise<void> {
               .where(eq(games.id, s.id));
           }
         } catch (err) {
-          await release(key, SCORES_TTL_MIN(), err);
+          await release(key, ttl, err);
         }
       }),
     );
   }
 
   const { autoSettle } = await import("./settle");
-  await autoSettle();
+  return autoSettle();
 }
 
 /**
