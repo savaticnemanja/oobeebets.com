@@ -1,6 +1,6 @@
 import "server-only";
 import { randomInt } from "node:crypto";
-import { and, desc, asc, eq, isNull, isNotNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, desc, asc, eq, inArray, isNull, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { linkPreviews, postLikes, posts, userFollows, users } from "@/db/schema";
@@ -191,6 +191,17 @@ export async function getForYouFeed(viewerId: string | null, pageIndex = 0): Pro
     .offset(pageIndex * FEED_PAGE_SIZE);
   const result = page(rows, FEED_PAGE_SIZE);
   return { ...result, nextPage: result.nextCursor ? pageIndex + 1 : null };
+}
+
+/**
+ * The posts a page's replies answer, keyed by id, so a timeline can draw each
+ * reply under the post it is replying to. One query for the whole page.
+ */
+export async function getParents(list: FeedPost[], viewerId: string | null): Promise<Map<string, FeedPost>> {
+  const ids = [...new Set(list.map((p) => p.parentId).filter((id): id is string => id !== null))];
+  if (ids.length === 0) return new Map();
+  const rows = await selectPosts(viewerId).where(inArray(posts.id, ids));
+  return new Map(rows.map(toFeedPost).map((p) => [p.id, p]));
 }
 
 export type ProfileTab = "posts" | "replies" | "likes";

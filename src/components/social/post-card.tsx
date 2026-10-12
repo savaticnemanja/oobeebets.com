@@ -49,11 +49,14 @@ export function PostCard({
   viewerId,
   isAdmin,
   variant = "feed",
+  showReplyTo = true,
 }: {
   post: FeedPost;
   viewerId: string | null;
   isAdmin: boolean;
   variant?: Variant;
+  /** Off when the post being replied to is drawn right above. */
+  showReplyTo?: boolean;
 }) {
   const router = useRouter();
   const href = `/p/${post.id}`;
@@ -121,7 +124,7 @@ export function PostCard({
           </div>
         )}
 
-        {post.replyToUsername && (
+        {showReplyTo && post.replyToUsername && (
           <p className="mt-0.5 text-sm text-fg-subtle">
             Replying to{" "}
             <Link href={`/u/${post.replyToUsername}`} className="text-brand hover:underline">

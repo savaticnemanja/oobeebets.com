@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { posts } from "@/db/schema";
-import { getFollowingFeed, getForYouFeed, type FeedPost, type PostAuthor } from "@/lib/social";
+import { getFollowingFeed, getForYouFeed, getParents, type FeedPost, type PostAuthor } from "@/lib/social";
 import { getFeedParlays, type ParlayView } from "@/lib/parlay-store";
 
 /**
@@ -12,11 +12,19 @@ import { getFeedParlays, type ParlayView } from "@/lib/parlay-store";
  */
 
 export type FeedItem =
-  | { kind: "post"; post: FeedPost }
+  /** `parent` is set on a reply: the post it answers, drawn above it. */
+  | { kind: "post"; post: FeedPost; parent?: FeedPost }
   | { kind: "parlay"; parlay: ParlayView; owner: PostAuthor };
 
-export const postItems = (list: FeedPost[]): FeedItem[] =>
-  list.map((post) => ({ kind: "post", post }));
+/** Posts as timeline items, each reply carrying the post it answers. */
+export async function postItems(list: FeedPost[], viewerId: string | null): Promise<FeedItem[]> {
+  const parents = await getParents(list, viewerId);
+  return list.map((post) => ({
+    kind: "post",
+    post,
+    parent: post.parentId ? parents.get(post.parentId) : undefined,
+  }));
+}
 
 function parlayItem({ parlay, ownerRole }: Awaited<ReturnType<typeof getFeedParlays>>[number]): FeedItem {
   return {
@@ -59,7 +67,7 @@ export async function getHomeFollowing(
     limit: 50,
   });
 
-  const items = [...postItems(feed.posts), ...parlays.map(parlayItem)].sort((a, b) => at(b) - at(a));
+  const items = [...(await postItems(feed.posts, viewerId)), ...parlays.map(parlayItem)].sort((a, b) => at(b) - at(a));
   return { items, nextCursor: feed.nextCursor };
 }
 
@@ -88,8 +96,8 @@ export async function getHomeForYou(
   const extra = parlays.slice(0, PARLAYS_PER_PAGE).map(parlayItem);
 
   const items: FeedItem[] = [];
-  feed.posts.forEach((post, i) => {
-    items.push({ kind: "post", post });
+  (await postItems(feed.posts, viewerId)).forEach((post, i) => {
+    items.push(post);
     if ((i + 1) % POSTS_BETWEEN_PARLAYS === 0 && extra.length > 0) items.push(extra.shift()!);
   });
   items.push(...extra);

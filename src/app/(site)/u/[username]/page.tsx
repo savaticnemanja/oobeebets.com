@@ -129,7 +129,7 @@ export default async function ProfilePage({
       />
 
       <FeedList
-        items={postItems(feed.posts)}
+        items={await postItems(feed.posts, viewerId)}
         viewerId={viewerId}
         isAdmin={auth?.isAdmin ?? false}
         moreHref={feed.nextCursor && `${base}?tab=${tab}&before=${feed.nextCursor}`}

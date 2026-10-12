@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import type { FeedItem } from "@/lib/home-feed";
 import { PostCard } from "@/components/social/post-card";
@@ -67,7 +68,14 @@ export function FeedList({
     <div>
       {items.map((item) =>
         item.kind === "post" ? (
-          <PostCard key={item.post.id} post={item.post} viewerId={viewerId} isAdmin={isAdmin} />
+          // A reply comes with the post it answers, joined by the thread line,
+          // as on X — so it reads as half of a conversation you can see.
+          <Fragment key={item.post.id}>
+            {item.parent && (
+              <PostCard post={item.parent} viewerId={viewerId} isAdmin={isAdmin} variant="ancestor" />
+            )}
+            <PostCard post={item.post} viewerId={viewerId} isAdmin={isAdmin} showReplyTo={!item.parent} />
+          </Fragment>
         ) : (
           <ParlayRow key={item.parlay.id} parlay={item.parlay} owner={item.owner} />
         ),
