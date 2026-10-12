@@ -77,48 +77,58 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
   const { pending, signOut } = useSignOut();
 
   return (
-    <header
-      data-chrome-top
-      // Slid up by ScrollChrome as you scroll down; see scroll-chrome.tsx.
-      className="sticky top-0 z-40 translate-y-[calc(var(--chrome-hide,0px)*-1)] border-b border-border bg-black/80 pt-safe-top backdrop-blur-xl sm:hidden"
-    >
-      <div className="relative flex h-14 items-center px-4">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger aria-label={t().nav.openMenu} className="rounded-full">
-            <Avatar name={user.name} size="sm" className="size-8" />
-          </DialogTrigger>
-          {/* A sheet from the left edge rather than the centred card. */}
-          <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[80vw] max-w-xs translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 pt-[calc(1.5rem+var(--spacing-safe-top))]">
-            <DialogTitle className="sr-only">Navigation</DialogTitle>
-            <Avatar name={user.name} />
-            <p className="mt-3 truncate font-semibold text-fg">{user.name}</p>
-            <p className="truncate text-sm text-fg-subtle">@{user.username}</p>
-            <nav aria-label={t().nav.mobileNav} className="mt-6 flex flex-col">
-              {drawerItems(user.username, user.isAdmin).map(({ href, label, icon: Icon }) => (
-                <DialogClose asChild key={href}>
-                  <Link href={href} className="flex items-center gap-4 py-3 text-lg font-semibold text-fg transition-colors hover:text-brand">
-                    <Icon className="size-5" aria-hidden="true" />
-                    {label}
-                  </Link>
-                </DialogClose>
-              ))}
-            </nav>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={signOut}
-              className="mt-4 flex w-full items-center gap-4 border-t border-border pt-4 text-base text-fg-muted transition-colors hover:text-fg"
-            >
-              <LogOut className="size-5" aria-hidden="true" />
-              {t().nav.signOut}
-            </button>
-          </DialogContent>
-        </Dialog>
+    <>
+      <header
+        data-chrome-top
+        // Slid up by ScrollChrome as you scroll down; see scroll-chrome.tsx.
+        className="sticky top-0 z-40 translate-y-[calc(var(--chrome-hide,0px)*-1)] border-b border-border bg-black/80 pt-safe-top backdrop-blur-xl sm:hidden"
+      >
+        <div className="relative flex h-14 items-center px-4">
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger aria-label={t().nav.openMenu} className="rounded-full">
+              <Avatar name={user.name} size="sm" className="size-8" />
+            </DialogTrigger>
+            {/* A sheet from the left edge rather than the centred card. */}
+            <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[80vw] max-w-xs translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 pt-[calc(1.5rem+var(--spacing-safe-top))]">
+              <DialogTitle className="sr-only">Navigation</DialogTitle>
+              <Avatar name={user.name} />
+              <p className="mt-3 truncate font-semibold text-fg">{user.name}</p>
+              <p className="truncate text-sm text-fg-subtle">@{user.username}</p>
+              <nav aria-label={t().nav.mobileNav} className="mt-6 flex flex-col">
+                {drawerItems(user.username, user.isAdmin).map(({ href, label, icon: Icon }) => (
+                  <DialogClose asChild key={href}>
+                    <Link href={href} className="flex items-center gap-4 py-3 text-lg font-semibold text-fg transition-colors hover:text-brand">
+                      <Icon className="size-5" aria-hidden="true" />
+                      {label}
+                    </Link>
+                  </DialogClose>
+                ))}
+              </nav>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={signOut}
+                className="mt-4 flex w-full items-center gap-4 border-t border-border pt-4 text-base text-fg-muted transition-colors hover:text-fg"
+              >
+                <LogOut className="size-5" aria-hidden="true" />
+                {t().nav.signOut}
+              </button>
+            </DialogContent>
+          </Dialog>
 
-        <Link href="/home" aria-label="Home" className="absolute left-1/2 -translate-x-1/2">
-          <Mark className="text-brand" />
-        </Link>
-      </div>
-    </header>
+          <Link href="/home" aria-label="Home" className="absolute left-1/2 -translate-x-1/2">
+            <Mark className="text-brand" />
+          </Link>
+        </div>
+      </header>
+      {/* A solid band behind the status bar, which doesn't move. The page runs
+          under the notch (viewport-fit: cover), so without it a collapsed top
+          bar left its own bottom edge there — translucent, blurring whatever
+          scrolled behind it. Now the bar slides away under this instead. */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-x-0 top-0 z-40 h-[var(--spacing-safe-top)] bg-black sm:hidden"
+      />
+    </>
   );
 }

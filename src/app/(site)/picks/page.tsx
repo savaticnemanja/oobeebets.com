@@ -110,10 +110,14 @@ export default async function PicksPage({
       </div>
 
       {/* -------------------------------------------------------------- tabs */}
-      {/* Home's tab strip, but scrollable: four labels don't fit a phone. */}
+      {/* Home's tab strip, but scrollable: four labels don't fit a phone. It
+          sticks, as Home's does — under the phone's top bar, riding up with
+          it as that slides away — and the day headings stick just below it.
+          Its height is fixed (3.0625rem, border included) because those
+          headings' offset is written in terms of it, in board-days.tsx. */}
       <nav
         aria-label="Board"
-        className="relative flex overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]"
+        className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-[3.0625rem] overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 backdrop-blur-xl [scrollbar-width:none] sm:top-0"
       >
         {boardTabs.map((c) => {
           const isActive = c === tab;
@@ -125,7 +129,7 @@ export default async function PicksPage({
               href={tabHref(c)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex flex-1 shrink-0 justify-center whitespace-nowrap px-4 py-3.5 text-sm transition-colors hover:bg-surface/60",
+                "flex flex-1 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm transition-colors hover:bg-surface/60",
                 isActive ? "font-semibold text-fg" : "text-fg-muted",
               )}
             >
@@ -133,7 +137,7 @@ export default async function PicksPage({
                 {TAB_LABELS[c]}
                 {n > 0 && <span className="num text-xs font-normal text-fg-subtle">{n}</span>}
                 {isActive && (
-                  <span className="absolute -bottom-3.5 left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
+                  <span className="absolute -bottom-[0.875rem] left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
                 )}
               </span>
             </Link>
