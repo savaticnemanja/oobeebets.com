@@ -62,7 +62,7 @@ function dayDiff(a: string, b: string): number {
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; before?: string; welcome?: string }>;
+  searchParams: Promise<{ category?: string; before?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
@@ -211,16 +211,6 @@ export default async function PicksPage({
 
   return (
     <div className="shell py-10">
-      {params.welcome === "1" && (
-        <div
-          role="status"
-          className="mb-6 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand"
-        >
-          Account created. All {PICKS_PER_SLATE.game} game bets and{" "}
-          {PICKS_PER_SLATE.prop} player props are free, every day, during our beta.
-        </div>
-      )}
-
       {/* -------------------------------------------------------------- head */}
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">The board</h1>
       <p className="mt-1.5 text-sm text-fg-muted">

@@ -136,9 +136,13 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   // Step 4 — spend band, then the real submit.
   await page.click('label:has-text("Under $50")');
   await page.click('button:has-text("Finish")');
-  await page.waitForURL("**/picks**", { timeout: 15000 });
+  await page.waitForURL("**/home**", { timeout: 15000 });
 
-  check(page.url().includes("/picks"), "onboarding redirects to the board");
+  check(page.url().includes("/home"), "onboarding lands on Home");
+  check(
+    (await page.content()).includes("Account created"),
+    "Home greets a new account",
+  );
 
   const [created] = await sql`
     select id, role, phone, display_name, monthly_spend_band
@@ -159,6 +163,7 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(invite?.accepted_user_id === created?.id, "invitation links to the new user");
 
   // A brand-new account gets the whole free board immediately — no plan step.
+  await page.goto(`${APP_URL}/picks`);
   const html = await page.content();
   const unlocked = new Set([...html.matchAll(/Pick (\d+): /g)].map((m) => Number(m[1])));
   const overServed = [...unlocked].filter((r) => r > freeBoard);

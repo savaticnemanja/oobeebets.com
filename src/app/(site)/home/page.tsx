@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { getAuth } from "@/lib/auth";
+import { PICKS_PER_SLATE } from "@/lib/board";
 import { getFollowingCount, getWhoToFollow } from "@/lib/social";
 import { getHomeFollowing, getHomeForYou } from "@/lib/home-feed";
 import { Composer } from "@/components/social/composer";
@@ -37,7 +39,7 @@ type Tab = "for-you" | "following";
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; before?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; before?: string; page?: string; welcome?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/home");
@@ -71,6 +73,16 @@ export default async function HomePage({
 
   return (
     <SocialShell viewerId={viewerId} suggestions={suggestions}>
+      {/* Once, straight after onboarding: where they landed, and where the picks are. */}
+      {params.welcome === "1" && (
+        <div role="status" className="m-4 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand">
+          Account created — welcome in. All {PICKS_PER_SLATE.game} game bets and{" "}
+          {PICKS_PER_SLATE.prop} player props are free every day during our beta.{" "}
+          <Link href="/picks" className="font-semibold underline-offset-2 hover:underline">
+            See today&apos;s board →
+          </Link>
+        </div>
+      )}
       <h1 className="sr-only">Home</h1>
       <FeedTabs
         sticky

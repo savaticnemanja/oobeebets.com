@@ -240,5 +240,5 @@ export async function acceptInviteAction(
   });
 
   await createSession(created.id);
-  redirect("/picks?welcome=1");
+  redirect("/home?welcome=1");
 }
