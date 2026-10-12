@@ -83,10 +83,12 @@ export default async function PicksPage({
 
   /* ------------------------------------------------------------ the days */
 
-  // Which days this page shows. The pick tabs follow slates (published ones,
-  // plus drafts for admins); Community follows the days anyone shared a
-  // parlay, since it needs no Oobee slate. Today always leads page one, so
-  // there is somewhere to say "nothing yet".
+  // Which days this page shows: only days with something on this tab, so a
+  // slate with no props never leaves an empty "Player props" day behind. The
+  // pick tabs follow slates (published ones, plus drafts for admins) that
+  // carry this tab's picks or Oobee parlays; Community follows the days
+  // anyone shared a parlay, since it needs no Oobee slate. Today always leads
+  // page one, so there is somewhere to say "nothing yet".
   const upTo = before ? lt(slates.date, before) : lte(slates.date, today);
   const dayRows: { date: string }[] = isCommunityTab
     ? await db
@@ -103,7 +105,15 @@ export default async function PicksPage({
     : await db
         .select({ date: slates.date })
         .from(slates)
-        .where(and(upTo, auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`))
+        .where(
+          and(
+            upTo,
+            auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`,
+            isParlayTab
+              ? sql`exists (select 1 from ${parlaysTable} where ${parlaysTable.slateDate} = ${slates.date} and ${parlaysTable.ownerId} is null)`
+              : sql`exists (select 1 from ${picksTable} where ${picksTable.slateDate} = ${slates.date} and ${picksTable.category} = ${category})`,
+          ),
+        )
         .orderBy(desc(slates.date))
         .limit(DAYS_PER_PAGE + 1);
 
