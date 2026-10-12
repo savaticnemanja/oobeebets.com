@@ -421,7 +421,8 @@ console.log("\nBuilding a parlay, and grading it from its legs");
   check(html.includes("Your parlays"), "the parlay shows on the tester's dashboard");
   const sign = expected > 0 ? `+${expected}` : `${expected}`;
   check(html.includes(sign), "the dashboard quotes the combined price", sign);
-  check(html.includes("Pending"), "it starts life pending");
+  // Ungraded tickets read Upcoming before the first leg starts and Live after.
+  check(html.includes("Upcoming") || html.includes("Live"), "it starts life ungraded (Upcoming / Live)");
 
   // THE point of deriving rather than storing: settle one leg and the ticket
   // re-grades itself, with nothing having touched the parlay row.
