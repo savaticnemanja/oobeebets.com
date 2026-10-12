@@ -1,7 +1,8 @@
 import { Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
+import { SPORT_EMOJI } from "@/components/pick-card";
+import { pickBadge, pickState } from "@/components/pick-state";
 import type { ParlayView } from "@/lib/parlay-store";
 import { americanToDecimal } from "@/lib/settlement";
 import { formatKickoff, formatOdds, formatUnits, timeZoneLabel } from "@/lib/i18n/format";
@@ -44,6 +45,14 @@ export function ParlayCard({
   // with. See parlayPrice in lib/parlays.ts.
   const dropped = legs.filter((l) => l.status === "push" || l.status === "void").length;
 
+  // Upcoming until the first leg kicks off, Live from then until graded — the
+  // same badges as a single pick (see pick-state.ts), and per leg below.
+  // Rendered per request on every page that shows tickets, so "now" is fresh.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const firstStart = legs.length ? Math.min(...legs.map((l) => l.startsAt.getTime())) : Infinity;
+  const badge = pickBadge(pickState({ status, startsAt: new Date(firstStart) }, now));
+
   return (
     <article
       className={cn(
@@ -58,7 +67,7 @@ export function ParlayCard({
             ),
         className,
       )}
-      aria-label={`${legs.length}-leg parlay at ${price === null ? "no price" : formatOdds(price)}, ${STATUS_LABEL[status]}`}
+      aria-label={`${legs.length}-leg parlay at ${price === null ? "no price" : formatOdds(price)}, ${badge.label}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -78,7 +87,12 @@ export function ParlayCard({
             )}
           </span>
         </div>
-        <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
+        <Badge variant={badge.variant}>
+          {badge.live && (
+            <span className="size-1.5 rounded-full bg-pending motion-safe:animate-pulse" aria-hidden="true" />
+          )}
+          {badge.label}
+        </Badge>
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -103,40 +117,43 @@ export function ParlayCard({
 
       {/* ------------------------------------------------------------- legs */}
       <ol className="mt-3 space-y-1.5 border-l border-border pl-3">
-        {legs.map((l) => (
-          <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-            <span aria-hidden="true" className="text-xs">
-              {SPORT_EMOJI[l.sport]}
-            </span>
-            <span
-              className={cn(
-                "text-fg",
-                // Struck through, not hidden: a dropped leg still happened and
-                // the ticket should show why the price moved.
-                (l.status === "push" || l.status === "void") && "text-void line-through",
-                l.status === "lost" && "text-miss",
-              )}
-            >
-              {l.selection}
-            </span>
-            <span className="num text-xs text-fg-muted">{formatOdds(l.price)}</span>
-            <span className="truncate text-xs text-fg-subtle">{l.event}</span>
-            <span
-              className={cn(
-                "ml-auto text-[0.6875rem]",
-                l.status === "won"
-                  ? "text-hit"
-                  : l.status === "lost"
-                    ? "text-miss"
-                    : l.status === "pending"
-                      ? "text-pending"
-                      : "text-fg-subtle",
-              )}
-            >
-              {STATUS_LABEL[l.status]}
-            </span>
-          </li>
-        ))}
+        {legs.map((l) => {
+          const legBadge = pickBadge(pickState(l, now));
+          return (
+            <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+              <span aria-hidden="true" className="text-xs">
+                {SPORT_EMOJI[l.sport]}
+              </span>
+              <span
+                className={cn(
+                  "text-fg",
+                  // Struck through, not hidden: a dropped leg still happened and
+                  // the ticket should show why the price moved.
+                  (l.status === "push" || l.status === "void") && "text-void line-through",
+                  l.status === "lost" && "text-miss",
+                )}
+              >
+                {l.selection}
+              </span>
+              <span className="num text-xs text-fg-muted">{formatOdds(l.price)}</span>
+              <span className="truncate text-xs text-fg-subtle">{l.event}</span>
+              <span
+                className={cn(
+                  "ml-auto text-[0.6875rem]",
+                  l.status === "won"
+                    ? "text-hit"
+                    : l.status === "lost"
+                      ? "text-miss"
+                      : legBadge.live
+                        ? "text-pending"
+                        : "text-fg-subtle",
+                )}
+              >
+                {legBadge.label}
+              </span>
+            </li>
+          );
+        })}
       </ol>
 
       <dl className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
