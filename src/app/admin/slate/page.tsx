@@ -22,6 +22,7 @@ import { getOobeeParlays, selectableLegs } from "@/lib/parlay-store";
 import { ParlayComposer } from "@/components/admin/parlay-composer";
 import { ParlayCard } from "@/components/parlay-card";
 import { DeleteOobeeParlayButton } from "@/components/admin/parlay-delete";
+import { FeatureToggle } from "@/components/admin/feature-toggle";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 
@@ -80,8 +81,9 @@ export default async function AdminSlatePage({
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Publish slate</h1>
       <p className="mt-1.5 text-sm text-fg-muted">
-        Two boards, ranked separately — rank 1 is the best play on its own tab. Add
-        picks in any order, then drag rows below to set the final rank. All{" "}
+        Two boards, ranked separately. Add picks in any order, then drag rows below
+        to set the final rank; star any you want featured — they lead their day on
+        the board, as many as you like, even after publishing. All{" "}
         {PICKS_PER_SLATE.game} game bets and {PICKS_PER_SLATE.prop} player props go
         out free to every tester, and both publish together.
       </p>
@@ -157,10 +159,13 @@ export default async function AdminSlatePage({
             ) : (
               <div className="grid gap-3">
                 {oobeeParlays.map((p) => (
-                  <ParlayCard key={p.id} parlay={p}>
-                    {/* Published parlays are immutable, like published picks:
-                        settling their legs is what grades them. */}
-                    {!published && <DeleteOobeeParlayButton parlayId={p.id} />}
+                  <ParlayCard key={p.id} parlay={p} featured={p.featured}>
+                    <div className="flex items-center gap-1">
+                      <FeatureToggle kind="parlay" id={p.id} featured={p.featured} withLabel />
+                      {/* Published parlays are immutable, like published picks:
+                          settling their legs is what grades them. */}
+                      {!published && <DeleteOobeeParlayButton parlayId={p.id} />}
+                    </div>
                   </ParlayCard>
                 ))}
               </div>

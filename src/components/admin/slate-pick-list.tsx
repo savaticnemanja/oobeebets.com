@@ -28,6 +28,7 @@ import { CATEGORY_NOUN, VISIBLE_PICKS, type PickCategory } from "@/lib/board";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
 import { formatDateTime, formatOdds } from "@/lib/i18n/format";
+import { FeatureToggle } from "@/components/admin/feature-toggle";
 
 export function SlatePickList({
   date,
@@ -186,6 +187,10 @@ function SortableRow({
           {formatDateTime(pick.startsAt)}
         </p>
       </div>
+
+      {/* Featuring isn't part of the record, so it stays available after
+          publishing — unlike reorder and delete. */}
+      <FeatureToggle kind="pick" id={pick.id} featured={pick.featured} />
 
       {!published && (
         <form action={deleteAction}>

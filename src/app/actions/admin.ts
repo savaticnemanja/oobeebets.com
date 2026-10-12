@@ -256,6 +256,30 @@ export async function reorderPicksAction(
   return { ok: true };
 }
 
+/* ---------------------------------------------------------- feature pick */
+
+/**
+ * Stars or unstars a pick: featured picks lead their day on the board. Any
+ * number per day, and allowed after publishing — it's presentation, not the
+ * record, so it doesn't fall under the published-is-immutable rule.
+ */
+export async function setPickFeaturedAction(pickId: string, featured: boolean): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const id = z.string().uuid().safeParse(pickId);
+  if (!id.success) return { ok: false, error: "Bad pick id" };
+
+  const [row] = await db
+    .update(picks)
+    .set({ featured })
+    .where(eq(picks.id, id.data))
+    .returning({ id: picks.id });
+  if (!row) return { ok: false, error: "Pick not found" };
+
+  await audit(actor, featured ? "pick.featured" : "pick.unfeatured", "pick", id.data);
+  revalidateSlate();
+  return { ok: true, message: featured ? "Featured." : "No longer featured." };
+}
+
 /* ------------------------------------------------------------ delete pick */
 
 export async function deletePickAction(

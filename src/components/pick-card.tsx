@@ -1,4 +1,3 @@
-import { TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
@@ -126,20 +125,17 @@ export function StateMark({
  *
  * `variant="row"` draws it as a timeline row rather than a boxed card — full
  * width, a hairline underneath, as posts are on Home. The board uses it.
- * `eyebrow` is a line above the header, for the top pick's label.
  */
 export function PickCard({
   pick,
   featured,
   follow,
   variant = "card",
-  eyebrow,
 }: {
   pick: Pick;
   featured?: boolean;
   follow?: ViewerFollow;
   variant?: "card" | "row";
-  eyebrow?: React.ReactNode;
 }) {
   const profit = pickProfit(pick);
   const settled = pick.status !== "pending";
@@ -170,7 +166,6 @@ export function PickCard({
       )}
       aria-label={`Pick ${pick.rank}: ${pick.selection} at ${formatOdds(pick.price)}, ${badge.label}`}
     >
-      {eyebrow}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true">{SPORT_EMOJI[pick.sport]}</span>
@@ -276,53 +271,6 @@ export function PickCard({
         <StatusLine at={pick.startsAt} state={state} finalScore={pick.finalScore} taken={follow?.taken} />
       </div>
     </article>
-  );
-}
-
-/**
- * Hero treatment for rank 1 — the shop window, free to everyone. There is one
- * per board, so the heading names which board: two sections both calling
- * themselves "top pick of the day" would be a lie on one of the two tabs.
- */
-export function TopPickCard({
-  pick,
-  follow,
-  variant = "card",
-}: {
-  pick: Pick;
-  follow?: ViewerFollow;
-  variant?: "card" | "row";
-}) {
-  const heading = pick.category === "prop" ? "Top prop of the day" : "Top pick of the day";
-  if (variant === "row") {
-    return (
-      <PickCard
-        pick={pick}
-        follow={follow}
-        featured
-        variant="row"
-        eyebrow={
-          <p className="mb-3 flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-hit">
-            <TrendingUp className="size-4" aria-hidden="true" />
-            {heading}
-          </p>
-        }
-      />
-    );
-  }
-  return (
-    <section aria-labelledby="potd-heading" className="relative">
-      <div className="mb-3 flex items-center gap-2">
-        <TrendingUp className="size-4 text-hit" aria-hidden="true" />
-        <h2
-          id="potd-heading"
-          className="text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-hit"
-        >
-          {heading}
-        </h2>
-      </div>
-      <PickCard pick={pick} follow={follow} featured />
-    </section>
   );
 }
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -392,6 +392,27 @@ export async function createOobeeParlayAction(
  * parlay" counterpart because a parlay cannot be voided on its own — voiding
  * its legs on /admin/settle is what empties it, and the grade follows.
  */
+/** Stars or unstars one of Oobee's parlays — see setPickFeaturedAction. */
+export async function setOobeeParlayFeaturedAction(
+  parlayId: string,
+  featured: boolean,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const id = z.string().uuid().safeParse(parlayId);
+  if (!id.success) return { ok: false, error: "Bad parlay id" };
+
+  const [row] = await db
+    .update(parlays)
+    .set({ featured })
+    .where(and(eq(parlays.id, id.data), isNull(parlays.ownerId)))
+    .returning({ id: parlays.id });
+  if (!row) return { ok: false, error: "Parlay not found" };
+
+  await audit(actor, featured ? "parlay.featured" : "parlay.unfeatured", id.data);
+  revalidateBoard();
+  return { ok: true, message: featured ? "Featured." : "No longer featured." };
+}
+
 export async function deleteOobeeParlayAction(
   _prev: ActionState,
   formData: FormData,

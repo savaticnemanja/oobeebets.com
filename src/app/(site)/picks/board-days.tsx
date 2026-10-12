@@ -1,4 +1,6 @@
 import "server-only";
+import { Fragment } from "react";
+import { Star } from "lucide-react";
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
@@ -11,7 +13,7 @@ import { pickProfit } from "@/lib/settlement";
 import { slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
-import { PickCard, TopPickCard } from "@/components/pick-card";
+import { PickCard } from "@/components/pick-card";
 import { ParlayRow } from "@/components/social/parlay-row";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -141,7 +143,16 @@ export async function loadBoardDays({
   /* --------------------------------------------------------- parlay tabs */
 
   const oobeeOn = new Map<string, ParlayView[]>(
-    isParlayTab ? await Promise.all(visibleDays.map(async (d) => [d, await getOobeeParlays(d)] as const)) : [],
+    // By first leg's kick-off, as picks are, rank breaking ties.
+    isParlayTab
+      ? await Promise.all(
+          visibleDays.map(async (d) => {
+            const first = (pl: ParlayView) => Math.min(...pl.legs.map((l) => l.startsAt.getTime()));
+            const list = (await getOobeeParlays(d)).sort((a, b) => first(a) - first(b) || (a.rank ?? 0) - (b.rank ?? 0));
+            return [d, list] as const;
+          }),
+        )
+      : [],
   );
   const communityOn = new Map<string, Awaited<ReturnType<typeof getCommunityParlays>>>(
     isCommunityTab ? await Promise.all(days.map(async (d) => [d, await getCommunityParlays(d)] as const)) : [],
@@ -187,16 +198,21 @@ export async function loadBoardDays({
           {list.length === 0 ? (
             <Empty>{isToday ? "None up yet today — they go out with the rest of the board." : "No Oobee parlays this day."}</Empty>
           ) : (
-            list.map((pl) => <ParlayCard key={pl.id} parlay={pl} featured={isToday && pl.rank === 1} variant="row" />)
+            <>
+              {featuredFirst(list, (pl) => pl.featured).map(({ item: pl, label }) => (
+                <Fragment key={pl.id}>
+                  {label && <FeaturedLabel tone="brand">Featured parlays</FeaturedLabel>}
+                  <ParlayCard parlay={pl} featured={pl.featured} variant="row" />
+                </Fragment>
+              ))}
+            </>
           )}
         </DaySection>
       );
     }
 
-    // Pick tabs. Today leads with its top pick, then the rest by kick-off;
-    // earlier days list every pick by kick-off.
-    const top = isToday ? dayPicks.find((p) => p.rank === 1) : undefined;
-    const rest = dayPicks.filter((p) => p !== top);
+    // Pick tabs: every day leads with its featured picks, then the rest, each
+    // group by kick-off.
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
         {dayPicks.length === 0 ? (
@@ -206,12 +222,16 @@ export async function loadBoardDays({
               : `No ${CATEGORY_NOUN[category]}s this day.`}
           </Empty>
         ) : (
-          <>
-            {top && <TopPickCard pick={top} follow={followFor(top)} variant="row" />}
-            {rest.map((p) => (
-              <PickCard key={p.id} pick={p} follow={followFor(p)} variant="row" />
-            ))}
-          </>
+          featuredFirst(dayPicks, (p) => p.featured).map(({ item: p, label }) => (
+            <Fragment key={p.id}>
+              {label && (
+                <FeaturedLabel tone="hit">
+                  Featured {category === "prop" ? "props" : "picks"}
+                </FeaturedLabel>
+              )}
+              <PickCard pick={p} follow={followFor(p)} featured={p.featured} variant="row" />
+            </Fragment>
+          ))
         )}
       </DaySection>
     );
@@ -270,6 +290,35 @@ function DaySection({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * A day's list with its featured items moved to the front, order otherwise
+ * kept (kick-off). `label` marks the first featured item, where the group's
+ * heading goes.
+ */
+function featuredFirst<T>(items: T[], isFeatured: (t: T) => boolean): { item: T; label: boolean }[] {
+  const featured = items.filter(isFeatured);
+  const rest = items.filter((t) => !isFeatured(t));
+  return [...featured.map((item, i) => ({ item, label: i === 0 })), ...rest.map((item) => ({ item, label: false }))];
+}
+
+/**
+ * The heading over a day's featured group, in the group's tint so it reads as
+ * one block with the rows under it.
+ */
+function FeaturedLabel({ tone, children }: { tone: "hit" | "brand"; children: React.ReactNode }) {
+  return (
+    <p
+      className={cn(
+        "flex items-center gap-2 px-4 pt-3 text-[0.6875rem] font-semibold uppercase tracking-[0.2em]",
+        tone === "hit" ? "bg-hit-dim/20 text-hit" : "bg-brand/5 text-brand",
+      )}
+    >
+      <Star className="size-3.5 fill-current" aria-hidden="true" />
+      {children}
+    </p>
   );
 }
 

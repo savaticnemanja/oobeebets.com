@@ -58,6 +58,8 @@ export interface ParlayView {
   ownerEmail: string | null;
   slateDate: string;
   rank: number | null;
+  /** Oobee's: listed first on its day on the board. */
+  featured: boolean;
   title: string | null;
   /** What Oobee recorded the book as offering, before any leg dropped out. */
   bookPrice: number | null;
@@ -91,6 +93,7 @@ interface ParlayRow {
   ownerEmail: string | null;
   slateDate: string;
   rank: number | null;
+  featured: boolean;
   title: string | null;
   price: number | null;
   units: string | null;
@@ -200,6 +203,7 @@ async function hydrate(rows: ParlayRow[]): Promise<ParlayView[]> {
       ownerEmail: r.ownerEmail,
       slateDate: r.slateDate,
       rank: r.rank,
+      featured: r.featured,
       title: r.title,
       bookPrice: r.price,
       confidence: r.confidence,
@@ -226,6 +230,7 @@ const PARLAY_COLUMNS = {
   ownerId: parlays.ownerId,
   slateDate: parlays.slateDate,
   rank: parlays.rank,
+  featured: parlays.featured,
   title: parlays.title,
   price: parlays.price,
   units: parlays.units,

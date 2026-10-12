@@ -206,6 +206,12 @@ export const picks = pgTable(
      * two rank-1s. Drives board visibility; see lib/board.ts.
      */
     rank: integer("rank").notNull(),
+    /**
+     * Shown first on its day, under a "Featured" label, on the board. Any
+     * number per day and tab, set by an admin at any time — it changes how the
+     * day is presented, not the record, so it is not frozen by publishing.
+     */
+    featured: boolean("featured").notNull().default(false),
 
     sport: sportEnum("sport").notNull(),
     league: text("league").notNull(),
@@ -377,6 +383,8 @@ export const parlays = pgTable(
       .references(() => slates.date, { onDelete: "cascade" }),
     /** Oobee's parlays are ranked on their board; a tester's are not. */
     rank: integer("rank"),
+    /** Oobee's only: listed first on its day, as picks.featured is. */
+    featured: boolean("featured").notNull().default(false),
     /** Oobee may name a parlay ("Sunday three-leg"); testers do not. */
     title: text("title"),
     /** The book's actual parlay price. NULL derives it from the legs. */
