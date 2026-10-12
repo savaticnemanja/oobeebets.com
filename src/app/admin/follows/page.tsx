@@ -313,6 +313,7 @@ export default async function AdminFollowsPage({
             <SlateDatePicker
               dates={availableDates.map((d) => d.date)}
               current={date}
+              today={today}
               basePath="/admin/follows"
             />
           )}

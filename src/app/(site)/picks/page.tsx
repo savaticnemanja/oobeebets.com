@@ -207,8 +207,13 @@ export default async function PicksPage({
         </div>
 
         <div className="flex items-center gap-2">
-          {auth.isAdmin && availableDates.length > 0 && (
-            <SlateDatePicker dates={availableDates.map((d) => d.date)} current={date} />
+          {auth.isAdmin && (
+            <SlateDatePicker
+              dates={availableDates.map((d) => d.date)}
+              current={date}
+              today={today}
+              keep={{ category: params.category }}
+            />
           )}
         </div>
       </div>
