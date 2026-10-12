@@ -14,7 +14,8 @@ interface NavItem {
 
 /**
  * The signed-in navigation, as on X: every destination is an icon plus a
- * label, and the current one is drawn bold with a heavier icon stroke.
+ * label. The current one is semibold with a heavier, brand-coloured icon; the
+ * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
  * four places people actually go back and forth between; the rest (Account,
@@ -56,15 +57,23 @@ export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: b
             href={href}
             aria-current={active ? "page" : undefined}
             title={label}
-            className="group flex"
+            className="group flex rounded-full outline-none"
           >
             <span
               className={cn(
-                "inline-flex items-center gap-4 rounded-full p-3 text-xl transition-colors group-hover:bg-surface-2 xl:pr-6",
-                active ? "font-bold text-fg" : "text-fg/90",
+                "inline-flex items-center gap-4 rounded-full px-3 py-2.5 text-[1.0625rem] leading-6 transition-colors duration-150",
+                "group-hover:bg-white/[0.07] group-active:bg-white/[0.11] group-focus-visible:ring-2 group-focus-visible:ring-brand/60 xl:pr-5",
+                active ? "font-semibold text-fg" : "text-fg-muted group-hover:text-fg",
               )}
             >
-              <Icon className="size-[1.625rem] shrink-0" strokeWidth={active ? 2.5 : 1.75} aria-hidden="true" />
+              <Icon
+                className={cn(
+                  "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
+                  active && "text-brand",
+                )}
+                strokeWidth={active ? 2.25 : 1.75}
+                aria-hidden="true"
+              />
               <span className="hidden xl:inline">{label}</span>
             </span>
           </Link>
@@ -91,11 +100,11 @@ export function BottomNav({ username, isAdmin }: { username: string; isAdmin: bo
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-1 items-center justify-center transition-colors",
-                  active ? "text-fg" : "text-fg-muted",
+                  "flex flex-1 items-center justify-center transition-colors active:bg-white/[0.07]",
+                  active ? "text-brand" : "text-fg-muted",
                 )}
               >
-                <Icon className="size-[1.625rem]" strokeWidth={active ? 2.5 : 1.75} aria-hidden="true" />
+                <Icon className="size-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
                 <span className="sr-only">{label}</span>
               </Link>
             </li>

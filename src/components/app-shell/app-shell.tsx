@@ -19,7 +19,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
     <div className="mx-auto flex w-full max-w-[80rem] justify-center pl-safe-left pr-safe-right">
       <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[17rem] xl:items-stretch xl:px-3">
         <div className="flex h-16 items-center xl:px-3">
-          <Link href="/home" aria-label="Home" className="grid size-12 place-items-center rounded-full transition-colors hover:bg-surface-2 xl:hidden">
+          <Link href="/home" aria-label="Home" className="grid size-12 place-items-center rounded-full transition-colors hover:bg-white/[0.07] xl:hidden">
             <Mark className="size-7 text-brand" />
           </Link>
           <Logo href="/home" className="hidden xl:inline-flex" />
@@ -30,7 +30,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         <Link
           href="/home#compose"
           aria-label="Post"
-          className="mt-4 grid size-12 place-items-center rounded-full bg-brand font-bold text-black transition-colors hover:bg-brand-bright xl:flex xl:h-12 xl:w-full xl:items-center xl:justify-center xl:text-base"
+          className="mt-4 grid size-12 place-items-center rounded-full bg-brand text-[0.9375rem] font-semibold text-black transition-[background-color,box-shadow] duration-150 hover:bg-brand-bright hover:shadow-[0_0_28px_-6px_var(--color-brand-glow)] xl:flex xl:h-11 xl:w-full xl:items-center xl:justify-center"
         >
           <Feather className="size-5 xl:hidden" aria-hidden="true" />
           <span className="hidden xl:inline">Post</span>

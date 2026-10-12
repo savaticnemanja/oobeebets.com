@@ -71,7 +71,7 @@ export default async function HomePage({
 
   return (
     <SocialShell viewerId={viewerId} suggestions={suggestions}>
-      <h1 className="sr-only px-4 pb-2 pt-4 text-xl font-semibold tracking-tight sm:not-sr-only sm:block">Home</h1>
+      <h1 className="sr-only">Home</h1>
       <FeedTabs
         sticky
         active={tab}

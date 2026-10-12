@@ -36,7 +36,7 @@ export function SidebarAccount({ user }: { user: ShellUser }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={t().nav.accountMenu}
-        className="flex w-full items-center justify-center gap-3 rounded-full p-2 text-left transition-colors hover:bg-surface-2 xl:justify-start xl:p-3"
+        className="flex w-full items-center justify-center gap-3 rounded-full p-2 text-left transition-colors duration-150 hover:bg-white/[0.07] xl:justify-start xl:px-3 xl:py-2.5"
       >
         <Avatar name={user.name} />
         <span className="hidden min-w-0 flex-1 xl:block">
