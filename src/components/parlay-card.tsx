@@ -1,11 +1,11 @@
 import { Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SPORT_EMOJI } from "@/components/pick-card";
-import { pickBadge, pickState } from "@/components/pick-state";
+import { SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
+import { PICK_STATE, pickBadge, pickState } from "@/components/pick-state";
 import type { ParlayView } from "@/lib/parlay-store";
 import { americanToDecimal } from "@/lib/settlement";
-import { formatKickoff, formatOdds, formatUnits, timeZoneLabel } from "@/lib/i18n/format";
+import { formatOdds, formatUnits } from "@/lib/i18n/format";
 import { CATEGORY_LABELS } from "@/lib/board";
 
 /**
@@ -51,14 +51,26 @@ export function ParlayCard({
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const firstStart = legs.length ? Math.min(...legs.map((l) => l.startsAt.getTime())) : Infinity;
-  const badge = pickBadge(pickState({ status, startsAt: new Date(firstStart) }, now));
 
+  const state = pickState({ status, startsAt: new Date(firstStart) }, now);
+  const badge = pickBadge(state);
+  // The sports on the ticket, once each, where a pick shows its one sport.
+  const sports = [...new Set(legs.map((l) => l.sport))];
+
+  // Laid out as a pick card is (pick-card.tsx), so the two read as one board:
+  // the same header, a status mark where the pick's circle sits, the headline
+  // with its price, the stats row, the reasoning, the status line.
   return (
     <article
       className={cn(
         "group relative overflow-hidden",
         variant === "row"
-          ? cn("border-b border-border px-4 py-3 transition-colors hover:bg-surface/60", featured && "bg-brand/5 py-4")
+          ? cn(
+              "border-b border-border px-4 py-3 transition-colors hover:bg-surface/60",
+              featured && "bg-brand/5 py-4",
+              status === "won" && "shadow-[inset_2px_0_0_var(--color-hit)]",
+              status === "lost" && "shadow-[inset_2px_0_0_var(--color-miss)]",
+            )
           : cn(
               "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
               featured && "border-brand/25 bg-brand/5 p-5",
@@ -76,15 +88,10 @@ export function ParlayCard({
               #{parlay.rank}
             </span>
           )}
-          <Layers className="size-3.5 text-brand" aria-hidden="true" />
-          <span className="text-xs text-fg-muted">
+          <span aria-hidden="true">{sports.map((sp) => SPORT_EMOJI[sp]).join("")}</span>
+          <span className="truncate text-xs text-fg-muted">
             {legs.length}-leg parlay
-            {dropped > 0 && (
-              <span className="text-fg-subtle">
-                {" "}
-                · {dropped} dropped
-              </span>
-            )}
+            {dropped > 0 && <span className="text-fg-subtle"> · {dropped} dropped</span>}
           </span>
         </div>
         <Badge variant={badge.variant}>
@@ -95,66 +102,71 @@ export function ParlayCard({
         </Badge>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <h3
-          className={cn(
-            "font-semibold tracking-tight text-fg",
-            featured ? "text-2xl" : "text-lg",
+      <div className="mt-3 flex items-start gap-2.5">
+        <StateMark
+          state={state}
+          featured={featured}
+          idle={<Layers className={cn("text-brand", featured ? "size-5" : "size-4")} aria-hidden="true" />}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <h3 className={cn("font-semibold tracking-tight text-fg", featured ? "text-2xl" : "text-lg")}>
+              {parlay.title ?? `${legs.length}-leg parlay`}
+            </h3>
+            <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
+              {price === null ? "—" : formatOdds(price)}
+            </span>
+            {parlay.book && <span className="text-[0.6875rem] text-fg-subtle">{parlay.book}</span>}
+          </div>
+          {decimal !== null && (
+            <p className="num mt-1 text-sm text-fg-muted">
+              {parlay.stakeUnits.toFixed(2)}u returns {(parlay.stakeUnits * decimal).toFixed(2)}u
+            </p>
           )}
-        >
-          {parlay.title ?? `${legs.length}-leg parlay`}
-        </h3>
-        <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
-          {price === null ? "—" : formatOdds(price)}
-        </span>
-        {decimal !== null && (
-          <span className="num text-[0.6875rem] text-fg-subtle">
-            {parlay.stakeUnits.toFixed(2)}u returns{" "}
-            {(parlay.stakeUnits * decimal).toFixed(2)}u
-          </span>
-        )}
-      </div>
 
-      {/* ------------------------------------------------------------- legs */}
-      <ol className="mt-3 space-y-1.5 border-l border-border pl-3">
-        {legs.map((l) => {
-          const legBadge = pickBadge(pickState(l, now));
-          return (
-            <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-              <span aria-hidden="true" className="text-xs">
-                {SPORT_EMOJI[l.sport]}
-              </span>
-              <span
-                className={cn(
-                  "text-fg",
-                  // Struck through, not hidden: a dropped leg still happened and
-                  // the ticket should show why the price moved.
-                  (l.status === "push" || l.status === "void") && "text-void line-through",
-                  l.status === "lost" && "text-miss",
-                )}
-              >
-                {l.selection}
-              </span>
-              <span className="num text-xs text-fg-muted">{formatOdds(l.price)}</span>
-              <span className="truncate text-xs text-fg-subtle">{l.event}</span>
-              <span
-                className={cn(
-                  "ml-auto text-[0.6875rem]",
-                  l.status === "won"
-                    ? "text-hit"
-                    : l.status === "lost"
-                      ? "text-miss"
-                      : legBadge.live
-                        ? "text-pending"
-                        : "text-fg-subtle",
-                )}
-              >
-                {legBadge.label}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+          {/* ----------------------------------------------------------- legs */}
+          <ol className="mt-3 space-y-2">
+            {legs.map((l) => {
+              const legState = pickState(l, now);
+              const legBadge = pickBadge(legState);
+              const LegIcon = legState ? PICK_STATE[legState].icon : null;
+              return (
+                <li key={l.key} className="flex items-start gap-2 text-sm">
+                  <span aria-hidden="true" className="text-xs leading-5">
+                    {SPORT_EMOJI[l.sport]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span
+                        className={cn(
+                          "font-medium text-fg",
+                          // Struck through, not hidden: a dropped leg still happened and
+                          // the ticket should show why the price moved.
+                          (l.status === "push" || l.status === "void") && "text-void line-through",
+                          l.status === "lost" && "text-miss",
+                        )}
+                      >
+                        {l.selection}
+                      </span>
+                      <span className="num text-xs text-fg-muted">{formatOdds(l.price)}</span>
+                    </div>
+                    <p className="truncate text-xs text-fg-subtle">{l.event}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 text-[0.6875rem] leading-5",
+                      legState ? PICK_STATE[legState].color : "text-fg-subtle",
+                    )}
+                  >
+                    {LegIcon && <LegIcon className="size-3" strokeWidth={2.5} aria-hidden="true" />}
+                    {legBadge.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </div>
 
       <dl className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {parlay.confidence !== null && (
@@ -165,9 +177,7 @@ export function ParlayCard({
         )}
         <div className="flex items-baseline gap-1">
           <dt className="text-fg-subtle">Stake</dt>
-          <dd className="num font-medium text-fg-muted">
-            {parlay.stakeUnits.toFixed(2)}u
-          </dd>
+          <dd className="num font-medium text-fg-muted">{parlay.stakeUnits.toFixed(2)}u</dd>
         </div>
         {settled && status !== "void" && (
           <div className="flex items-baseline gap-1">
@@ -175,18 +185,13 @@ export function ParlayCard({
             <dd
               className={cn(
                 "num font-semibold",
-                parlay.profit > 0
-                  ? "text-hit"
-                  : parlay.profit < 0
-                    ? "text-miss"
-                    : "text-fg-muted",
+                parlay.profit > 0 ? "text-hit" : parlay.profit < 0 ? "text-miss" : "text-fg-muted",
               )}
             >
               {formatUnits(parlay.profit)}
             </dd>
           </div>
         )}
-        {parlay.book && <span className="text-[0.6875rem] text-fg-subtle">{parlay.book}</span>}
       </dl>
 
       {parlay.reasoning && (
@@ -196,14 +201,12 @@ export function ParlayCard({
       )}
 
       {(children || legs.length > 0) && (
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="num text-xs text-fg-subtle">
-            {legs.length > 0 && (
-              <>
-                First leg {formatKickoff(legs[0].startsAt)} {timeZoneLabel()}
-              </>
-            )}
-          </span>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          {legs.length > 0 ? (
+            <StatusLine at={new Date(firstStart)} state={state} prefix="First leg" />
+          ) : (
+            <span />
+          )}
           {children}
         </div>
       )}

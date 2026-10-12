@@ -40,39 +40,79 @@ const STATUS_LABEL: Record<PickStatus, string> = t().status;
 /**
  * The line under a card: when it starts, and once it can't be taken any more,
  * why — "Started … · locked", or the result with the final score. Same icon
- * and colour as the circle beside the selection.
+ * and colour as the circle beside the selection. Parlay tickets use it too,
+ * with `prefix` "First leg".
  */
-function StatusLine({
+export function StatusLine({
   at,
   state,
   finalScore,
   taken,
+  prefix,
 }: {
   at: Date;
   state: PickState | null;
-  finalScore: string | null;
+  finalScore?: string | null;
   taken?: boolean;
+  prefix?: string;
 }) {
   const time = (
     <time dateTime={at.toISOString()} className="num">
       {formatKickoff(at)} {timeZoneLabel()}
     </time>
   );
-  if (!state) return <span className="text-xs text-fg-subtle">{time}</span>;
+  const lead = prefix ? `${prefix} ` : "";
+  if (!state) {
+    return (
+      <span className="text-xs text-fg-subtle">
+        {lead}
+        {time}
+      </span>
+    );
+  }
   const s = PICK_STATE[state];
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs", s.color)}>
       <s.icon className="size-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />
       {state === "started" ? (
-        <span>Started {time} · locked</span>
+        <span>
+          {prefix ? `${prefix} started` : "Started"} {time} · locked
+        </span>
       ) : (
         <>
           <span className="font-medium">{s.label}</span>
           {finalScore && <span className="num">· Final {finalScore}</span>}
-          <span className="text-fg-subtle">· {time}</span>
+          <span className="text-fg-subtle">
+            · {lead}
+            {time}
+          </span>
         </>
       )}
       {taken && <span className="text-brand">· You took it</span>}
+    </span>
+  );
+}
+
+/**
+ * The status icon in the circle's place, for cards with nothing to tap — a
+ * parlay ticket. Same slot size as FollowToggle, so headlines line up across
+ * picks and parlays; `idle` is what it shows before kick-off.
+ */
+export function StateMark({
+  state,
+  featured,
+  idle,
+}: {
+  state: PickState | null;
+  featured?: boolean;
+  idle: React.ReactNode;
+}) {
+  const box = featured ? "size-10 -ml-1" : "size-9 -ml-1 -mt-1";
+  if (!state) return <span className={cn("grid shrink-0 place-items-center", box)}>{idle}</span>;
+  const s = PICK_STATE[state];
+  return (
+    <span className={cn("grid shrink-0 place-items-center", box, s.color)} title={s.label}>
+      <s.icon className={featured ? "size-5" : "size-4"} strokeWidth={2.25} aria-hidden="true" />
     </span>
   );
 }
