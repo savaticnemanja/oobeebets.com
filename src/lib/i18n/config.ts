@@ -8,10 +8,12 @@ import { SLATE_TIMEZONE } from "@/lib/slate-date";
  * not of hunting down `"en-GB"` and `timeZone: "UTC"` scattered through
  * components, which is how it was before.
  *
- * Language and formatting are separate fields on purpose. This product writes
- * American English copy ("Soccer", "Football" for the NFL) but prints dates
- * day-first — `en` for the content, `en-GB` for the numbers. Collapsing the two
- * would silently change what every date on the site says.
+ * Language and formatting are separate fields on purpose: `en` for the
+ * content, `en-US` for the numbers. They agree today — American copy
+ * ("Soccer", "Football" for the NFL), American dates ("Oct 13", "10:30 PM") —
+ * but a second locale may want the one without the other. Dates were printed
+ * day-first and 24-hour (`en-GB`) until 13 Oct 2026, which read oddly beside
+ * American odds for an American audience.
  */
 export const LOCALES = ["en"] as const;
 
@@ -43,7 +45,7 @@ export const LOCALE_CONFIG: Record<Locale, LocaleConfig> = {
     tag: "en",
     ogLocale: "en_US",
     dir: "ltr",
-    formats: "en-GB",
+    formats: "en-US",
     // The slate's zone, so before the switch a time agrees with the day
     // heading above it.
     timeZone: SLATE_TIMEZONE,

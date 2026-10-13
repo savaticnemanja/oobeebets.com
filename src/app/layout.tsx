@@ -77,7 +77,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // `dir` was never set at all, and `lang` was the string "en" in the markup
-  // while og:locale said en_US and the formatters said en-GB.
+  // while og:locale said en_US and the formatters said something else again.
   const locale = localeConfig(getLocale());
 
   return (

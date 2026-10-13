@@ -69,7 +69,7 @@ interface InZone {
   timeZone?: string;
 }
 
-/** "Wed 29 Jul" — the slate day, which is a date string, not an instant. */
+/** "Wed, Jul 29" — the slate day, which is a date string, not an instant. */
 export function formatSlateDate(dateStr: string, locale: Locale = DEFAULT_LOCALE): string {
   const { formats } = localeConfig(locale);
   // A calendar date, pinned to noon UTC and read back in UTC, so no zone can
@@ -84,38 +84,36 @@ export function formatSlateDate(dateStr: string, locale: Locale = DEFAULT_LOCALE
   ).format(new Date(`${dateStr}T12:00:00Z`));
 }
 
-/** "Wed 16:15" — kickoff, without the zone; pair it with `zoneLabel`. */
+/** "Wed 4:15 PM" — kickoff, without the zone; pair it with `zoneLabel`. */
 export function formatKickoff(at: Date, { timeZone }: InZone = {}, locale: Locale = DEFAULT_LOCALE): string {
   const { formats } = localeConfig(locale);
   const zone = timeZone ?? localeConfig(locale).timeZone;
   return memo(`kickoff:${formats}:${zone}`, () =>
     new Intl.DateTimeFormat(formats, {
       weekday: "short",
-      hour: "2-digit",
+      hour: "numeric",
       minute: "2-digit",
-      hour12: false,
       timeZone: zone,
     }),
   ).format(at);
 }
 
-/** "29 Jul, 18:00" — a date and time together, for the admin lists. */
+/** "Jul 29, 6:00 PM" — a date and time together, for the admin lists. */
 export function formatDateTime(at: Date, { timeZone }: InZone = {}, locale: Locale = DEFAULT_LOCALE): string {
   const { formats } = localeConfig(locale);
   const zone = timeZone ?? localeConfig(locale).timeZone;
   return memo(`datetime:${formats}:${zone}`, () =>
     new Intl.DateTimeFormat(formats, {
-      day: "2-digit",
+      day: "numeric",
       month: "short",
-      hour: "2-digit",
+      hour: "numeric",
       minute: "2-digit",
-      hour12: false,
       timeZone: zone,
     }),
   ).format(at);
 }
 
-/** "29 Jul 2026" — a calendar date with no time, e.g. a renewal date. */
+/** "Jul 29, 2026" — a calendar date with no time; "7/29/26" with `year: "2-digit"`, for a tight column. */
 export function formatDate(
   at: Date,
   { year = "numeric", timeZone }: { year?: "numeric" | "2-digit" } & InZone = {},
@@ -124,28 +122,28 @@ export function formatDate(
   const { formats } = localeConfig(locale);
   const zone = timeZone ?? localeConfig(locale).timeZone;
   return memo(`date:${formats}:${zone}:${year}`, () =>
-    new Intl.DateTimeFormat(formats, {
-      day: year === "2-digit" ? "2-digit" : "numeric",
-      month: "short",
-      year,
-      timeZone: zone,
-    }),
+    new Intl.DateTimeFormat(
+      formats,
+      year === "2-digit"
+        ? { day: "numeric", month: "numeric", year, timeZone: zone }
+        : { day: "numeric", month: "short", year, timeZone: zone },
+    ),
   ).format(at);
 }
 
-/** "16:15 · 29 Jul 2026" — the full stamp under a post, as X puts it. */
+/** "4:15 PM · Jul 29, 2026" — the full stamp under a post, as X puts it. */
 export function formatStamp(at: Date, { timeZone }: InZone = {}, locale: Locale = DEFAULT_LOCALE): string {
   const { formats } = localeConfig(locale);
   const zone = timeZone ?? localeConfig(locale).timeZone;
   const time = memo(`time:${formats}:${zone}`, () =>
-    new Intl.DateTimeFormat(formats, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: zone }),
+    new Intl.DateTimeFormat(formats, { hour: "numeric", minute: "2-digit", timeZone: zone }),
   ).format(at);
   return `${time} · ${formatDate(at, { timeZone: zone }, locale)}`;
 }
 
 /**
- * X's relative time: "now", "42s", "5m", "3h", then the date — "29 Jul", or
- * "29 Jul 2025" from another year. The date is the viewer's, so a post from
+ * X's relative time: "now", "42s", "5m", "3h", then the date — "Jul 29", or
+ * "Jul 29, 2025" from another year. The date is the viewer's, so a post from
  * late last night says yesterday's date wherever they are.
  */
 export function formatAgo(
@@ -182,5 +180,5 @@ export function zoneLabel(at: Date, { timeZone }: InZone = {}, locale: Locale = 
       .find((p) => p.type === "timeZoneName")?.value;
   const us = name("en-US");
   if (us && !us.startsWith("GMT")) return us;
-  return name(localeConfig(locale).formats) ?? us ?? zone;
+  return name("en-GB") ?? us ?? zone;
 }

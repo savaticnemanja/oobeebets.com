@@ -20,11 +20,11 @@ import {
  * after hydrating, it renders again in the browser's zone. Mounted later — a
  * client navigation, a page infinite scroll appended — it starts there.
  *
- *   kickoff   "Tue 22:30 EDT", with the zone, since that's what you plan by
- *   ago       X's "5m", "3h", "13 Oct", with the full stamp as its tooltip
- *   stamp     "22:30 · 13 Oct 2026", under a post on its own page
- *   datetime  "13 Oct, 22:30", the admin lists
- *   date      "13 Oct 2026"
+ *   kickoff   "Tue 10:30 PM EDT", with the zone, since that's what you plan by
+ *   ago       X's "5m", "3h", "Oct 13", with the full stamp as its tooltip
+ *   stamp     "10:30 PM · Oct 13, 2026", under a post on its own page
+ *   datetime  "Oct 13, 10:30 PM", the admin lists
+ *   date      "Oct 13, 2026" ("10/13/26" with year="2-digit")
  */
 export type TimeFormat = "kickoff" | "ago" | "stamp" | "datetime" | "date";
 
@@ -56,9 +56,7 @@ export function LocalTime({
     format === "kickoff"
       ? `${formatKickoff(at, z)} ${zoneLabel(at, z)}`
       : format === "ago"
-        ? // Measured from now, and the server's now and the browser's differ
-          // by the trip between them — hence suppressHydrationWarning below.
-          formatAgo(at, new Date(), z)
+        ? formatAgo(at, new Date(), z)
         : format === "stamp"
           ? formatStamp(at, z)
           : format === "datetime"
@@ -70,7 +68,11 @@ export function LocalTime({
       dateTime={at.toISOString()}
       title={format === "ago" ? `${formatStamp(at, z)} ${zoneLabel(at, z)}` : undefined}
       className={className}
-      suppressHydrationWarning={format === "ago"}
+      // The browser's first render can't be trusted to match the server's
+      // text exactly — "5m ago" is measured from two different nows, and
+      // engines differ on the space before AM/PM (a narrow no-break space in
+      // newer ones). It is replaced straight after hydrating anyway.
+      suppressHydrationWarning
     >
       {text}
     </time>
