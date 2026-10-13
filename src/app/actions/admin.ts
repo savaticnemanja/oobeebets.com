@@ -335,6 +335,23 @@ export async function publishSlateAction(
 
   if (n === 0) return { ok: false, error: "Nothing to publish — add picks first." };
 
+  // A slate goes public before its games, never after. Otherwise a draft is a
+  // way to pick winners in hindsight: add fifteen, wait for the results,
+  // delete the losers, publish the rest. Started picks can still be deleted
+  // from the draft (it was never public), and then the others can go out.
+  const [{ late }] = await db
+    .select({
+      late: sql<number>`count(*) filter (where ${picks.startsAt} <= now() or ${picks.settledAt} is not null)::int`,
+    })
+    .from(picks)
+    .where(eq(picks.slateDate, date));
+  if (late > 0) {
+    return {
+      ok: false,
+      error: `${late} pick${late === 1 ? " has" : "s have"} already started — delete ${late === 1 ? "it" : "them"} from the draft, then publish the rest.`,
+    };
+  }
+
   await db
     .update(slates)
     .set({ publishedAt: new Date(), publishedBy: actor.user.id })

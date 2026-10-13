@@ -32,7 +32,8 @@ export function PublishBar({
   /** Both lists, because publishing sends them out together. */
   counts: Record<PickCategory, number>;
   anySettled: boolean;
-  /** A game has kicked off: the slate is on the record, as a settled one is. */
+  /** A game has kicked off: a published slate is on the record, as a settled
+   *  one is — and a draft can no longer go out until those picks are gone. */
   anyStarted: boolean;
 }) {
   const router = useRouter();
@@ -106,7 +107,7 @@ export function PublishBar({
           ) : (
             <form action={publish}>
               <input type="hidden" name="slateDate" value={date} />
-              <Button type="submit" size="sm" disabled={publishing || total === 0}>
+              <Button type="submit" size="sm" disabled={publishing || total === 0 || anySettled || anyStarted}>
                 {publishing ? (
                   <Loader2 className="animate-spin" aria-hidden="true" />
                 ) : (
@@ -118,6 +119,13 @@ export function PublishBar({
           )}
         </div>
       </div>
+
+      {!published && (anyStarted || anySettled) && (
+        <p className="mt-3 text-sm text-pending">
+          Some picks on this draft have already started. A slate goes public only before its
+          games — delete those picks, then publish the rest.
+        </p>
+      )}
 
       <div
         className="mt-3 h-1 overflow-hidden rounded-full bg-surface-2"
