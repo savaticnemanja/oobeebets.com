@@ -28,6 +28,7 @@ import {
   type PickCategory,
 } from "@/lib/board";
 import { z } from "zod";
+import { violates } from "@/lib/db-errors";
 
 async function audit(
   actor: AuthContext,
@@ -181,7 +182,7 @@ export async function createPickAction(
     if (msg.includes("Already on the board")) {
       return { ok: false, error: "That exact bet is already on today's board." };
     }
-    if (msg.includes("picks_slate_rank_unique")) {
+    if (violates(err, "picks_slate_rank_unique")) {
       return { ok: false, error: "Someone else just added a pick — try again." };
     }
     throw err;

@@ -15,6 +15,7 @@ import { inviteEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
 import { emailSchema, fieldErrorsFrom, onboardingSchema, type ActionState } from "@/lib/validation";
 import { mintUsername } from "@/lib/social";
+import { violates } from "@/lib/db-errors";
 
 const ACCEPT_LIMIT = 10;
 const ACCEPT_WINDOW_MS = 15 * 60 * 1000;
@@ -216,12 +217,11 @@ export async function acceptInviteAction(
       })
       .returning({ id: users.id, email: users.email });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("users_email_unique")) {
+    if (violates(err, "users_email_unique")) {
       // A concurrent submission of the same invite link won the race.
       return { ok: false, error: "This invite has already been used." };
     }
-    if (msg.includes("users_username_unique") && attempt === 0) continue;
+    if (violates(err, "users_username_unique") && attempt === 0) continue;
     throw err;
   }
 

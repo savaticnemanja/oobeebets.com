@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { votePollAction } from "@/app/actions/social";
 import type { PollView } from "@/lib/social";
 import { cn } from "@/lib/utils";
+import { tryAction } from "@/lib/try-action";
 
 function timeLeft(endsAt: Date): string {
   const ms = endsAt.getTime() - Date.now();
@@ -49,7 +50,7 @@ export function PostPoll({
         total: state.total + 1,
       };
       setState(value);
-      const result = await votePollAction(postId, optionId);
+      const result = await tryAction(() => votePollAction(postId, optionId));
       if (result && !result.ok) toast.error(result.error);
       else keep(value);
     });

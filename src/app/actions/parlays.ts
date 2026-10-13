@@ -27,6 +27,7 @@ import {
 import { PARLAYS_PER_SLATE } from "@/lib/board";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
+import { violates } from "@/lib/db-errors";
 
 /**
  * Building and tearing down parlays — Oobee's own, and the ones testers make
@@ -416,7 +417,7 @@ export async function createOobeeParlayAction(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("Parlay board is full")) return { ok: false, error: msg };
-    if (msg.includes("parlays_oobee_rank_unique")) {
+    if (violates(err, "parlays_oobee_rank_unique")) {
       return { ok: false, error: "Someone else just added a parlay — try again." };
     }
     throw err;

@@ -8,6 +8,7 @@ import { setParlayFollowAction, setPickFollowAction } from "@/app/actions/follow
 import { FOLLOW_LABELS, type ViewerFollow } from "@/lib/follows";
 import { cn } from "@/lib/utils";
 import { PICK_STATE, type PickState } from "@/components/pick-state";
+import { tryAction } from "@/lib/try-action";
 
 /**
  * The check circle on the left of a pick card:
@@ -128,7 +129,9 @@ export function FollowToggle({
     const next = !taken;
     startTransition(async () => {
       setTaken(next);
-      const result = kind === "parlay" ? await setParlayFollowAction(pickId, next) : await setPickFollowAction(pickId, next);
+      const result = await tryAction(() =>
+        kind === "parlay" ? setParlayFollowAction(pickId, next) : setPickFollowAction(pickId, next),
+      );
       if (result && !result.ok) toast.error(result.error);
       else keepTaken(next);
     });

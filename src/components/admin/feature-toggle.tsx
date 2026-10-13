@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { setPickFeaturedAction } from "@/app/actions/admin";
 import { setOobeeParlayFeaturedAction } from "@/app/actions/parlays";
 import { cn } from "@/lib/utils";
+import { tryAction } from "@/lib/try-action";
 
 /**
  * The admin's star on a pick or one of Oobee's parlays: featured ones lead
@@ -31,8 +32,9 @@ export function FeatureToggle({
     const next = !on;
     startTransition(async () => {
       setOn(next);
-      const result =
-        kind === "pick" ? await setPickFeaturedAction(id, next) : await setOobeeParlayFeaturedAction(id, next);
+      const result = await tryAction(() =>
+        kind === "pick" ? setPickFeaturedAction(id, next) : setOobeeParlayFeaturedAction(id, next),
+      );
       if (!result?.ok) toast.error(result?.error ?? "Couldn't change that");
     });
   }

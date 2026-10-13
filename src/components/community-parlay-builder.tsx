@@ -66,7 +66,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
       const result = await createCommunityParlayAction(
         legs.map((l) => ({ lineId: l.option.lineId, price: l.option.price })),
         shared,
-      );
+      ).catch(() => ({ ok: false as const, error: "That didn't save — check your connection and try again.", movedLineId: undefined }));
       if (result.ok) {
         toast.success(result.message);
         setLegs([]);

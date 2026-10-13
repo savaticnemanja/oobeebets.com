@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { tryAction } from "@/lib/try-action";
 
 type Variant = "feed" | "detail" | "ancestor";
 
@@ -231,7 +232,7 @@ export function PostActions({
     startTransition(async () => {
       const value = { liked: next, count: like.count + (next ? 1 : -1) };
       setLike(value);
-      const result = await setPostLikeAction(post.id, next);
+      const result = await tryAction(() => setPostLikeAction(post.id, next));
       if (result && !result.ok) toast.error(result.error);
       else keepLike(value);
     });
@@ -246,7 +247,7 @@ export function PostActions({
     startTransition(async () => {
       const value = { reposted: next, count: repost.count + (next ? 1 : -1) };
       setRepost(value);
-      const result = await setPostRepostAction(post.id, next);
+      const result = await tryAction(() => setPostRepostAction(post.id, next));
       if (result && !result.ok) toast.error(result.error);
       else {
         keepRepost(value);

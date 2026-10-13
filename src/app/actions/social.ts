@@ -12,6 +12,7 @@ import { getLinkPreview, normalizeLinkUrl } from "@/lib/link-preview";
 import { usernameTaken, type PostPreview } from "@/lib/social";
 import { extractCardUrl, pollSchema, postBodyOptionalSchema, profileSchema } from "@/lib/social-rules";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
+import { violates } from "@/lib/db-errors";
 
 /**
  * Writes for the social layer. Every one of them uses getAuth rather than
@@ -211,7 +212,7 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
         .onConflictDoNothing();
     } catch (err) {
       // Foreign key: the post was deleted between render and tap.
-      if (String(err).includes("post_likes_post_id_posts_id_fk")) {
+      if (violates(err, "post_likes_post_id_posts_id_fk")) {
         return { ok: false, error: "That post was deleted." };
       }
       throw err;
@@ -314,7 +315,7 @@ export async function setPostRepostAction(postId: string, reposted: boolean): Pr
         .values({ userId: auth.user.id, postId: parsed.data.postId })
         .onConflictDoNothing();
     } catch (err) {
-      if (String(err).includes("post_reposts_post_id_posts_id_fk")) {
+      if (violates(err, "post_reposts_post_id_posts_id_fk")) {
         return { ok: false, error: "That post was deleted." };
       }
       throw err;
@@ -420,7 +421,7 @@ export async function updateProfileAction(
       .where(eq(users.id, auth.user.id));
   } catch (err) {
     // Two people claiming the same free handle at once: the index decides.
-    if (String(err).includes("users_username_unique")) {
+    if (violates(err, "users_username_unique")) {
       return { ok: false, error: "Check the fields below", fieldErrors: { username: ["That handle is taken"] } };
     }
     throw err;

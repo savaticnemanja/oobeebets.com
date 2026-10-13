@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { setUserFollowAction } from "@/app/actions/social";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { tryAction } from "@/lib/try-action";
 
 /**
  * Follow / Following, as on X: once following, hovering turns the button
@@ -41,7 +42,7 @@ export function FollowButton({
     const next = !state;
     startTransition(async () => {
       setState(next);
-      const result = await setUserFollowAction(userId, next);
+      const result = await tryAction(() => setUserFollowAction(userId, next));
       if (result && !result.ok) toast.error(result.error);
       else keep(next);
     });

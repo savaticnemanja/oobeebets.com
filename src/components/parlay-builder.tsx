@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { deleteUserParlayAction } from "@/app/actions/parlays";
 import type { PickCategory } from "@/db/schema";
+import { tryAction } from "@/lib/try-action";
 
 /** A pick an Oobee parlay can be built from — the admin parlay composer's options. */
 export interface SelectableLeg {
@@ -40,7 +41,7 @@ export function DeleteParlayButton({ parlayId }: { parlayId: string }) {
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const result = await deleteUserParlayAction(parlayId);
+          const result = await tryAction(() => deleteUserParlayAction(parlayId));
           if (result?.ok) {
             toast.success(result.message ?? "Removed");
             router.refresh();
