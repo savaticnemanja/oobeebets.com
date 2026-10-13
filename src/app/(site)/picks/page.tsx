@@ -132,9 +132,9 @@ export default async function PicksPage({
       {/* -------------------------------------------------------------- tabs */}
       {/* Home's tab strip, but scrollable: four labels don't fit a phone. It
           sticks, as Home's does — under the phone's top bar, riding up with
-          it as that slides away — and the day headings stick just below it.
-          Its height is fixed (3.0625rem, border included) because those
-          headings' offset is written in terms of it, in board-days.tsx. */}
+          it as that slides away — with the sport pills and day headings
+          stacked below it. Its height is fixed (3.0625rem, border included)
+          because their offsets are written in terms of it. */}
       <nav
         aria-label="Board"
         className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-[3.0625rem] overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 backdrop-blur-xl [scrollbar-width:none] sm:top-0"
@@ -167,11 +167,13 @@ export default async function PicksPage({
       </nav>
 
       {/* ------------------------------------------------------ sport pills */}
-      {/* Not sticky: the tabs and the day heading already stack at the top,
-          and a third band would leave little room for the picks on a phone. */}
+      {/* Sticks right under the tabs (which are 3.0625rem tall), riding up
+          with them as the phone's top bar slides away. Fixed height,
+          3.5rem with its border, because the day headings stick below it
+          and their offset is written in terms of it, in board-days.tsx. */}
       <nav
         aria-label="Sport"
-        className="relative flex gap-2 overflow-x-auto overscroll-x-contain border-b border-border px-4 py-3 [scrollbar-width:none]"
+        className="sticky top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-14 items-center gap-2 overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 px-4 backdrop-blur-xl [scrollbar-width:none] sm:top-[3.0625rem]"
       >
         {[null, ...SPORT_FILTERS].map((f) => {
           const isActive = (f?.key ?? null) === (sportFilter?.key ?? null);

@@ -309,8 +309,8 @@ export async function loadBoardDays({
 
 /**
  * One day of the board. The heading sticks while you scroll through that day,
- * just under the board's tab strip (which sticks under the phone's top bar,
- * or at the very top beside the sidebar), and on a day with graded picks
+ * just under the board's tab strip and sport pills (which stick under the
+ * phone's top bar, or at the very top beside the sidebar), and on a day with graded picks
  * carries its record: won–lost(–push) and net units.
  */
 function DaySection({
@@ -337,7 +337,7 @@ function DaySection({
 
   return (
     <section aria-labelledby={`day-${date}-heading`} id={`day-${date}`} className="scroll-mt-20">
-      <div className="sticky top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-[3.0625rem]">
+      <div className="sticky top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-[6.5625rem]">
         <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">
           {name && <span>{name}</span>}
           <span className={cn("num", name ? "text-sm font-normal text-fg-muted" : "")}>{formatSlateDate(date)}</span>
