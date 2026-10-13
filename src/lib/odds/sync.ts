@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { games, lines, oddsSync, selections } from "@/db/schema";
+import { games, lines, oddsSync, picks, selections } from "@/db/schema";
 import { addDays, zonedTimeToUtc } from "@/lib/slate-date";
 import { FEED_LEAGUES, GAME_MARKETS, LEAGUE_CONFIG, type FeedLeague } from "./markets";
 
@@ -166,6 +166,20 @@ async function upsertGame(league: FeedLeague, e: ApiEvent) {
       // Kick-off can move (a rain delay, a flexed Sunday game); teams cannot.
       set: { commenceTime: values.commenceTime, syncedAt: values.syncedAt },
     });
+  // Oobee's picks keep their own copy of the kick-off, and every lock reads
+  // it — "I took this", parlay legs, unpublishing, the Live badge. So a moved
+  // game moves its open picks with it; otherwise a game brought forward could
+  // still be ticked while it was being played.
+  await db
+    .update(picks)
+    .set({ startsAt: values.commenceTime })
+    .where(
+      and(
+        eq(picks.status, "pending"),
+        ne(picks.startsAt, values.commenceTime),
+        inArray(picks.selectionId, db.select({ id: selections.id }).from(selections).where(eq(selections.gameId, e.id))),
+      ),
+    );
 }
 
 /**
