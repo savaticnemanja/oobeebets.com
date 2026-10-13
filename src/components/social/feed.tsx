@@ -24,7 +24,9 @@ export function FeedTabs({
       aria-label="Feed"
       className={cn(
         "flex border-b border-border bg-black/80 backdrop-blur-xl",
-        sticky && "sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 sm:top-0",
+        // On a phone it slides away with the top bar (by its own height too)
+        // and comes back with it; see scroll-chrome.tsx.
+        sticky && "sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*3.0625rem)] z-30 sm:top-0",
       )}
     >
       {tabs.map((tab) => {

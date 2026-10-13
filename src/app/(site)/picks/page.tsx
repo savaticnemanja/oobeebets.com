@@ -104,11 +104,12 @@ export default async function PicksPage({
 
       {/* -------------------------------------------------------------- tabs */}
       {/* Home's tab strip, scrollable on a narrow phone, with the info tip at
-          its right end. It sticks, as Home's does — under the phone's top bar,
-          riding up with it as that slides away — with the sport pills and day
-          headings stacked below it. Its height is fixed (3.0625rem, border
-          included) because their offsets are written in terms of it. */}
-      <div className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-[35] flex h-[3.0625rem] border-b border-border bg-black/80 backdrop-blur-xl sm:top-0">
+          its right end. It sticks under the phone's top bar, with the sport
+          pills below it; on a phone both slide away with the bar as you scroll
+          down (and come back with it), leaving the day heading at the top.
+          Its height is fixed (3.0625rem, border included) because the other
+          offsets are written in terms of it. */}
+      <div className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] z-[35] flex h-[3.0625rem] border-b border-border bg-black/80 backdrop-blur-xl sm:top-0">
         <nav
           aria-label="Board"
           className="relative flex min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]"

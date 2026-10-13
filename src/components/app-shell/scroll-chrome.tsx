@@ -17,7 +17,10 @@ import { useEffect } from "react";
  *                  day headers) subtracts it from its `top`, so it rides up
  *                  with the bar instead of leaving a gap.
  *   --chrome-p     0 … 1: the same as a fraction, for the tab bar and what
- *                  floats above it, which are a different height.
+ *                  floats above it, which are a different height — and for
+ *                  the pages' menu rows (Home's tabs, Picks' tabs and sport
+ *                  pills…), which also subtract p × their own height so they
+ *                  slide away with the bar, leaving only a day heading pinned.
  *
  * The distance is the bar's visible height, not counting the notch padding,
  * so the strip under the status bar stays covered.

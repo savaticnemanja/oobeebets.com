@@ -9,7 +9,9 @@ import { cn } from "@/lib/utils";
  * Community. They stick: under Picks' tab strip (`below="tabs"`), or straight
  * under the phone's top bar on Community, which has no tabs (`below="bar"`).
  * Fixed at 3.5rem with the border, since the day headings stick under them
- * and their offset is written in terms of it (board-days.tsx).
+ * and their offset is written in terms of it (board-days.tsx). On a phone the
+ * menus slide away with the top bar (scroll-chrome.tsx's --chrome-p, times the
+ * menus' own height) so only the day heading stays pinned.
  */
 export function SportPills({
   active,
@@ -29,8 +31,8 @@ export function SportPills({
       className={cn(
         "sticky z-30 flex h-14 items-center border-b border-border bg-black/80 backdrop-blur-xl",
         below === "tabs"
-          ? "top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[3.0625rem]"
-          : "top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-0",
+          ? "top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] sm:top-[3.0625rem]"
+          : "top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*3.5rem)] sm:top-0",
       )}
     >
       <nav

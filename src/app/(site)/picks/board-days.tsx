@@ -373,10 +373,11 @@ function DaySection({
       <div
         className={cn(
           "sticky z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl",
-          // Under Picks' tabs and pills, or under Community's pills alone.
+          // Under Picks' tabs and pills, or under Community's pills alone —
+          // and on a phone, as those slide away with the top bar, at the top.
           pillsOnly
-            ? "top-[calc(3.5rem+1px+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[3.5rem]"
-            : "top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[6.5625rem]",
+            ? "top-[calc(3.5rem+1px+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*3.5rem)] sm:top-[3.5rem]"
+            : "top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] sm:top-[6.5625rem]",
         )}
       >
         <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">

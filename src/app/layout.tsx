@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
 import { getLocale, localeConfig } from "@/lib/i18n/config";
-import { Aurora } from "@/components/aurora";
 import { ServiceWorker } from "@/components/pwa/service-worker";
 import "./globals.css";
 import { t } from "@/lib/i18n";
@@ -89,8 +88,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Aurora />
-        <div className="grid-lines" aria-hidden="true" />
 
         {/* First focusable element on every page. */}
         <a
