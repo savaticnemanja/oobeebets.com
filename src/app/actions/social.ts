@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, parlays, pollOptions, pollVotes, postLikes, postMedia, postPolls, postReposts, posts, userFollows, users } from "@/db/schema";
+import { auditLog, parlays, pollOptions, pollVotes, postLikes, postMedia, postPolls, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
 import { MAX_MEDIA_PER_POST } from "@/lib/media";
 import { gifSearchConfigured, isGiphyUrl, searchGifs, type GifResult } from "@/lib/giphy";
 import { getAuth, rateLimit } from "@/lib/auth";
@@ -221,6 +221,30 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
 
   revalidateSocial();
   return { ok: true };
+}
+
+/* ----------------------------------------------------------------- views */
+
+/**
+ * Records that the signed-in viewer has seen these posts — batched by the
+ * browser (components/social/view-tracker.ts). Deliberately revalidates
+ * nothing: it fires as you scroll, and re-rendering the page under you for a
+ * counter would be worse than the counter catching up on the next load.
+ */
+export async function recordPostViewsAction(postIds: string[]): Promise<void> {
+  const auth = await getAuth();
+  if (!auth) return;
+  const ids = z.array(z.string().uuid()).max(100).safeParse(postIds);
+  if (!ids.success || ids.data.length === 0) return;
+  await db
+    .insert(postViews)
+    .select(
+      db
+        .select({ postId: posts.id, userId: sql<string>`${auth.user.id}::uuid`.as("user_id"), createdAt: sql<Date>`now()`.as("created_at") })
+        .from(posts)
+        .where(inArray(posts.id, ids.data)),
+    )
+    .onConflictDoNothing();
 }
 
 /* ----------------------------------------------------------------- polls */

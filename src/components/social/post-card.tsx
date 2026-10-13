@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOptimistic, useTransition } from "react";
-import { Heart, Link2, MessageCircle, MoreHorizontal, Repeat2, Trash2 } from "lucide-react";
+import { BarChart2, Heart, MessageCircle, MoreHorizontal, Repeat2, Share, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
 import type { FeedPost } from "@/lib/social";
@@ -14,6 +14,7 @@ import { LinkCard } from "@/components/social/link-card";
 import { PostBody } from "@/components/social/post-body";
 import { PostMedia } from "@/components/social/post-media";
 import { PostPoll } from "@/components/social/post-poll";
+import { trackView } from "@/components/social/view-tracker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -260,8 +261,17 @@ export function PostActions({
     });
   }
 
-  async function copyLink() {
+  // The phone's own share sheet where there is one; otherwise copy the link.
+  async function share() {
     const url = new URL(`/p/${post.id}`, window.location.origin).toString();
+    if (typeof navigator.share === "function" && window.matchMedia("(pointer: coarse)").matches) {
+      try {
+        await navigator.share({ url });
+      } catch {
+        // Dismissing the sheet rejects; nothing to say about that.
+      }
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link copied");
@@ -270,59 +280,84 @@ export function PostActions({
     }
   }
 
+  // This row is on screen → the post is being seen. See view-tracker.
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!viewerId || !rowRef.current) return;
+    return trackView(rowRef.current, post.id);
+  }, [post.id, viewerId]);
+
   const btn =
     "group/act relative z-10 inline-flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-sm text-fg-subtle transition-colors";
+  // Reply, repost and like sit in equal cells, so the gaps between them
+  // don't shift with how wide each count is; views and share go right — X's row.
+  const cell = detail ? "w-24" : "w-[4.5rem] sm:w-20";
 
   return (
     <div
+      ref={rowRef}
       className={cn(
         "-ml-2 flex items-center justify-between",
-        detail ? "max-w-md border-b border-border py-1.5" : "mt-1.5 max-w-sm",
+        detail ? "border-b border-border py-1.5" : "mt-1.5",
         className,
       )}
     >
-      <Link
-        href={detail ? "#reply" : `/p/${post.id}#reply`}
-        className={cn(btn, "hover:text-brand")}
-        aria-label={`Reply${post.replyCount ? `, ${post.replyCount} replies` : ""}`}
-      >
-        <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
-          <MessageCircle className="size-[1.125rem]" aria-hidden="true" />
-        </span>
-        {post.replyCount > 0 && <span className="num -ml-1">{compactCount(post.replyCount)}</span>}
-      </Link>
+      <div className="flex items-center">
+        <Link
+          href={detail ? "#reply" : `/p/${post.id}#reply`}
+          className={cn(btn, cell, "hover:text-brand")}
+          aria-label={`Reply${post.replyCount ? `, ${post.replyCount} replies` : ""}`}
+        >
+          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
+            <MessageCircle className="size-[1.125rem]" aria-hidden="true" />
+          </span>
+          {post.replyCount > 0 && <span className="num -ml-1">{compactCount(post.replyCount)}</span>}
+        </Link>
 
-      <button
-        type="button"
-        onClick={toggleRepost}
-        aria-pressed={repost.reposted}
-        aria-label={`${repost.reposted ? "Undo repost" : "Repost"}${repost.count ? `, ${repost.count} reposts` : ""}`}
-        className={cn(btn, repost.reposted ? "text-hit" : "hover:text-hit")}
-      >
-        <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-hit/10">
-          <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
-        </span>
-        {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
-      </button>
+        <button
+          type="button"
+          onClick={toggleRepost}
+          aria-pressed={repost.reposted}
+          aria-label={`${repost.reposted ? "Undo repost" : "Repost"}${repost.count ? `, ${repost.count} reposts` : ""}`}
+          className={cn(btn, cell, repost.reposted ? "text-hit" : "hover:text-hit")}
+        >
+          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-hit/10">
+            <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
+          </span>
+          {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
+        </button>
 
-      <button
-        type="button"
-        onClick={toggleLike}
-        aria-pressed={like.liked}
-        aria-label={`${like.liked ? "Unlike" : "Like"}${like.count ? `, ${like.count} likes` : ""}`}
-        className={cn(btn, like.liked ? "text-pink-500" : "hover:text-pink-500")}
-      >
-        <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-pink-500/10">
-          <Heart className={cn("size-[1.125rem]", like.liked && "fill-current")} aria-hidden="true" />
-        </span>
-        {like.count > 0 && <span className="num -ml-1">{compactCount(like.count)}</span>}
-      </button>
+        <button
+          type="button"
+          onClick={toggleLike}
+          aria-pressed={like.liked}
+          aria-label={`${like.liked ? "Unlike" : "Like"}${like.count ? `, ${like.count} likes` : ""}`}
+          className={cn(btn, cell, like.liked ? "text-pink-500" : "hover:text-pink-500")}
+        >
+          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-pink-500/10">
+            <Heart className={cn("size-[1.125rem]", like.liked && "fill-current")} aria-hidden="true" />
+          </span>
+          {like.count > 0 && <span className="num -ml-1">{compactCount(like.count)}</span>}
+        </button>
+      </div>
 
-      <button type="button" onClick={copyLink} aria-label="Copy link to post" className={cn(btn, "hover:text-brand")}>
-        <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
-          <Link2 className="size-[1.125rem]" aria-hidden="true" />
+      <div className="flex items-center">
+        <span
+          className={cn(btn, "cursor-default")}
+          title={`${post.viewCount} ${post.viewCount === 1 ? "person has" : "people have"} seen this`}
+          aria-label={`${post.viewCount} views`}
+        >
+          <span className="grid size-8 place-items-center rounded-full">
+            <BarChart2 className="size-[1.125rem]" aria-hidden="true" />
+          </span>
+          {post.viewCount > 0 && <span className="num -ml-1">{compactCount(post.viewCount)}</span>}
         </span>
-      </button>
+        <button type="button" onClick={share} aria-label="Share post" className={cn(btn, "pr-0 hover:text-brand")}>
+          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
+            <Share className="size-[1.125rem]" aria-hidden="true" />
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

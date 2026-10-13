@@ -628,6 +628,26 @@ export const pollVotes = pgTable(
 );
 
 /**
+ * Who has seen a post: one row per person per post, written when the post
+ * has been on their screen for a moment (see components/social/view-tracker).
+ * The count is unique viewers — X counts every impression; one per person is
+ * the honest number at this size, and can't be pumped by scrolling.
+ */
+export const postViews = pgTable(
+  "post_views",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.userId] })],
+);
+
+/**
  * One row per repost ("retweet"): the pair, and when — reposts appear in the
  * reposter's followers' Following feed at that moment, not the post's.
  */

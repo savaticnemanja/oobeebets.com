@@ -4,7 +4,7 @@ import { cache } from "react";
 import { and, desc, asc, eq, gte, inArray, isNull, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts, posts, userFollows, users } from "@/db/schema";
+import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
 import { getMediaFor, type MediaView } from "@/lib/media";
 import { getParlaysByIds, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
@@ -48,6 +48,8 @@ export interface FeedPost {
   likeCount: number;
   replyCount: number;
   repostCount: number;
+  /** Unique viewers (see post_views). */
+  viewCount: number;
   /** Whether the viewer has liked it. Always false signed out. */
   liked: boolean;
   /** Whether the viewer has reposted it. Always false signed out. */
@@ -78,6 +80,7 @@ const LIKE_COUNT = sql<number>`(select count(*)::int from ${postLikes} where ${p
 const REPLY_COUNT = sql<number>`(select count(*)::int from "posts" as "r" where "r"."parent_id" = ${posts.id})`;
 
 const REPOST_COUNT = sql<number>`(select count(*)::int from ${postReposts} where ${postReposts.postId} = ${posts.id})`;
+const VIEW_COUNT = sql<number>`(select count(*)::int from ${postViews} where ${postViews.postId} = ${posts.id})`;
 
 function likedBy(viewerId: string | null): SQL<boolean> {
   if (!viewerId) return sql<boolean>`false`;
@@ -113,6 +116,7 @@ function selectPosts(viewerId: string | null) {
       likeCount: LIKE_COUNT,
       replyCount: REPLY_COUNT,
       repostCount: REPOST_COUNT,
+      viewCount: VIEW_COUNT,
       liked: likedBy(viewerId),
       reposted: repostedBy(viewerId),
       parlayId: posts.parlayId,
@@ -152,6 +156,7 @@ function toFeedPost(r: Row): FeedPost {
     likeCount: Number(r.likeCount),
     replyCount: Number(r.replyCount),
     repostCount: Number(r.repostCount),
+    viewCount: Number(r.viewCount),
     liked: Boolean(r.liked),
     reposted: Boolean(r.reposted),
     parlayId: r.parlayId,
