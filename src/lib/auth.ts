@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -164,6 +164,17 @@ export async function requireAdminPage(): Promise<AuthContext> {
   const auth = await getAuth();
   if (!auth?.isAdmin) notFound();
   return auth;
+}
+
+/**
+ * The guard for the layout of a signed-in page that has a loading.tsx. The
+ * page checks too, but it runs inside the loading boundary — after the
+ * skeleton has gone out with a 200 — where a redirect can only be done by the
+ * browser. Up here, outside the boundary, a signed-out visitor (or an expired
+ * session) still gets a real redirect to sign in.
+ */
+export async function requireSignedInLayout(next: string): Promise<void> {
+  if (!(await getAuth())) redirect(`/login?next=${next}`);
 }
 
 export function canManageRole(actor: AuthContext, target: User): boolean {

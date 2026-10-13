@@ -11,7 +11,7 @@ import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
 import { SportPills } from "@/components/board/sport-pills";
 import { loadCommunityAction } from "@/app/actions/feeds";
-import { loadCommunityChunk } from "./community-feed";
+import { loadCommunityChunk } from "../community-feed";
 
 export const metadata: Metadata = {
   title: "Community",
