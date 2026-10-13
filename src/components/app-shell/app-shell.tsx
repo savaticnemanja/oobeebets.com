@@ -112,8 +112,6 @@ function LegalNote({ className }: { className?: string }) {
         <Link href="/about" className="hover:underline">About</Link>
         <Link href="/legal/terms" className="hover:underline">Terms</Link>
         <Link href="/legal/privacy" className="hover:underline">Privacy</Link>
-        <a href="https://www.begambleaware.org" target="_blank" rel="noopener noreferrer" className="hover:underline">BeGambleAware</a>
-        <a href="https://www.ncpgambling.org/help-treatment/" target="_blank" rel="noopener noreferrer" className="hover:underline">Get help</a>
         <span>© {new Date().getFullYear()} {SITE.name}</span>
       </p>
     </footer>
