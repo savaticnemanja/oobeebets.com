@@ -87,7 +87,7 @@ function validate(field: Field, v: Values): string | undefined {
     case "spendBand":
       return v.spendBand ? undefined : "Pick a range";
     case "agree":
-      return v.agree ? undefined : "Confirm you're 18 or older and accept the Terms to finish";
+      return v.agree ? undefined : "Confirm you're 21 or older and accept the Terms to finish";
   }
 }
 
@@ -346,7 +346,7 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
               className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
             />
             <span>
-              I&apos;m 18 or older, and I accept the{" "}
+              I&apos;m 21 or older and allowed to bet on sports where I live, and I accept the{" "}
               <a href="/legal/terms" target="_blank" rel="noopener" className="text-brand hover:underline">
                 Terms
               </a>{" "}

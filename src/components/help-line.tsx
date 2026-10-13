@@ -3,7 +3,7 @@
  * is the US national helpline (run by the National Council on Problem
  * Gambling) — the audience the slate's time zone, the dollar spend bands and
  * the US books all point at. A tel: link rather than a help page: the old
- * help pages were removed, but the number belongs wherever the 18+ line does.
+ * help pages were removed, but the number belongs wherever the 21+ line does.
  */
 export function HelpLine() {
   return (

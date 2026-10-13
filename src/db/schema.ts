@@ -111,7 +111,7 @@ export const users = pgTable(
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     /**
-     * When they confirmed they are 18+ and accepted the Terms and Privacy
+     * When they confirmed their age (18+ until 13 Oct 2026, 21+ since) and accepted the Terms and Privacy
      * Policy — the checkbox at the end of onboarding. Null for accounts made
      * before it existed.
      */

@@ -100,7 +100,7 @@ export async function AppShell({
 }
 
 /**
- * The footer's obligations in X's small print style: the 18+ line, the
+ * The footer's obligations in X's small print style: the 21+ line, the
  * helpline and the legal links stay on every signed-in page, not only the
  * marketing ones — under Who to follow in the rail, or at the end of the
  * page without one.
@@ -109,7 +109,7 @@ function LegalNote({ className }: { className?: string }) {
   return (
     <footer className={cn("px-4 py-6 text-xs leading-relaxed text-fg-subtle", className)}>
       <p>
-        <strong className="text-fg-muted">18+ only.</strong> {SITE.name} sells information and
+        <strong className="text-fg-muted">21+ only.</strong> {SITE.name} sells information and
         opinion, not wagers. Every pick can lose; never stake what you cannot afford to lose.{" "}
         <HelpLine />
       </p>

@@ -111,7 +111,7 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
               {/* The small print, which the page itself doesn't carry on a phone. */}
               <div className="mt-6 text-xs leading-relaxed text-fg-subtle">
                 <p>
-                  <strong className="text-fg-muted">18+ only.</strong> Every pick can lose; never stake
+                  <strong className="text-fg-muted">21+ only.</strong> Every pick can lose; never stake
                   what you cannot afford to lose. <HelpLine />
                 </p>
                 <p className="mt-2 flex gap-3">

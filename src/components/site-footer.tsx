@@ -41,7 +41,7 @@ export function SiteFooter() {
           <p className="text-xs leading-relaxed text-fg-subtle">
             {/* The explicit {" "} is load-bearing: JSX drops the leading space of
                 a multi-line text node, which glues the brand name to the next word. */}
-            <strong className="text-fg-muted">18+ only.</strong> {SITE.name}{" "}
+            <strong className="text-fg-muted">21+ only.</strong> {SITE.name}{" "}
             sells information and opinion, not wagers. We do not take bets, hold funds,
             or
             act as a bookmaker. Every pick is a judgement call that can lose. Past

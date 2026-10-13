@@ -133,13 +133,13 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   );
   await page.click('button:has-text("Continue")');
 
-  // Step 4 — spend band, then the 18+ / Terms box, then the real submit.
+  // Step 4 — spend band, then the 21+ / Terms box, then the real submit.
   await page.click('label:has-text("Under $50")');
   await page.click('button:has-text("Finish")');
   await page.waitForTimeout(500);
   check(
-    page.url().includes("/invite/") && (await page.getByText("Confirm you're 18 or older").isVisible()),
-    "Finish is refused until the 18+ / Terms box is ticked",
+    page.url().includes("/invite/") && (await page.getByText("Confirm you're 21 or older").isVisible()),
+    "Finish is refused until the 21+ / Terms box is ticked",
   );
   await page.check('input[name="agreeChoice"]');
   await page.click('button:has-text("Finish")');

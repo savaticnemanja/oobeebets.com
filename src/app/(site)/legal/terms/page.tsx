@@ -43,10 +43,10 @@ export default function TermsPage() {
 
       <DocSection title="3. Eligibility">
         <p>
-          You must be at least 18 years old, or the legal gambling age where you live,
-          whichever is higher. You are responsible for knowing whether sports betting
-          is lawful in your jurisdiction. We do not provide the service where it would
-          be unlawful.
+          You must be at least 21 years old, or older where the law where you live
+          requires it, and allowed to bet on sports there. You are responsible for
+          knowing whether sports betting is lawful in your jurisdiction. We do not
+          provide the service where it would be unlawful.
         </p>
       </DocSection>
 
