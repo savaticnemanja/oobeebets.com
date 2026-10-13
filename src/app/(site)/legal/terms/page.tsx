@@ -60,20 +60,35 @@ export default function TermsPage() {
 
       <DocSection title="5. Your account">
         <p>
-          Accounts are personal. Sharing credentials, redistributing picks, scraping
-          the site, or reselling access will result in termination.
+          Accounts are personal. Sharing your sign-in, scraping the site, copying the
+          board wholesale, or reselling access will result in termination. Sharing a post,
+          or a link to one, with friends is fine — that&apos;s what the Share button is for.
         </p>
       </DocSection>
 
-      <DocSection title="6. Responsible gambling">
+      <DocSection title="6. What you post">
+        <p>
+          What you post stays yours. By posting it, you let us show it to other testers on
+          the site, in feeds and in link previews, for as long as it is up.
+        </p>
+        <p>
+          Don&apos;t post anything illegal, hateful or harassing, sexual content, or someone
+          else&apos;s private information. Don&apos;t impersonate anyone — including{" "}
+          {SITE.name} — and don&apos;t advertise paid picks, other services, or spam. We may
+          remove posts and suspend or close accounts that break these rules. To tell us about
+          a post, use the contact address on the Privacy page.
+        </p>
+      </DocSection>
+
+      <DocSection title="7. Responsible gambling">
         <p>
           Only stake money you can afford to lose. Do not chase losses. If gambling is
-          causing you harm, stop and reach out to a gambling support service where you
-          live.
+          causing you harm, stop and get help: call or text 1-800-GAMBLER, the National
+          Problem Gambling Helpline — free, confidential, and open around the clock.
         </p>
       </DocSection>
 
-      <DocSection title="7. Limitation of liability">
+      <DocSection title="8. Limitation of liability">
         <p>
           To the fullest extent permitted by law, we are not liable for gambling
           losses, missed bets, closed lines, or bookmaker disputes.
