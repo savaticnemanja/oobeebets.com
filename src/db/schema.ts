@@ -498,9 +498,18 @@ export const posts = pgTable(
     }),
     body: text("body").notNull(),
     linkUrl: text("link_url"),
+    /**
+     * A shared Community parlay, as a post — so it is liked, replied to and
+     * reposted like any other. Created when the builder shares the parlay,
+     * deleted when they unshare it (see actions/parlays.ts). Such a post may
+     * have an empty body: the ticket is the content.
+     */
+    parlayId: uuid("parlay_id").references(() => parlays.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // One post per shared parlay.
+    uniqueIndex("posts_parlay_unique").on(t.parlayId),
     // A profile's timeline, and the Following feed (author in (...)).
     index("posts_author_created_idx").on(t.authorId, t.createdAt),
     // A post's replies, oldest first.
@@ -508,7 +517,10 @@ export const posts = pgTable(
     // The For you feed scans recent top-level posts.
     index("posts_created_idx").on(t.createdAt),
     // Keep in step with POST_MAX_LENGTH in lib/social.ts.
-    check("posts_body_length", sql`char_length(${t.body}) between 1 and 280`),
+    check(
+      "posts_body_length",
+      sql`char_length(${t.body}) between 1 and 280 or (${t.parlayId} is not null and char_length(${t.body}) <= 280)`,
+    ),
   ],
 );
 
@@ -528,6 +540,29 @@ export const postLikes = pgTable(
     primaryKey({ columns: [t.userId, t.postId] }),
     // Counting a post's likes, and the cascade when it is deleted.
     index("post_likes_post_idx").on(t.postId),
+  ],
+);
+
+/**
+ * One row per repost ("retweet"): the pair, and when — reposts appear in the
+ * reposter's followers' Following feed at that moment, not the post's.
+ */
+export const postReposts = pgTable(
+  "post_reposts",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.postId] }),
+    index("post_reposts_post_idx").on(t.postId),
+    // The Following feed reads reposts by time.
+    index("post_reposts_created_idx").on(t.createdAt),
   ],
 );
 

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
-import { getAncestors, getPost, getReplies } from "@/lib/social";
+import { getAncestors, getPost, getReplies, withParlays, type FeedPost } from "@/lib/social";
+import { ParlayCard } from "@/components/parlay-card";
 import { appUrl } from "@/lib/site";
 import { Composer } from "@/components/social/composer";
 import { EmptyFeed } from "@/components/social/feed";
@@ -28,25 +29,27 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const post = await getPost(id, null);
   if (!post) return { title: "Post not found" };
   const who = `${displayNameOf(post.author)} (@${post.author.username})`;
-  const snippet = post.body.length > 120 ? `${post.body.slice(0, 119)}…` : post.body;
-  const title = `${who} on oobee: "${snippet}"`;
+  // A shared parlay's post has no text of its own — the ticket is the content.
+  const text = post.body || (post.parlayId ? "Shared a parlay" : "");
+  const snippet = text.length > 120 ? `${text.slice(0, 119)}…` : text;
+  const title = post.body ? `${who} on oobee: "${snippet}"` : `${who} on oobee: ${snippet}`;
   const url = appUrl(`/p/${post.id}`);
   const image = post.preview?.imageUrl ?? undefined;
   return {
     title,
-    description: post.body,
+    description: text,
     alternates: { canonical: url },
     openGraph: {
       type: "article",
       title: who,
-      description: post.body,
+      description: text,
       url,
       ...(image ? { images: [{ url: image }] } : {}),
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
       title: who,
-      description: post.body,
+      description: text,
       ...(image ? { images: [image] } : {}),
     },
   };
@@ -62,12 +65,14 @@ export default async function PostPage({ params }: { params: Params }) {
   const viewerId = auth.user.id;
   const isAdmin = auth.isAdmin;
 
-  const post = await getPost(id, viewerId);
-  if (!post) notFound();
-  const [ancestors, replies] = await Promise.all([
-    getAncestors(post, viewerId),
-    getReplies(post.id, viewerId),
-  ]);
+  const found = await getPost(id, viewerId);
+  if (!found) notFound();
+  const [chain, replyList] = await Promise.all([getAncestors(found, viewerId), getReplies(found.id, viewerId)]);
+  // A shared parlay's post (or one above it) shows its ticket.
+  const [post, ...ancestors] = await withParlays([found, ...chain]);
+  const replies = replyList;
+  const ticket = (p: FeedPost) =>
+    p.parlay ? <ParlayCard parlay={p.parlay} featured={p.id === post.id} /> : undefined;
 
   return (
     <SocialShell>
@@ -93,6 +98,7 @@ export default async function PostPage({ params }: { params: Params }) {
           variant="ancestor"
           threadAbove={i > 0}
           showReplyTo={i === 0}
+          attachment={ticket(a)}
         />
       ))}
 
@@ -103,6 +109,7 @@ export default async function PostPage({ params }: { params: Params }) {
         variant="detail"
         threadAbove={ancestors.length > 0}
         showReplyTo={ancestors.length === 0}
+        attachment={ticket(post)}
       />
 
       {auth ? (

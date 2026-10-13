@@ -4,9 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOptimistic, useTransition } from "react";
-import { Heart, Link2, MessageCircle, MoreHorizontal, Trash2 } from "lucide-react";
+import { Heart, Link2, MessageCircle, MoreHorizontal, Repeat2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deletePostAction, setPostLikeAction } from "@/app/actions/social";
+import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
 import type { FeedPost } from "@/lib/social";
 import { compactCount, relativeTime } from "@/lib/social-rules";
 import { Avatar, NameLine, displayNameOf } from "@/components/social/identity";
@@ -51,6 +51,8 @@ export function PostCard({
   variant = "feed",
   showReplyTo = true,
   threadAbove = false,
+  repostedBy,
+  attachment,
 }: {
   post: FeedPost;
   viewerId: string | null;
@@ -64,6 +66,10 @@ export function PostCard({
    * as one unbroken conversation, as on X.
    */
   threadAbove?: boolean;
+  /** This row is someone's repost: "↻ Name reposted" above it, as on X. */
+  repostedBy?: { username: string; displayName: string | null } | null;
+  /** Drawn where a link card would go — a shared parlay's ticket. */
+  attachment?: React.ReactNode;
 }) {
   const router = useRouter();
   const href = `/p/${post.id}`;
@@ -86,18 +92,20 @@ export function PostCard({
     <article
       onClick={openPost}
       className={cn(
-        "relative flex gap-3 px-4",
+        // A repost line spans the row above the avatar and the content.
+        repostedBy ? "relative flex flex-wrap gap-x-3 gap-y-1 px-4" : "relative flex gap-3 px-4",
         // With the thread line coming in from above, the line itself takes
         // the place of the top padding.
         detail
           ? threadAbove ? "pt-0" : "pt-4"
           : variant === "ancestor"
-            ? threadAbove ? "" : "pt-3"
-            : threadAbove ? "pb-3" : "py-3",
+            ? threadAbove || repostedBy ? "" : "pt-3"
+            : threadAbove || repostedBy ? "pb-3" : "py-3",
         variant === "feed" && "cursor-pointer border-b border-border transition-colors hover:bg-surface/60",
         variant === "ancestor" && "cursor-pointer transition-colors hover:bg-surface/60",
       )}
     >
+      {repostedBy && <RepostedLine by={repostedBy} />}
       {!detail && (
         <div className="flex flex-col items-center">
           {/* The line from the post above, ending 4px short of the avatar —
@@ -154,9 +162,12 @@ export function PostCard({
           </p>
         )}
 
-        <PostBody body={post.body} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
+        {post.body && (
+          <PostBody body={post.body} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
+        )}
 
         {post.preview && <LinkCard preview={post.preview} className="mt-3" />}
+        {attachment && <div className="mt-2">{attachment}</div>}
 
         {detail && (
           <p className="mt-4 border-b border-border pb-3 text-sm text-fg-subtle">
@@ -178,10 +189,42 @@ export function PostCard({
   );
 }
 
+/**
+ * "↻ Name reposted", over a reposted row: the icon right-aligned in the
+ * avatar column's width, the name lined up with the post's text, as on X.
+ */
+export function RepostedLine({ by }: { by: { username: string; displayName: string | null } }) {
+  return (
+    <div className="flex basis-full items-center gap-3 pt-2 text-[0.8125rem] font-semibold text-fg-subtle">
+      <span className="flex w-10 shrink-0 justify-end">
+        <Repeat2 className="size-4" aria-hidden="true" />
+      </span>
+      <Link href={`/u/${by.username}`} className="truncate hover:underline">
+        {displayNameOf(by)} reposted
+      </Link>
+    </div>
+  );
+}
+
 /* --------------------------------------------------------------- actions */
 
-function PostActions({ post, viewerId, detail }: { post: FeedPost; viewerId: string | null; detail: boolean }) {
+/**
+ * Reply · Repost · Like · Copy link, as on X. Exported for the ticket of a
+ * shared parlay, which is a post too and carries the same row under it.
+ */
+export function PostActions({
+  post,
+  viewerId,
+  detail = false,
+  className,
+}: {
+  post: FeedPost;
+  viewerId: string | null;
+  detail?: boolean;
+  className?: string;
+}) {
   const [like, setLike] = useOptimistic({ liked: post.liked, count: post.likeCount });
+  const [repost, setRepost] = useOptimistic({ reposted: post.reposted, count: post.repostCount });
   const [, startTransition] = useTransition();
   const router = useRouter();
 
@@ -195,6 +238,20 @@ function PostActions({ post, viewerId, detail }: { post: FeedPost; viewerId: str
       setLike({ liked: next, count: like.count + (next ? 1 : -1) });
       const result = await setPostLikeAction(post.id, next);
       if (result && !result.ok) toast.error(result.error);
+    });
+  }
+
+  function toggleRepost() {
+    if (!viewerId) {
+      router.push(`/login?next=/p/${post.id}`);
+      return;
+    }
+    const next = !repost.reposted;
+    startTransition(async () => {
+      setRepost({ reposted: next, count: repost.count + (next ? 1 : -1) });
+      const result = await setPostRepostAction(post.id, next);
+      if (result && !result.ok) toast.error(result.error);
+      else if (next) toast.success("Reposted");
     });
   }
 
@@ -212,7 +269,13 @@ function PostActions({ post, viewerId, detail }: { post: FeedPost; viewerId: str
     "group/act relative z-10 inline-flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-sm text-fg-subtle transition-colors";
 
   return (
-    <div className={cn("-ml-2 flex items-center justify-between", detail ? "max-w-sm border-b border-border py-1.5" : "mt-1.5 max-w-xs")}>
+    <div
+      className={cn(
+        "-ml-2 flex items-center justify-between",
+        detail ? "max-w-md border-b border-border py-1.5" : "mt-1.5 max-w-sm",
+        className,
+      )}
+    >
       <Link
         href={detail ? "#reply" : `/p/${post.id}#reply`}
         className={cn(btn, "hover:text-brand")}
@@ -223,6 +286,19 @@ function PostActions({ post, viewerId, detail }: { post: FeedPost; viewerId: str
         </span>
         {post.replyCount > 0 && <span className="num -ml-1">{compactCount(post.replyCount)}</span>}
       </Link>
+
+      <button
+        type="button"
+        onClick={toggleRepost}
+        aria-pressed={repost.reposted}
+        aria-label={`${repost.reposted ? "Undo repost" : "Repost"}${repost.count ? `, ${repost.count} reposts` : ""}`}
+        className={cn(btn, repost.reposted ? "text-hit" : "hover:text-hit")}
+      >
+        <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-hit/10">
+          <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
+        </span>
+        {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
+      </button>
 
       <button
         type="button"

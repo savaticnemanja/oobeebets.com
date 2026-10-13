@@ -2,52 +2,51 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { posts } from "@/db/schema";
-import { getFollowingFeed, getForYouFeed, getParents, type FeedPost, type PostAuthor } from "@/lib/social";
-import { getFeedParlays, type ParlayView } from "@/lib/parlay-store";
+import {
+  getFollowingFeed,
+  getFollowingReposts,
+  getForYouFeed,
+  getParents,
+  getRecentParlayPosts,
+  withParlays,
+  type FeedPost,
+  type PostAuthor,
+} from "@/lib/social";
 
 /**
- * Home is posts and shared Community parlays in one timeline. The two live in
- * different tables with different shapes, so they meet here, after each has
- * been read and graded the way every other surface reads it.
+ * Timeline items for Home and profiles. Everything is a post now — a shared
+ * Community parlay is carried by one (posts.parlay_id) — so the only extra
+ * shapes are a reply's parent drawn above it, and a repost's "X reposted".
  */
 
-export type FeedItem =
-  /** `parent` is set on a reply: the post it answers, drawn above it. */
-  | { kind: "post"; post: FeedPost; parent?: FeedPost }
-  | { kind: "parlay"; parlay: ParlayView; owner: PostAuthor };
+export interface FeedItem {
+  /** Unique per row: a post can appear once as itself and once as a repost. */
+  key: string;
+  post: FeedPost;
+  /** Set on a reply: the post it answers, drawn above it. */
+  parent?: FeedPost;
+  /** Set when this row is someone's repost of the post. */
+  repostedBy?: PostAuthor;
+}
 
-/** Posts as timeline items, each reply carrying the post it answers. */
+/** Posts as timeline items: tickets filled in, each reply carrying its parent. */
 export async function postItems(list: FeedPost[], viewerId: string | null): Promise<FeedItem[]> {
-  const parents = await getParents(list, viewerId);
-  return list.map((post) => ({
-    kind: "post",
+  const [full, parents] = await Promise.all([withParlays(list), getParents(list, viewerId)]);
+  const fullParents = new Map((await withParlays([...parents.values()])).map((p) => [p.id, p]));
+  return full.map((post) => ({
+    key: post.id,
     post,
-    parent: post.parentId ? parents.get(post.parentId) : undefined,
+    parent: post.parentId ? fullParents.get(post.parentId) : undefined,
   }));
 }
 
-function parlayItem({ parlay, ownerRole }: Awaited<ReturnType<typeof getFeedParlays>>[number]): FeedItem {
-  return {
-    kind: "parlay",
-    parlay,
-    owner: {
-      id: parlay.ownerId!,
-      username: parlay.ownerUsername!,
-      displayName: parlay.ownerDisplayName,
-      role: ownerRole,
-    },
-  };
-}
-
-const at = (i: FeedItem) => (i.kind === "post" ? i.post.createdAt : i.parlay.createdAt).getTime();
-
 /**
- * Following, newest first. The posts query pages by cursor as before; the
- * parlays on a page are whichever were shared inside the stretch of time that
+ * Following, newest first: posts by the accounts you follow, and their
+ * reposts at the time they reposted. The posts query pages by cursor; the
+ * reposts on a page are whichever happened inside the stretch of time that
  * page's posts cover — from its oldest post up to where the previous page
- * stopped. Consecutive pages share those bounds, so a parlay can be neither
- * skipped nor shown twice, and no second cursor is needed. The last page has
- * no lower bound and sweeps up anything older.
+ * stopped. Consecutive pages share those bounds, so a repost is neither
+ * skipped nor shown twice, and no second cursor is needed.
  */
 export async function getHomeFollowing(
   viewerId: string,
@@ -60,48 +59,57 @@ export async function getHomeFollowing(
       : Promise.resolve([]),
   ]);
   const lower = feed.nextCursor ? feed.posts.at(-1)!.createdAt : null;
-  const parlays = await getFeedParlays({
-    followingOf: viewerId,
-    from: lower,
-    to: upper[0]?.at ?? null,
-    limit: 50,
-  });
+  const reposts = await getFollowingReposts({ viewerId, from: lower, to: upper[0]?.at ?? null, limit: 50 });
 
-  const items = [...(await postItems(feed.posts, viewerId)), ...parlays.map(parlayItem)].sort((a, b) => at(b) - at(a));
+  const own = await postItems(feed.posts, viewerId);
+  const shared = await postItems(
+    reposts.map((r) => r.post),
+    viewerId,
+  );
+  const timed = [
+    ...own.map((item) => ({ item, at: item.post.createdAt.getTime() })),
+    ...shared.map((item, i) => ({
+      item: { ...item, key: `repost:${reposts[i].by.id}:${item.post.id}`, repostedBy: reposts[i].by },
+      at: reposts[i].at.getTime(),
+    })),
+  ].sort((a, b) => b.at - a.at);
+
+  // A post reposted by several people you follow, or posted and reposted in
+  // the same stretch, shows once — its newest appearance.
+  const seen = new Set<string>();
+  const items = timed
+    .map((t) => t.item)
+    .filter((item) => (seen.has(item.post.id) ? false : (seen.add(item.post.id), true)));
   return { items, nextCursor: feed.nextCursor };
 }
 
-/** How many parlays a For you page carries, and how often one appears. */
+/** How many shared parlays a For you page carries, and how often one appears. */
 const PARLAYS_PER_PAGE = 6;
 const POSTS_BETWEEN_PARLAYS = 5;
 
 /**
  * For you: the ranked posts, with the newest shared parlays of the last week
- * dropped in every few posts. Parlays have no likes or replies to rank by, so
- * they don't compete with posts on HOT_SCORE; they take turns with them
- * instead, newest first, paged by the same page number.
+ * dropped in every few posts. A fresh ticket has nothing to rank on yet, so
+ * rather than compete on the score it takes turns with the posts, newest
+ * first, paged by the same page number.
  */
 export async function getHomeForYou(
   viewerId: string,
   pageIndex = 0,
 ): Promise<{ items: FeedItem[]; nextPage: number | null }> {
-  const [feed, parlays] = await Promise.all([
+  const [feed, parlayPosts] = await Promise.all([
     getForYouFeed(viewerId, pageIndex),
-    getFeedParlays({
-      from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      limit: PARLAYS_PER_PAGE + 1,
-      offset: pageIndex * PARLAYS_PER_PAGE,
-    }),
+    getRecentParlayPosts(viewerId, pageIndex * PARLAYS_PER_PAGE, PARLAYS_PER_PAGE + 1),
   ]);
-  const extra = parlays.slice(0, PARLAYS_PER_PAGE).map(parlayItem);
+  const extra = await postItems(parlayPosts.slice(0, PARLAYS_PER_PAGE), viewerId);
 
   const items: FeedItem[] = [];
-  (await postItems(feed.posts, viewerId)).forEach((post, i) => {
-    items.push(post);
+  (await postItems(feed.posts, viewerId)).forEach((item, i) => {
+    items.push(item);
     if ((i + 1) % POSTS_BETWEEN_PARLAYS === 0 && extra.length > 0) items.push(extra.shift()!);
   });
   items.push(...extra);
 
-  const moreParlays = parlays.length > PARLAYS_PER_PAGE;
+  const moreParlays = parlayPosts.length > PARLAYS_PER_PAGE;
   return { items, nextPage: feed.nextPage ?? (moreParlays ? pageIndex + 1 : null) };
 }

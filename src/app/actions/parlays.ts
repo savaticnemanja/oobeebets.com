@@ -11,6 +11,7 @@ import {
   parlaySelectionLegs,
   parlays,
   picks,
+  posts,
   selections,
   slates,
 } from "@/db/schema";
@@ -174,10 +175,13 @@ export async function createCommunityParlayAction(
     await tx
       .insert(parlaySelectionLegs)
       .values(frozen.map((f) => ({ parlayId: row.id, selectionId: f.selectionId })));
+    // Shared, it is a post too — see setParlaySharedAction.
+    if (shared) await tx.insert(posts).values({ authorId: auth.user.id, body: "", parlayId: row.id });
   });
 
   revalidatePath("/picks");
   revalidatePath("/my-bets");
+  revalidatePath("/home");
   return {
     ok: true,
     message: `${frozen.length}-leg parlay saved${shared ? " and shared to Community" : ""}.`,
@@ -189,14 +193,31 @@ export async function setParlaySharedAction(parlayId: string, shared: boolean): 
   const auth = await getAuth();
   if (!auth) return { ok: false, error: "Your session expired — sign in again." };
   if (!z.string().uuid().safeParse(parlayId).success) return { ok: false, error: "Bad request" };
-  const updated = await db
-    .update(parlays)
-    .set({ shared: Boolean(shared), updatedAt: new Date() })
-    .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, auth.user.id)))
-    .returning({ id: parlays.id });
-  if (updated.length === 0) return { ok: false, error: "Parlay not found" };
+  // The post that carries a shared parlay comes and goes with sharing: on
+  // Community and in timelines it is that post — liked, replied to, reposted
+  // — so a private parlay has none. Unsharing takes its replies with it.
+  const done = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(parlays)
+      .set({ shared: Boolean(shared), updatedAt: new Date() })
+      .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, auth.user.id)))
+      .returning({ id: parlays.id });
+    if (updated.length === 0) return false;
+    if (shared) {
+      await tx
+        .insert(posts)
+        .values({ authorId: auth.user.id, body: "", parlayId })
+        .onConflictDoNothing({ target: posts.parlayId });
+    } else {
+      await tx.delete(posts).where(eq(posts.parlayId, parlayId));
+    }
+    return true;
+  });
+  if (!done) return { ok: false, error: "Parlay not found" };
   revalidatePath("/picks");
   revalidatePath("/my-bets");
+  revalidatePath("/home");
+  revalidatePath(`/u/${auth.user.username}`, "layout");
   return { ok: true, message: shared ? "Shared to Community." : "Made private." };
 }
 

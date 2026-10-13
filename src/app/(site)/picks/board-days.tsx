@@ -14,6 +14,8 @@ import { pickProfit } from "@/lib/settlement";
 import { slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
+import { ParlayPost } from "@/components/social/parlay-row";
+import { getParlayPosts, type FeedPost } from "@/lib/social";
 import { PickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -189,6 +191,13 @@ export async function loadBoardDays({
   const communityOn = new Map<string, Awaited<ReturnType<typeof getCommunityParlays>>>(
     isCommunityTab ? await Promise.all(days.map(async (d) => [d, await getCommunityParlays(d)] as const)) : [],
   );
+  // Each shared ticket is carried by a post — its likes, replies and reposts.
+  const postFor = isCommunityTab
+    ? await getParlayPosts(
+        [...communityOn.values()].flat().map(({ parlay }) => parlay.id),
+        auth.user.id,
+      )
+    : new Map<string, FeedPost>();
 
   /* ------------------------------------------------------------- render */
 
@@ -224,14 +233,19 @@ export async function loadBoardDays({
           ) : (
             // The same ticket as Oobee's parlays, with who built it in the
             // header where Oobee's show the sports.
-            list.map(({ parlay: pl, ownerRole }) => (
-              <ParlayCard
-                key={pl.id}
-                parlay={pl}
-                variant="row"
-                owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName, role: ownerRole }}
-              />
-            ))
+            list.map(({ parlay: pl, ownerRole }) => {
+              const post = postFor.get(pl.id);
+              return post ? (
+                <ParlayPost key={pl.id} post={{ ...post, parlay: pl }} viewerId={auth.user.id} />
+              ) : (
+                <ParlayCard
+                  key={pl.id}
+                  parlay={pl}
+                  variant="row"
+                  owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName, role: ownerRole }}
+                />
+              );
+            })
           )}
         </DaySection>
       );

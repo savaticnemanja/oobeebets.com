@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, postLikes, posts, userFollows, users } from "@/db/schema";
+import { auditLog, parlays, postLikes, postReposts, posts, userFollows, users } from "@/db/schema";
 import { getAuth, rateLimit } from "@/lib/auth";
 import { getLinkPreview, normalizeLinkUrl } from "@/lib/link-preview";
 import { usernameTaken, type PostPreview } from "@/lib/social";
@@ -91,7 +91,7 @@ export async function deletePostAction(postId: string): Promise<ActionState> {
   if (!z.string().uuid().safeParse(postId).success) return { ok: false, error: "Bad request" };
 
   const [post] = await db
-    .select({ id: posts.id, authorId: posts.authorId, body: posts.body, username: users.username })
+    .select({ id: posts.id, authorId: posts.authorId, body: posts.body, parlayId: posts.parlayId, username: users.username })
     .from(posts)
     .innerJoin(users, eq(users.id, posts.authorId))
     .where(eq(posts.id, postId))
@@ -101,7 +101,15 @@ export async function deletePostAction(postId: string): Promise<ActionState> {
   const own = post.authorId === auth.user.id;
   if (!own && !auth.isAdmin) return { ok: false, error: "You can only delete your own posts." };
 
-  await db.delete(posts).where(eq(posts.id, postId));
+  // Deleting the post that carries a shared parlay unshares the parlay — the
+  // ticket itself stays on its builder's My bets.
+  await db.transaction(async (tx) => {
+    await tx.delete(posts).where(eq(posts.id, postId));
+    if (post.parlayId) {
+      await tx.update(parlays).set({ shared: false, updatedAt: new Date() }).where(eq(parlays.id, post.parlayId));
+    }
+  });
+  if (post.parlayId) revalidatePath("/picks");
 
   // A tester deleting their own post is ordinary use. An admin removing
   // someone else's is moderation, and that belongs on the record — with the
@@ -150,6 +158,40 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
 
   revalidateSocial();
   return { ok: true };
+}
+
+/* --------------------------------------------------------------- reposts */
+
+/**
+ * Repost ("retweet") or undo it. The post then shows in the reposter's
+ * followers' Following feed, at the time of the repost, under "X reposted".
+ */
+export async function setPostRepostAction(postId: string, reposted: boolean): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) return { ok: false, error: SIGNED_OUT };
+  const parsed = z.object({ postId: z.string().uuid(), reposted: z.boolean() }).safeParse({ postId, reposted });
+  if (!parsed.success) return { ok: false, error: "Bad request" };
+
+  if (parsed.data.reposted) {
+    try {
+      await db
+        .insert(postReposts)
+        .values({ userId: auth.user.id, postId: parsed.data.postId })
+        .onConflictDoNothing();
+    } catch (err) {
+      if (String(err).includes("post_reposts_post_id_posts_id_fk")) {
+        return { ok: false, error: "That post was deleted." };
+      }
+      throw err;
+    }
+  } else {
+    await db
+      .delete(postReposts)
+      .where(and(eq(postReposts.userId, auth.user.id), eq(postReposts.postId, parsed.data.postId)));
+  }
+
+  revalidateSocial(auth.user.username);
+  return { ok: true, message: parsed.data.reposted ? "Reposted." : undefined };
 }
 
 /* --------------------------------------------------------------- follows */

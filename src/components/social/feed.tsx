@@ -2,7 +2,8 @@ import { Fragment } from "react";
 import Link from "next/link";
 import type { FeedItem } from "@/lib/home-feed";
 import { PostCard } from "@/components/social/post-card";
-import { ParlayRow } from "@/components/social/parlay-row";
+import { ParlayPost, hasParlay } from "@/components/social/parlay-row";
+import { ParlayCard } from "@/components/parlay-card";
 import { cn } from "@/lib/utils";
 
 /** The tab strip under a page title: For you / Following, Posts / Replies / Likes. */
@@ -48,7 +49,7 @@ export function FeedTabs({
   );
 }
 
-/** A timeline: posts, and on Home, shared parlays between them. */
+/** A timeline of posts — shared parlays among them, drawn as their tickets. */
 export function FeedList({
   items,
   viewerId,
@@ -66,26 +67,39 @@ export function FeedList({
   if (items.length === 0) return <>{empty}</>;
   return (
     <div>
-      {items.map((item) =>
-        item.kind === "post" ? (
-          // A reply comes with the post it answers, joined by the thread line,
-          // as on X — so it reads as half of a conversation you can see.
-          <Fragment key={item.post.id}>
-            {item.parent && (
-              <PostCard post={item.parent} viewerId={viewerId} isAdmin={isAdmin} variant="ancestor" />
+      {items.map((item) => {
+        const { post, parent, repostedBy } = item;
+        // A shared parlay: the ticket, with its post's actions under it.
+        if (hasParlay(post) && !parent) {
+          return <ParlayPost key={item.key} post={post} viewerId={viewerId} repostedBy={repostedBy} />;
+        }
+        // A reply comes with the post it answers, joined by the thread line,
+        // as on X — so it reads as half of a conversation you can see. A
+        // repost line goes above the pair, not between.
+        return (
+          <Fragment key={item.key}>
+            {parent && (
+              <PostCard
+                post={parent}
+                viewerId={viewerId}
+                isAdmin={isAdmin}
+                variant="ancestor"
+                repostedBy={repostedBy}
+                attachment={hasParlay(parent) ? <ParlayCard parlay={parent.parlay} /> : undefined}
+              />
             )}
             <PostCard
-              post={item.post}
+              post={post}
               viewerId={viewerId}
               isAdmin={isAdmin}
-              showReplyTo={!item.parent}
-              threadAbove={Boolean(item.parent)}
+              showReplyTo={!parent}
+              threadAbove={Boolean(parent)}
+              repostedBy={parent ? undefined : repostedBy}
+              attachment={hasParlay(post) ? <ParlayCard parlay={post.parlay} /> : undefined}
             />
           </Fragment>
-        ) : (
-          <ParlayRow key={item.parlay.id} parlay={item.parlay} owner={item.owner} />
-        ),
-      )}
+        );
+      })}
       {more}
     </div>
   );

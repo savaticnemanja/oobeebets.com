@@ -31,6 +31,9 @@ export function ParlayCard({
   className,
   variant = "card",
   owner,
+  postHref,
+  kicker,
+  footer,
   children,
 }: {
   parlay: ParlayView;
@@ -43,6 +46,12 @@ export function ParlayCard({
    * header — the Community tab and the Home timeline both draw it this way.
    */
   owner?: { username: string; displayName: string | null; role?: Role };
+  /** The post that carries a shared ticket: its time links there, as a post's does. */
+  postHref?: string;
+  /** A line above the header — "↻ Name reposted". */
+  kicker?: React.ReactNode;
+  /** A row under everything — the post's Reply / Repost / Like. */
+  footer?: React.ReactNode;
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -91,6 +100,7 @@ export function ParlayCard({
       )}
       aria-label={`${legs.length}-leg parlay at ${price === null ? "no price" : formatOdds(price)}, ${badge.label}`}
     >
+      {kicker}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {owner && (
@@ -104,16 +114,25 @@ export function ParlayCard({
               <span className="truncate text-fg-subtle">@{owner.username}</span>
             </Link>
           )}
-          {owner && (
-            <time
-              dateTime={parlay.createdAt.toISOString()}
-              title={parlay.createdAt.toLocaleString()}
-              className="shrink-0 text-xs text-fg-subtle"
-              suppressHydrationWarning
-            >
-              · {relativeTime(parlay.createdAt)}
-            </time>
-          )}
+          {owner &&
+            (() => {
+              const time = (
+                <time
+                  dateTime={parlay.createdAt.toISOString()}
+                  title={parlay.createdAt.toLocaleString()}
+                  suppressHydrationWarning
+                >
+                  · {relativeTime(parlay.createdAt)}
+                </time>
+              );
+              return postHref ? (
+                <Link href={postHref} className="shrink-0 text-xs text-fg-subtle hover:underline">
+                  {time}
+                </Link>
+              ) : (
+                <span className="shrink-0 text-xs text-fg-subtle">{time}</span>
+              );
+            })()}
           <span aria-hidden="true">{sports.map((sp) => SPORT_EMOJI[sp]).join("")}</span>
           {/* A tester's ticket is titled "N-leg parlay" already, so with the
               owner taking the room the count isn't repeated up here. */}
@@ -240,6 +259,7 @@ export function ParlayCard({
           {children}
         </div>
       )}
+      {footer}
     </article>
   );
 }

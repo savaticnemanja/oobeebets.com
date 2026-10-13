@@ -1,10 +1,11 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { cache } from "react";
-import { and, desc, asc, eq, inArray, isNull, isNotNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, desc, asc, eq, gte, inArray, isNull, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { linkPreviews, postLikes, posts, userFollows, users } from "@/db/schema";
+import { linkPreviews, postLikes, postReposts, posts, userFollows, users } from "@/db/schema";
+import { getParlaysByIds, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { isReservedUsername } from "@/lib/social-rules";
 
@@ -45,9 +46,15 @@ export interface FeedPost {
   replyToUsername: string | null;
   likeCount: number;
   replyCount: number;
+  repostCount: number;
   /** Whether the viewer has liked it. Always false signed out. */
   liked: boolean;
+  /** Whether the viewer has reposted it. Always false signed out. */
+  reposted: boolean;
   preview: PostPreview | null;
+  /** A shared Community parlay: the post carries this ticket (see withParlays). */
+  parlayId: string | null;
+  parlay?: ParlayView | null;
 }
 
 /* ------------------------------------------------------------- the query */
@@ -58,18 +65,25 @@ const parentAuthor = alias(users, "parent_author");
 const LIKE_COUNT = sql<number>`(select count(*)::int from ${postLikes} where ${postLikes.postId} = ${posts.id})`;
 const REPLY_COUNT = sql<number>`(select count(*)::int from "posts" as "r" where "r"."parent_id" = ${posts.id})`;
 
+const REPOST_COUNT = sql<number>`(select count(*)::int from ${postReposts} where ${postReposts.postId} = ${posts.id})`;
+
 function likedBy(viewerId: string | null): SQL<boolean> {
   if (!viewerId) return sql<boolean>`false`;
   return sql<boolean>`exists(select 1 from ${postLikes} where ${postLikes.postId} = ${posts.id} and ${postLikes.userId} = ${viewerId})`;
 }
 
+function repostedBy(viewerId: string | null): SQL<boolean> {
+  if (!viewerId) return sql<boolean>`false`;
+  return sql<boolean>`exists(select 1 from ${postReposts} where ${postReposts.postId} = ${posts.id} and ${postReposts.userId} = ${viewerId})`;
+}
+
 /**
  * Hacker News-style ranking for the For you feed: engagement over age, with
- * gravity 1.5. A reply counts double a like — answering costs more than a tap
- * and says more about whether a post started something — and the +1 lets a
- * brand-new post with nothing yet still outrank a stale one.
+ * gravity 1.5. A reply or a repost counts double a like — each costs more than
+ * a tap and says more about whether a post started something — and the +1
+ * lets a brand-new post with nothing yet still outrank a stale one.
  */
-const HOT_SCORE = sql<number>`((${LIKE_COUNT}) + 2 * (${REPLY_COUNT}) + 1)
+const HOT_SCORE = sql<number>`((${LIKE_COUNT}) + 2 * (${REPLY_COUNT}) + 2 * (${REPOST_COUNT}) + 1)
   / power(extract(epoch from (now() - ${posts.createdAt})) / 3600 + 2, 1.5)`;
 
 function selectPosts(viewerId: string | null) {
@@ -86,7 +100,10 @@ function selectPosts(viewerId: string | null) {
       replyToUsername: parentAuthor.username,
       likeCount: LIKE_COUNT,
       replyCount: REPLY_COUNT,
+      repostCount: REPOST_COUNT,
       liked: likedBy(viewerId),
+      reposted: repostedBy(viewerId),
+      parlayId: posts.parlayId,
       previewUrl: linkPreviews.url,
       previewTitle: linkPreviews.title,
       previewDescription: linkPreviews.description,
@@ -122,7 +139,10 @@ function toFeedPost(r: Row): FeedPost {
     replyToUsername: r.replyToUsername,
     likeCount: Number(r.likeCount),
     replyCount: Number(r.replyCount),
+    repostCount: Number(r.repostCount),
     liked: Boolean(r.liked),
+    reposted: Boolean(r.reposted),
+    parlayId: r.parlayId,
     preview: r.previewUrl
       ? {
           url: r.previewUrl,
@@ -185,8 +205,10 @@ export async function getFollowingFeed(viewerId: string, before?: string): Promi
  * read has no stable "older than this one".
  */
 export async function getForYouFeed(viewerId: string | null, pageIndex = 0): Promise<FeedPage & { nextPage: number | null }> {
+  // Shared parlays take turns with these instead of competing on the score —
+  // see getRecentParlayPosts and lib/home-feed.ts.
   const rows = await selectPosts(viewerId)
-    .where(sql`${posts.createdAt} > now() - interval '30 days'`)
+    .where(and(sql`${posts.createdAt} > now() - interval '30 days'`, isNull(posts.parlayId)))
     .orderBy(desc(HOT_SCORE), desc(posts.createdAt))
     .limit(FEED_PAGE_SIZE + 1)
     .offset(pageIndex * FEED_PAGE_SIZE);
@@ -203,6 +225,90 @@ export async function getParents(list: FeedPost[], viewerId: string | null): Pro
   if (ids.length === 0) return new Map();
   const rows = await selectPosts(viewerId).where(inArray(posts.id, ids));
   return new Map(rows.map(toFeedPost).map((p) => [p.id, p]));
+}
+
+/**
+ * Fills in the ticket on every post that carries a shared parlay — one query
+ * for the lot, graded the way every other surface grades a parlay. A post
+ * whose parlay can't be read (deleted mid-render) keeps parlay = null.
+ */
+export async function withParlays(list: FeedPost[]): Promise<FeedPost[]> {
+  const ids = [...new Set(list.map((p) => p.parlayId).filter((id): id is string => id !== null))];
+  if (ids.length === 0) return list;
+  const byId = new Map((await getParlaysByIds(ids)).map((pl) => [pl.id, pl]));
+  return list.map((p) => (p.parlayId ? { ...p, parlay: byId.get(p.parlayId) ?? null } : p));
+}
+
+/** Reposts for a timeline: the post, who reposted it, and when. */
+export interface FeedRepost {
+  post: FeedPost;
+  by: PostAuthor;
+  at: Date;
+}
+
+const reposter = alias(users, "reposter");
+
+/**
+ * Reposts by the accounts a viewer follows (and the viewer's own), between
+ * `from` (inclusive) and `to` (exclusive) — the Following feed merges these in
+ * by the same time-window trick it uses for nothing else now (see
+ * lib/home-feed.ts), so it needs no second cursor.
+ */
+export async function getFollowingReposts(opts: {
+  viewerId: string;
+  from: Date | null;
+  to: Date | null;
+  limit: number;
+}): Promise<FeedRepost[]> {
+  const rows = await db
+    .select({
+      postId: postReposts.postId,
+      at: postReposts.createdAt,
+      byId: reposter.id,
+      byUsername: reposter.username,
+      byDisplayName: reposter.displayName,
+      byRole: reposter.role,
+    })
+    .from(postReposts)
+    .innerJoin(reposter, eq(reposter.id, postReposts.userId))
+    .where(
+      and(
+        sql`(${postReposts.userId} = ${opts.viewerId} or ${postReposts.userId} in (select ${userFollows.followeeId} from ${userFollows} where ${userFollows.followerId} = ${opts.viewerId}))`,
+        opts.from ? gte(postReposts.createdAt, opts.from) : undefined,
+        opts.to ? lt(postReposts.createdAt, opts.to) : undefined,
+      ),
+    )
+    .orderBy(desc(postReposts.createdAt))
+    .limit(opts.limit);
+  if (rows.length === 0) return [];
+  const postRows = await selectPosts(opts.viewerId).where(inArray(posts.id, [...new Set(rows.map((r) => r.postId))]));
+  const byId = new Map(postRows.map(toFeedPost).map((p) => [p.id, p]));
+  return rows.flatMap((r) => {
+    const post = byId.get(r.postId);
+    if (!post) return [];
+    return [{ post, at: r.at, by: { id: r.byId, username: r.byUsername, displayName: r.byDisplayName, role: r.byRole } }];
+  });
+}
+
+/**
+ * The newest shared parlays of the last week, as posts — For you drops them
+ * in between its ranked posts. A fresh ticket has no engagement to rank on
+ * yet, so on the score alone it would never surface.
+ */
+export async function getRecentParlayPosts(viewerId: string | null, offset: number, limit: number): Promise<FeedPost[]> {
+  const rows = await selectPosts(viewerId)
+    .where(and(isNotNull(posts.parlayId), sql`${posts.createdAt} > now() - interval '7 days'`))
+    .orderBy(desc(posts.createdAt), desc(posts.id))
+    .limit(limit)
+    .offset(offset);
+  return rows.map(toFeedPost);
+}
+
+/** The posts that carry these shared parlays, keyed by parlay id — for the Community tab's actions. */
+export async function getParlayPosts(parlayIds: string[], viewerId: string | null): Promise<Map<string, FeedPost>> {
+  if (parlayIds.length === 0) return new Map();
+  const rows = await selectPosts(viewerId).where(inArray(posts.parlayId, parlayIds));
+  return new Map(rows.map(toFeedPost).map((p) => [p.parlayId!, p]));
 }
 
 export type ProfileTab = "posts" | "replies" | "likes";
