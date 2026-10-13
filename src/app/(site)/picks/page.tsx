@@ -1,12 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Circle, Plus } from "lucide-react";
 import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
-import { PICKS_PER_SLATE, TAB_LABELS, boardTabs, categoryFromParam, tabFromParam } from "@/lib/board";
+import {
+  PICKS_PER_SLATE,
+  SPORT_FILTERS,
+  TAB_LABELS,
+  boardTabs,
+  categoryFromParam,
+  sportFilterFromParam,
+  tabFromParam,
+} from "@/lib/board";
+import { SPORT_EMOJI } from "@/components/pick-card";
 import { LoadMore } from "@/components/load-more";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -43,7 +52,7 @@ export const dynamic = "force-dynamic";
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; sport?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
@@ -53,11 +62,13 @@ export default async function PicksPage({
   // Community parlays that read a different table entirely.
   const tab = tabFromParam(params.category);
   const category = categoryFromParam(params.category);
+  // The pill under the tabs — a league, or a whole sport for soccer/tennis.
+  const sportFilter = sportFilterFromParam(params.sport);
   // Grade anything whose game has finished before reading results.
   await refreshResults();
 
   const [first, todaySlate] = await Promise.all([
-    loadBoardDays({ auth, tab, category, before: null }),
+    loadBoardDays({ auth, tab, category, sportFilter, before: null }),
     db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, today)).limit(1),
   ]);
   const publishedToday = Boolean(todaySlate[0]?.publishedAt);
@@ -69,12 +80,21 @@ export default async function PicksPage({
       ? await db
           .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
           .from(picksTable)
-          .where(eq(picksTable.slateDate, today))
+          .where(
+            and(
+              eq(picksTable.slateDate, today),
+              sportFilter ? eq(picksTable.sport, sportFilter.sport) : undefined,
+              sportFilter?.league ? eq(picksTable.league, sportFilter.league) : undefined,
+            ),
+          )
           .groupBy(picksTable.category)
       : [];
   const countFor = new Map(tallies.map((t) => [t.category, t.n]));
 
-  const tabHref = (c: string) => `/picks?category=${c}`;
+  // Tabs keep the pill and pills keep the tab, so the two combine.
+  const sportQuery = sportFilter ? `&sport=${sportFilter.key}` : "";
+  const tabHref = (c: string) => `/picks?category=${c}${sportQuery}`;
+  const pillHref = (key: string | null) => `/picks?category=${tab}${key ? `&sport=${key}` : ""}`;
 
   return (
     <SocialShell>
@@ -146,15 +166,48 @@ export default async function PicksPage({
         <ScrollActiveTab />
       </nav>
 
+      {/* ------------------------------------------------------ sport pills */}
+      {/* Not sticky: the tabs and the day heading already stack at the top,
+          and a third band would leave little room for the picks on a phone. */}
+      <nav
+        aria-label="Sport"
+        className="relative flex gap-2 overflow-x-auto overscroll-x-contain border-b border-border px-4 py-3 [scrollbar-width:none]"
+      >
+        {[null, ...SPORT_FILTERS].map((f) => {
+          const isActive = (f?.key ?? null) === (sportFilter?.key ?? null);
+          return (
+            <Link
+              key={f?.key ?? "all"}
+              href={pillHref(f?.key ?? null)}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+                isActive
+                  ? "border-fg bg-fg text-black"
+                  : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
+              )}
+            >
+              {f && <span aria-hidden="true">{SPORT_EMOJI[f.sport]}</span>}
+              {f?.label ?? "All"}
+            </Link>
+          );
+        })}
+        <ScrollActiveTab />
+      </nav>
+
       {/* --------------------------------------------------------- the days */}
       {first.node}
-      <LoadMore key={tab} next={first.next} load={loadBoardAction.bind(null, tab)} />
+      <LoadMore
+        key={`${tab}:${sportFilter?.key ?? ""}`}
+        next={first.next}
+        load={loadBoardAction.bind(null, tab, sportFilter?.key ?? "")}
+      />
 
       {tab === "parlay" && (
         <p className="px-4 py-6 text-sm text-fg-muted">
           Want your own?{" "}
-          <Link href={tabHref("community")} className="text-brand hover:underline">
-            Build one on Community parlays
+          <Link href="/picks/new" className="text-brand hover:underline">
+            Build one
           </Link>{" "}
           from any line on today&apos;s games.
         </p>

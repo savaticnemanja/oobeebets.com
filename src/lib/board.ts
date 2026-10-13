@@ -1,3 +1,5 @@
+import type { Sport } from "@/db/schema";
+
 /**
  * The board is two independent lists — game bets and player props — not one
  * list with a type column read after the fact. Each is ranked from 1 and
@@ -144,4 +146,34 @@ export function isBoardTab(value: unknown): value is BoardTab {
  */
 export function tabFromParam(value: string | undefined): BoardTab {
   return isBoardTab(value) ? value : "game";
+}
+
+/* --------------------------------------------------------- sport filter */
+
+/**
+ * The pills under the board's tabs. The four big US leagues match on league;
+ * soccer and tennis match the whole sport, since their competitions come and
+ * go (a Nations League window, a Masters event) and a pill per competition
+ * would be a row of names nobody recognises. `?sport=` carries the key.
+ */
+export const SPORT_FILTERS = [
+  { key: "nfl", label: "NFL", sport: "football", league: "NFL" },
+  { key: "nba", label: "NBA", sport: "basketball", league: "NBA" },
+  { key: "mlb", label: "MLB", sport: "baseball", league: "MLB" },
+  { key: "nhl", label: "NHL", sport: "hockey", league: "NHL" },
+  { key: "soccer", label: "Soccer", sport: "soccer", league: null },
+  { key: "tennis", label: "Tennis", sport: "tennis", league: null },
+] as const satisfies ReadonlyArray<{ key: string; label: string; sport: Sport; league: string | null }>;
+
+export type SportFilter = (typeof SPORT_FILTERS)[number];
+
+/** `?sport=` as a filter; anything unknown means no filter (All). */
+export function sportFilterFromParam(value: string | undefined): SportFilter | null {
+  return SPORT_FILTERS.find((f) => f.key === value) ?? null;
+}
+
+/** Whether a pick or a parlay leg falls under a filter. */
+export function matchesSportFilter(filter: SportFilter | null, item: { sport: Sport; league: string }): boolean {
+  if (!filter) return true;
+  return item.sport === filter.sport && (filter.league === null || item.league === filter.league);
 }

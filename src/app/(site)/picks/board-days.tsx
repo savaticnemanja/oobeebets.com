@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick, PickCategory } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
-import { CATEGORY_NOUN, visiblePicks, type BoardTab } from "@/lib/board";
+import { CATEGORY_NOUN, matchesSportFilter, visiblePicks, type BoardTab, type SportFilter } from "@/lib/board";
 import { getCommunityParlays, getOobeeParlays, type ParlayView } from "@/lib/parlay-store";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { pickProfit } from "@/lib/settlement";
@@ -45,16 +45,27 @@ export async function loadBoardDays({
   auth,
   tab,
   category,
+  sportFilter = null,
   before,
 }: {
   auth: AuthContext;
   tab: BoardTab;
   category: PickCategory;
+  /** The pill under the tabs: only this league's (or sport's) picks and tickets. */
+  sportFilter?: SportFilter | null;
   before: string | null;
 }): Promise<{ node: React.ReactNode; next: string | null; todayPicks: number }> {
   const today = slateDateString();
   const isParlayTab = tab === "parlay";
   const isCommunityTab = tab === "community";
+
+  // The sport pill, as SQL on picks — so a day with no MLB props is not
+  // listed under MLB at all, as a day with no props isn't listed on Props.
+  const pickFilterSql = sportFilter
+    ? sql` and ${picksTable.sport} = ${sportFilter.sport}${sportFilter.league ? sql` and ${picksTable.league} = ${sportFilter.league}` : sql``}`
+    : sql``;
+  // Parlays match if any leg is in it.
+  const ticketMatches = (pl: ParlayView) => pl.legs.some((l) => matchesSportFilter(sportFilter, l));
 
   // Which dates have something on this tab, in a date window: published
   // slates (plus drafts for admins) with this tab's picks or Oobee parlays, or
@@ -81,7 +92,7 @@ export async function loadBoardDays({
               auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`,
               isParlayTab
                 ? sql`exists (select 1 from ${parlaysTable} where ${parlaysTable.slateDate} = ${slates.date} and ${parlaysTable.ownerId} is null)`
-                : sql`exists (select 1 from ${picksTable} where ${picksTable.slateDate} = ${slates.date} and ${picksTable.category} = ${category})`,
+                : sql`exists (select 1 from ${picksTable} where ${picksTable.slateDate} = ${slates.date} and ${picksTable.category} = ${category}${pickFilterSql})`,
             ),
           )
           .orderBy(desc(slates.date));
@@ -119,7 +130,14 @@ export async function loadBoardDays({
       ? await db
           .select()
           .from(picksTable)
-          .where(and(inArray(picksTable.slateDate, visibleDays), eq(picksTable.category, category)))
+          .where(
+            and(
+              inArray(picksTable.slateDate, visibleDays),
+              eq(picksTable.category, category),
+              sportFilter ? eq(picksTable.sport, sportFilter.sport) : undefined,
+              sportFilter?.league ? eq(picksTable.league, sportFilter.league) : undefined,
+            ),
+          )
           .orderBy(asc(picksTable.rank))
       : [];
   // Admins preview whole slates; everyone else sees each day's top VISIBLE_PICKS.
@@ -174,27 +192,33 @@ export async function loadBoardDays({
 
   /* ------------------------------------------------------------- render */
 
+  // "MLB game bets", "Soccer parlays" — the empty states name the pill.
+  const what = sportFilter ? `${sportFilter.label} ` : "";
+
   const node = days.map((d) => {
     const isToday = d === today;
     const draft = draftOn.has(d) && auth.isAdmin;
     const dayPicks = picksOn.get(d) ?? [];
 
     if (isCommunityTab) {
-      const list = communityOn.get(d) ?? [];
+      const list = (communityOn.get(d) ?? []).filter(({ parlay }) => ticketMatches(parlay));
+      // Under a pill, a day with nothing in that sport is left out, today
+      // included (see the note after this map).
+      if (sportFilter && list.length === 0) return null;
       return (
         <DaySection key={d} date={d} today={today}>
           {list.length === 0 ? (
             <Empty>
               {isToday ? (
                 <>
-                  Nobody has shared a parlay today yet.{" "}
+                  {sportFilter ? `No ${what}parlays shared today yet.` : "Nobody has shared a parlay today yet."}{" "}
                   <Link href="/picks/new" className="text-brand hover:underline">
                     Build one
                   </Link>{" "}
                   and be first.
                 </>
               ) : (
-                "No shared parlays this day."
+                `No shared ${what}parlays this day.`
               )}
             </Empty>
           ) : (
@@ -214,11 +238,16 @@ export async function loadBoardDays({
     }
 
     if (isParlayTab) {
-      const list = oobeeOn.get(d) ?? [];
+      const list = (oobeeOn.get(d) ?? []).filter(ticketMatches);
+      if (sportFilter && list.length === 0) return null;
       return (
         <DaySection key={d} date={d} today={today} draft={draft}>
           {list.length === 0 ? (
-            <Empty>{isToday ? "None up yet today — they go out with the rest of the board." : "No Oobee parlays this day."}</Empty>
+            <Empty>
+              {isToday
+                ? `No ${what}parlays up yet today — they go out with the rest of the board.`
+                : `No ${what}Oobee parlays this day.`}
+            </Empty>
           ) : (
             <>
               {featuredFirst(list, (pl) => pl.featured).map(({ item: pl, label }) => (
@@ -234,14 +263,15 @@ export async function loadBoardDays({
     }
 
     // Pick tabs: every day leads with its featured picks, then the rest, each
-    // group by kick-off.
+    // group by kick-off. Under a pill an empty today is dropped too.
+    if (sportFilter && dayPicks.length === 0) return null;
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
         {dayPicks.length === 0 ? (
           <Empty>
             {isToday
-              ? `No ${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
-              : `No ${CATEGORY_NOUN[category]}s this day.`}
+              ? `No ${what}${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
+              : `No ${what}${CATEGORY_NOUN[category]}s this day.`}
           </Empty>
         ) : (
           featuredFirst(dayPicks, (p) => p.featured).map(({ item: p, label }) => (
@@ -259,7 +289,22 @@ export async function loadBoardDays({
     );
   });
 
-  return { node, next, todayPicks: picksOn.get(today)?.length ?? 0 };
+  // Today normally stays even when empty, to say "nothing yet". Under a pill
+  // that would be a row of "No NHL…" above the NHL picks on other days, so
+  // empty days go — and if that leaves nothing on the first chunk, one line
+  // says so instead.
+  const shown = node.filter(Boolean);
+  const out =
+    sportFilter && before === null && shown.length === 0 ? (
+      <Empty>
+        No {what}
+        {isParlayTab || isCommunityTab ? "parlays" : `${CATEGORY_NOUN[category]}s`} on the board yet.
+      </Empty>
+    ) : (
+      shown
+    );
+
+  return { node: out, next, todayPicks: picksOn.get(today)?.length ?? 0 };
 }
 
 /**
