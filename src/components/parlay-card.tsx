@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { FeaturedMark, SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
 import { FollowToggle } from "@/components/follow-toggle";
 import type { ViewerFollow } from "@/lib/follows";
-import { PICK_STATE, pickBadge, pickState } from "@/components/pick-state";
+import { PICK_STATE, pickBadge, pickState, ticketState } from "@/components/pick-state";
 import type { ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { americanToDecimal } from "@/lib/settlement";
@@ -74,9 +74,9 @@ export function ParlayCard({
   // Rendered per request on every page that shows tickets, so "now" is fresh.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  const firstStart = legs.length ? Math.min(...legs.map((l) => l.startsAt.getTime())) : Infinity;
-
-  const state = pickState({ status, startsAt: new Date(firstStart) }, now);
+  const starts = legs.map((l) => l.startsAt.getTime());
+  const firstStart = starts.length ? Math.min(...starts) : Infinity;
+  const state = ticketState(status, starts, now);
   const badge = pickBadge(state);
   // The sports on the ticket, once each, where a pick shows its one sport.
   const sports = [...new Set(legs.map((l) => l.sport))];

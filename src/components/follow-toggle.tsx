@@ -87,7 +87,7 @@ export function FollowToggle({
   if (!follow.open) {
     if (state) {
       const s = PICK_STATE[state];
-      const reason = state === "started" ? FOLLOW_LABELS.started : s.label;
+      const reason = state === "started" || state === "awaiting" ? FOLLOW_LABELS.started : s.label;
       const label = taken ? `${FOLLOW_LABELS.took} — ${reason}` : reason;
       return (
         <span className={cn("grid shrink-0 place-items-center", box)} title={label}>

@@ -67,9 +67,9 @@ export function StatusLine({
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs", s.color)}>
       <s.icon className="size-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />
-      {state === "started" ? (
+      {state === "started" || state === "awaiting" ? (
         <span>
-          {prefix ? `${prefix} started` : "Started"} {time} · locked
+          {prefix ? `${prefix} started` : "Started"} {time} · {state === "started" ? "locked" : "awaiting result"}
         </span>
       ) : (
         <>
