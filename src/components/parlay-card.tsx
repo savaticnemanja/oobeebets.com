@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Layers } from "lucide-react";
+import { Avatar, displayNameOf } from "@/components/social/identity";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
@@ -26,6 +28,7 @@ export function ParlayCard({
   featured,
   className,
   variant = "card",
+  owner,
   children,
 }: {
   parlay: ParlayView;
@@ -33,6 +36,8 @@ export function ParlayCard({
   className?: string;
   /** "row": a full-width timeline row with a hairline under it, as on Home. */
   variant?: "card" | "row";
+  /** A tester's shared ticket: who built it, in the header where Oobee's show the sports. */
+  owner?: { username: string; displayName: string | null };
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -83,11 +88,25 @@ export function ParlayCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          {owner && (
+            <Link
+              href={`/u/${owner.username}`}
+              className="flex min-w-0 items-center gap-2 text-xs hover:underline"
+            >
+              <Avatar name={displayNameOf(owner)} size="sm" className="size-6 text-[0.625rem]" />
+              <span className="truncate font-semibold text-fg">{displayNameOf(owner)}</span>
+              <span className="truncate text-fg-subtle">@{owner.username}</span>
+            </Link>
+          )}
           <span aria-hidden="true">{sports.map((sp) => SPORT_EMOJI[sp]).join("")}</span>
-          <span className="truncate text-xs text-fg-muted">
-            {legs.length}-leg parlay
-            {dropped > 0 && <span className="text-fg-subtle"> · {dropped} dropped</span>}
-          </span>
+          {/* A tester's ticket is titled "N-leg parlay" already, so with the
+              owner taking the room the count isn't repeated up here. */}
+          {(!owner || dropped > 0) && (
+            <span className="truncate text-xs text-fg-muted">
+              {!owner && `${legs.length}-leg parlay`}
+              {dropped > 0 && <span className="text-fg-subtle">{owner ? "" : " · "}{dropped} dropped</span>}
+            </span>
+          )}
         </div>
         <Badge variant={badge.variant}>
           {badge.live && (

@@ -1,5 +1,6 @@
 import "server-only";
 import { Fragment } from "react";
+import Link from "next/link";
 import { Star } from "lucide-react";
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -14,7 +15,6 @@ import { slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
 import { PickCard } from "@/components/pick-card";
-import { ParlayRow } from "@/components/social/parlay-row";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -166,24 +166,32 @@ export async function loadBoardDays({
     const dayPicks = picksOn.get(d) ?? [];
 
     if (isCommunityTab) {
-      // Today's own parlays are listed above the board with their controls.
-      const list = (communityOn.get(d) ?? []).filter(({ parlay: pl }) => !(isToday && pl.ownerId === auth.user.id));
+      const list = communityOn.get(d) ?? [];
       return (
         <DaySection key={d} date={d} today={today}>
           {list.length === 0 ? (
-            <Empty>{isToday ? "Nobody has shared a parlay today yet. Build one and be first." : "No shared parlays this day."}</Empty>
+            <Empty>
+              {isToday ? (
+                <>
+                  Nobody has shared a parlay today yet.{" "}
+                  <Link href="/picks/build" className="text-brand hover:underline">
+                    Build one
+                  </Link>{" "}
+                  and be first.
+                </>
+              ) : (
+                "No shared parlays this day."
+              )}
+            </Empty>
           ) : (
-            // Drawn exactly as Home draws a shared parlay: who, when, the ticket.
-            list.map(({ parlay: pl, ownerRole }) => (
-              <ParlayRow
+            // The same ticket as Oobee's parlays, with who built it in the
+            // header where Oobee's show the sports.
+            list.map(({ parlay: pl }) => (
+              <ParlayCard
                 key={pl.id}
                 parlay={pl}
-                owner={{
-                  id: pl.ownerId!,
-                  username: pl.ownerUsername!,
-                  displayName: pl.ownerDisplayName,
-                  role: ownerRole,
-                }}
+                variant="row"
+                owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName }}
               />
             ))
           )}
