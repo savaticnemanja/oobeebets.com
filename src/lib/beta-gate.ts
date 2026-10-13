@@ -135,6 +135,12 @@ export async function verifyBetaGateToken(
  * `/\evil.com` both become the protocol-relative `//evil.com`. So the value is
  * resolved the way a browser will resolve it, and kept only if it is still on
  * this site — as a path, never a full URL.
+ *
+ * Resolving is not the end of it either. Dot segments are removed after the
+ * origin is settled, so `/.//evil.com` resolves on this site to the path
+ * `//evil.com` — which, handed to a redirect, is protocol-relative again. A
+ * path that comes out starting with two slashes (or a slash and a backslash)
+ * is refused.
  */
 export function safeNextPath(value: string | null | undefined): string | null {
   if (!value || !value.startsWith("/")) return null;
@@ -146,5 +152,7 @@ export function safeNextPath(value: string | null | undefined): string | null {
     return null;
   }
   if (url.origin !== base) return null;
-  return url.pathname + url.search + url.hash;
+  const path = url.pathname + url.search + url.hash;
+  if (path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
 }

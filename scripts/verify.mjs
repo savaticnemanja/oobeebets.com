@@ -37,6 +37,7 @@ import {
 } from "../src/lib/board.ts";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
+import { safeNextPath } from "../src/lib/beta-gate.ts";
 import { americanToDecimal, decimalToAmerican } from "../src/lib/settlement.ts";
 import {
   MAX_PARLAY_LEGS,
@@ -353,6 +354,18 @@ const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", 
     check(res.status === 200, `admin ${route}`.padEnd(24), `-> ${res.status}`);
   }
   await admin.cleanup();
+}
+
+console.log("\nRedirect targets (safeNextPath)");
+
+{
+  // Every one of these is somewhere else once a browser resolves it.
+  for (const v of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/.//evil.com", "/..//evil.com", "/%2e//evil.com", "/./\\evil.com", "https://evil.com", "evil.com"]) {
+    check(safeNextPath(v) === null, `refuses ${JSON.stringify(v)}`, `-> ${JSON.stringify(safeNextPath(v))}`);
+  }
+  for (const [v, want] of [["/picks", "/picks"], ["/stats?tab=parlays", "/stats?tab=parlays"], ["/u/rob19#replies", "/u/rob19#replies"], ["/a/../picks", "/picks"]]) {
+    check(safeNextPath(v) === want, `keeps ${JSON.stringify(v)}`, `-> ${JSON.stringify(safeNextPath(v))}`);
+  }
 }
 
 /* ------------------------------------------------------ 3b. the role model */
