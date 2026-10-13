@@ -129,13 +129,22 @@ export async function verifyBetaGateToken(
 }
 
 /**
- * Keeps a `next` value from turning the gate into an open redirect. A leading
- * `//` or `/\` is a protocol-relative URL and leaves the site, so only a single
- * leading slash is allowed through.
+ * Keeps a `next` value from turning the gate or the login into an open
+ * redirect. Checking the string's prefix is not enough: before parsing, a
+ * browser drops tabs and newlines and reads `\` as `/`, so `/\t/evil.com` and
+ * `/\evil.com` both become the protocol-relative `//evil.com`. So the value is
+ * resolved the way a browser will resolve it, and kept only if it is still on
+ * this site — as a path, never a full URL.
  */
 export function safeNextPath(value: string | null | undefined): string | null {
-  if (!value) return null;
-  if (!value.startsWith("/")) return null;
-  if (value.startsWith("//") || value.startsWith("/\\")) return null;
-  return value;
+  if (!value || !value.startsWith("/")) return null;
+  const base = "http://next.invalid";
+  let url: URL;
+  try {
+    url = new URL(value, base);
+  } catch {
+    return null;
+  }
+  if (url.origin !== base) return null;
+  return url.pathname + url.search + url.hash;
 }
