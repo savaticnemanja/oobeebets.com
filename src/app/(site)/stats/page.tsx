@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-type Tab = "picks" | "parlays";
+type Tab = "overview" | "picks" | "parlays";
 type Show = "all" | "game" | "prop" | "built" | "played";
 
 /**
@@ -45,7 +45,7 @@ export default async function StatsPage({
   if (!auth) redirect("/login?next=/stats");
   await refreshResults();
 
-  const tab: Tab = params.tab === "parlays" ? "parlays" : "picks";
+  const tab: Tab = params.tab === "parlays" ? "parlays" : params.tab === "picks" ? "picks" : "overview";
   const show = (["game", "prop", "built", "played"].includes(params.show ?? "") ? params.show : "all") as Show;
 
   const [singles, taken, built, played] = await Promise.all([
@@ -65,7 +65,8 @@ export default async function StatsPage({
     ...(show === "built" ? [] : played.map((p) => ({ p, mine: false }))),
   ].sort((a, b) => b.p.slateDate.localeCompare(a.p.slateDate) || b.p.createdAt.getTime() - a.p.createdAt.getTime());
 
-  const href = (t: Tab, s: Show = "all") => `/stats?tab=${t}${s === "all" ? "" : `&show=${s}`}`;
+  const href = (t: Tab, s: Show = "all") =>
+    t === "overview" ? "/stats" : `/stats?tab=${t}${s === "all" ? "" : `&show=${s}`}`;
   const pills: Array<{ key: Show; label: string; n: number }> =
     tab === "picks"
       ? [
@@ -84,59 +85,14 @@ export default async function StatsPage({
       {/* The page is named by the nav; the heading is for screen readers. */}
       <h1 className="sr-only">Stats</h1>
 
-      {/* ---------------------------------------------------------- numbers */}
-      <dl className="grid grid-cols-2 border-y border-border">
-        <Cell label="Bets logged" value={singles.length + parlays.length} sub={`${singles.length} picks · ${parlays.length} parlays`} />
-        <Cell
-          label="Record"
-          value={`${stats.combined.wins}–${stats.combined.losses}`}
-          sub={
-            stats.combined.sampleTooSmall
-              ? `Win rate after ${MIN_SAMPLE_FOR_RATE} settled`
-              : stats.combined.winRate !== null
-                ? `${formatRate(stats.combined.winRate)} won`
-                : undefined
-          }
-        />
-        <Cell
-          label="Net units"
-          value={stats.combined.settled === 0 ? "—" : formatUnits(stats.combined.netUnits)}
-          tone={stats.combined.settled === 0 ? undefined : stats.combined.netUnits >= 0 ? "hit" : "miss"}
-        />
-        <Cell label="Still running" value={running} sub="not graded yet" tone="brand" />
-      </dl>
-
-      {/* ------------------------------------------------ picks v parlays */}
-      <section className="border-b border-border px-4 py-4" aria-labelledby="split-heading">
-        <h2 id="split-heading" className="text-base font-bold tracking-tight">
-          Picks against parlays
-        </h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          Kept apart: a parlay wins rarely and pays a lot, so one number would hide whether
-          yours pay for themselves.
-        </p>
-        <table className="mt-3 w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-[0.6875rem] uppercase tracking-wider text-fg-subtle">
-              <th scope="col" className="pb-2 pr-3 text-left font-medium">Bets</th>
-              <th scope="col" className="px-3 pb-2 text-right font-medium">W–L</th>
-              <th scope="col" className="px-3 pb-2 text-right font-medium">Win rate</th>
-              <th scope="col" className="pb-2 pl-3 text-right font-medium">Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            <RecordRow label="Picks" record={stats.singles} />
-            <RecordRow label="Parlays" record={stats.parlays} />
-            <RecordRow label="All" record={stats.combined} />
-          </tbody>
-        </table>
-      </section>
-
-      {/* -------------------------------------------------------- the lists */}
+      {/* --------------------------------------------------------------- tabs */}
+      {/* On top and sticky, as every page's menu is: Overview (the numbers),
+          then the two lists. */}
       <FeedTabs
         sticky
         active={tab}
         tabs={[
+          { key: "overview", label: "Overview", href: href("overview") },
           { key: "picks", label: "Picks", href: href("picks") },
           { key: "parlays", label: "Parlays", href: href("parlays") },
         ]}
@@ -153,66 +109,121 @@ export default async function StatsPage({
           </InfoTip>
         }
       />
-      <nav aria-label="Show" className="flex gap-2 overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none]">
-        {pills.map((p) => (
-          <Link
-            key={p.key}
-            href={href(tab, p.key)}
-            aria-current={show === p.key ? "page" : undefined}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-              show === p.key ? "border-fg bg-fg text-black" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
-            )}
-          >
-            {p.label}
-            <span className={cn("num text-xs", show === p.key ? "text-black/60" : "text-fg-subtle")}>{p.n}</span>
-          </Link>
-        ))}
-      </nav>
 
-      {tab === "picks" ? (
-        picksShown.length === 0 ? (
-          <Empty>
-            Nothing here yet. Tap the circle on a pick on{" "}
-            <Link href="/picks" className="text-brand hover:underline">Picks</Link> to log that you took it.
-          </Empty>
-        ) : (
-          byDay(picksShown, (p) => p.slateDate).map(([day, list]) => (
-            <Fragment key={day}>
-              <DayLabel day={day} />
-              {list.map((p) => (
-                <PickCard key={p.id} pick={p} follow={{ taken: true, open: followWindowOpen(p) }} variant="row" />
-              ))}
-            </Fragment>
-          ))
-        )
-      ) : parlaysShown.length === 0 ? (
-        <Empty>
-          Nothing here yet. Build one, or play someone&apos;s from{" "}
-          <Link href="/community" className="text-brand hover:underline">Community</Link>.
-        </Empty>
+      {tab === "overview" ? (
+        <>
+          {/* ---------------------------------------------------------- numbers */}
+          <dl className="grid grid-cols-2 border-b border-border">
+            <Cell label="Bets logged" value={singles.length + parlays.length} sub={`${singles.length} pick${singles.length === 1 ? "" : "s"} · ${parlays.length} parlay${parlays.length === 1 ? "" : "s"}`} />
+            <Cell
+              label="Record"
+              value={`${stats.combined.wins}–${stats.combined.losses}`}
+              sub={
+                stats.combined.sampleTooSmall
+                  ? `Win rate after ${MIN_SAMPLE_FOR_RATE} settled`
+                  : stats.combined.winRate !== null
+                    ? `${formatRate(stats.combined.winRate)} won`
+                    : undefined
+              }
+            />
+            <Cell
+              label="Net units"
+              value={stats.combined.settled === 0 ? "—" : formatUnits(stats.combined.netUnits)}
+              tone={stats.combined.settled === 0 ? undefined : stats.combined.netUnits >= 0 ? "hit" : "miss"}
+            />
+            <Cell label="Still running" value={running} sub="not graded yet" tone="brand" />
+          </dl>
+
+          {/* ------------------------------------------------ picks v parlays */}
+          <section className="border-b border-border px-4 py-4" aria-labelledby="split-heading">
+            <h2 id="split-heading" className="text-base font-bold tracking-tight">
+              Picks against parlays
+            </h2>
+            <p className="mt-1 text-sm text-fg-muted">
+              Kept apart: a parlay wins rarely and pays a lot, so one number would hide whether
+              yours pay for themselves.
+            </p>
+            <table className="mt-3 w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-[0.6875rem] uppercase tracking-wider text-fg-subtle">
+                  <th scope="col" className="pb-2 pr-3 text-left font-medium">Bets</th>
+                  <th scope="col" className="px-3 pb-2 text-right font-medium">W–L</th>
+                  <th scope="col" className="px-3 pb-2 text-right font-medium">Win rate</th>
+                  <th scope="col" className="pb-2 pl-3 text-right font-medium">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                <RecordRow label="Picks" record={stats.singles} />
+                <RecordRow label="Parlays" record={stats.parlays} />
+                <RecordRow label="All" record={stats.combined} />
+              </tbody>
+            </table>
+          </section>
+        </>
       ) : (
-        byDay(parlaysShown, (x) => x.p.slateDate).map(([day, list]) => (
-          <Fragment key={day}>
-            <DayLabel day={day} />
-            {list.map(({ p, mine }) => (
-              <ParlayCard
-                key={p.id}
-                parlay={p}
-                variant="row"
-                kicker={<Origin parlay={p} mine={mine} />}
-                follow={mine ? undefined : playable(p, p.ownerId, auth.user.id)}
-              >
-                {mine && (
-                  <div className="flex items-center gap-3">
-                    <ShareToggle parlayId={p.id} shared={p.shared} />
-                    {p.open && <DeleteParlayButton parlayId={p.id} />}
-                  </div>
+        <>
+          <nav aria-label="Show" className="flex gap-2 overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none]">
+            {pills.map((p) => (
+              <Link
+                key={p.key}
+                href={href(tab, p.key)}
+                aria-current={show === p.key ? "page" : undefined}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+                  show === p.key ? "border-fg bg-fg text-black" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
                 )}
-              </ParlayCard>
+              >
+                {p.label}
+                <span className={cn("num text-xs", show === p.key ? "text-black/60" : "text-fg-subtle")}>{p.n}</span>
+              </Link>
             ))}
-          </Fragment>
-        ))
+          </nav>
+
+          {tab === "picks" ? (
+            picksShown.length === 0 ? (
+              <Empty>
+                Nothing here yet. Tap the circle on a pick on{" "}
+                <Link href="/picks" className="text-brand hover:underline">Picks</Link> to log that you took it.
+              </Empty>
+            ) : (
+              byDay(picksShown, (p) => p.slateDate).map(([day, list]) => (
+                <Fragment key={day}>
+                  <DayLabel day={day} />
+                  {list.map((p) => (
+                    <PickCard key={p.id} pick={p} follow={{ taken: true, open: followWindowOpen(p) }} variant="row" />
+                  ))}
+                </Fragment>
+              ))
+            )
+          ) : parlaysShown.length === 0 ? (
+            <Empty>
+              Nothing here yet. Build one, or play someone&apos;s from{" "}
+              <Link href="/community" className="text-brand hover:underline">Community</Link>.
+            </Empty>
+          ) : (
+            byDay(parlaysShown, (x) => x.p.slateDate).map(([day, list]) => (
+              <Fragment key={day}>
+                <DayLabel day={day} />
+                {list.map(({ p, mine }) => (
+                  <ParlayCard
+                    key={p.id}
+                    parlay={p}
+                    variant="row"
+                    kicker={<Origin parlay={p} mine={mine} />}
+                    follow={mine ? undefined : playable(p, p.ownerId, auth.user.id)}
+                  >
+                    {mine && (
+                      <div className="flex items-center gap-3">
+                        <ShareToggle parlayId={p.id} shared={p.shared} />
+                        {p.open && <DeleteParlayButton parlayId={p.id} />}
+                      </div>
+                    )}
+                  </ParlayCard>
+                ))}
+              </Fragment>
+            ))
+          )}
+        </>
       )}
     </SocialShell>
   );
