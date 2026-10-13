@@ -7,6 +7,7 @@ import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireAdminPage } from "@/lib/auth";
 import { getTrackRecord } from "@/lib/stats";
 import {
   CATEGORY_LABELS,
@@ -24,6 +25,7 @@ export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
+  await requireAdminPage();
   const today = slateDateString();
 
   const [record, todaySlate, counts, awaiting, recentAudit] = await Promise.all([

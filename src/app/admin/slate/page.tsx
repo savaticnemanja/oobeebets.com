@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { picks, slates } from "@/db/schema";
 import { PickComposer } from "@/components/admin/pick-composer";
+import { requireAdminPage } from "@/lib/auth";
 import { getSlateGames } from "@/lib/odds/board";
 import { ensureSlateOdds, getFeedStatus } from "@/lib/odds/sync";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
@@ -35,6 +36,7 @@ export default async function AdminSlatePage({
 }: {
   searchParams: Promise<{ date?: string; category?: string }>;
 }) {
+  await requireAdminPage();
   const params = await searchParams;
   const date =
     params.date && isValidSlateDate(params.date) ? params.date : slateDateString();
@@ -94,6 +96,8 @@ export default async function AdminSlatePage({
         published={published}
         counts={counts}
         anySettled={rows.some((r) => r.settledAt !== null)}
+        // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "has a game started yet" is the point
+        anyStarted={rows.some((r) => r.startsAt.getTime() <= Date.now())}
       />
 
       {/* ---------------------------------------------------------- category */}

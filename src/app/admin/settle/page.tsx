@@ -4,6 +4,7 @@ import { picks } from "@/db/schema";
 import { SettleList } from "@/components/admin/settle-list";
 import { CommunityLegList } from "@/components/admin/community-leg-list";
 import { getPendingCommunityLegs } from "@/lib/odds/board";
+import { requireAdminPage } from "@/lib/auth";
 import { refreshResults } from "@/lib/odds/sync";
 import { Badge } from "@/components/ui/badge";
 import type { Metadata } from "next";
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Settle" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminSettlePage() {
+  await requireAdminPage();
   // Game lines grade themselves from the final score; fetch any that are due
   // first, so this page only lists what genuinely needs a person.
   await refreshResults();

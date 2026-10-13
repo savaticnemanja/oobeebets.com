@@ -22,6 +22,7 @@ export function PublishBar({
   published,
   counts,
   anySettled,
+  anyStarted,
 }: {
   date: string;
   /** Carried through the date picker below, so changing the day keeps you on
@@ -31,6 +32,8 @@ export function PublishBar({
   /** Both lists, because publishing sends them out together. */
   counts: Record<PickCategory, number>;
   anySettled: boolean;
+  /** A game has kicked off: the slate is on the record, as a settled one is. */
+  anyStarted: boolean;
 }) {
   const router = useRouter();
   const [pubState, publish, publishing] = useActionState(publishSlateAction, null);
@@ -83,11 +86,13 @@ export function PublishBar({
                 type="submit"
                 variant="outline"
                 size="sm"
-                disabled={unpublishing || anySettled}
+                disabled={unpublishing || anySettled || anyStarted}
                 title={
                   anySettled
                     ? "Picks are settled — this slate is part of the public record"
-                    : undefined
+                    : anyStarted
+                      ? "A game has started — this slate is part of the public record. Void a pick instead."
+                      : undefined
                 }
               >
                 {unpublishing ? (

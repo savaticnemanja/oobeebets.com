@@ -362,15 +362,27 @@ export async function unpublishSlateAction(
   const date = String(formData.get("slateDate") ?? "");
   if (!isValidSlateDate(date)) return { ok: false, error: "Bad slate date" };
 
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)::int` })
+  const [{ settled, started }] = await db
+    .select({
+      settled: sql<number>`count(*) filter (where ${picks.settledAt} is not null)::int`,
+      started: sql<number>`count(*) filter (where ${picks.startsAt} <= now())::int`,
+    })
     .from(picks)
-    .where(and(eq(picks.slateDate, date), sql`${picks.settledAt} is not null`));
+    .where(eq(picks.slateDate, date));
 
   // Once results are on the public record, pulling the slate would be editing
   // history after the fact.
-  if (n > 0) {
+  if (settled > 0) {
     return { ok: false, error: "Picks are already settled — this slate is part of the record." };
+  }
+  // So would pulling it once a game is under way: a draft's picks can be
+  // deleted, so this was the way to make a pick that's going badly vanish
+  // before anyone settled it. From the first kick-off, void instead.
+  if (started > 0) {
+    return {
+      ok: false,
+      error: "A game on this slate has started — it's part of the record now. Void a pick instead.",
+    };
   }
 
   await db.update(slates).set({ publishedAt: null, publishedBy: null }).where(eq(slates.date, date));

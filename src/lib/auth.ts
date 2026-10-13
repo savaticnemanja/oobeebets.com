@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -149,6 +150,19 @@ export async function requireAuth(): Promise<AuthContext> {
 export async function requireAdmin(): Promise<AuthContext> {
   const auth = await requireAuth();
   if (!auth.isAdmin) throw new AuthError("Admins only", "forbidden");
+  return auth;
+}
+
+/**
+ * The guard every admin *page* starts with. The layout checks too, but a
+ * layout is not a guard: Next can render a page without re-running the layout
+ * above it (on client navigation the router reuses the layout it already has,
+ * and the request says which one that is). So each page checks for itself —
+ * 404, as the layout does, so a non-admin never learns the route exists.
+ */
+export async function requireAdminPage(): Promise<AuthContext> {
+  const auth = await getAuth();
+  if (!auth?.isAdmin) notFound();
   return auth;
 }
 
