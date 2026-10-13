@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth-form";
 import { getAuth } from "@/lib/auth";
+import { safeNextPath } from "@/lib/beta-gate";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -26,9 +27,9 @@ export default async function LoginPage({
         Sign in to see today&apos;s board.
       </p>
       <div className="mt-8">
-        {/* Only relative paths are ever forwarded — an absolute `next` would
-            turn this into an open redirect. */}
-        <LoginForm next={next?.startsWith("/") ? next : undefined} />
+        {/* Only same-site paths are ever forwarded — anything else would
+            turn this into an open redirect (the action checks again). */}
+        <LoginForm next={safeNextPath(next) ?? undefined} />
       </div>
     </>
   );

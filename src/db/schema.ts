@@ -103,8 +103,19 @@ export const users = pgTable(
     role: roleEnum("role").notNull().default("user"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    /**
+     * The old per-account lock. No longer written: any stranger could keep an
+     * account locked by typing its email wrong ten times every fifteen
+     * minutes. Sign-in is throttled in rate_limits instead (see loginAction).
+     */
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /**
+     * When they confirmed they are 18+ and accepted the Terms and Privacy
+     * Policy — the checkbox at the end of onboarding. Null for accounts made
+     * before it existed.
+     */
+    termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -175,6 +186,26 @@ export const invitations = pgTable(
     uniqueIndex("invitations_email_unique").on(t.email),
     uniqueIndex("invitations_token_hash_unique").on(t.tokenHash),
   ],
+);
+
+/* -------------------------------------------------------- password resets */
+
+/**
+ * A "forgot password" link. One per account — asking again replaces it, so
+ * only the newest email works. Like an invite, only the token's hash is
+ * stored, and the row is deleted the moment it is used.
+ */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("password_resets_token_hash_unique").on(t.tokenHash)],
 );
 
 /* ----------------------------------------------------------------- slates */

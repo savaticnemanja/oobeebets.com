@@ -113,6 +113,13 @@
       "when": 1791859186806,
       "tag": "0015_parlay_follows",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791895996089,
+      "tag": "0016_password_resets",
+      "breakpoints": true
     }
   ]
 }

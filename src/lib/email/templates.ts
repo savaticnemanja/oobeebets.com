@@ -172,6 +172,56 @@ export function inviteEmail({
   };
 }
 
+/**
+ * The "forgot password" link. Same envelope as the invite. Says plainly that
+ * ignoring it changes nothing, since most of these that arrive unasked are
+ * someone typing the wrong address, not an attack.
+ */
+export function passwordResetEmail({ resetUrl, minutes }: { resetUrl: string; minutes: number }): Email {
+  const html = shell({
+    preheader: `Reset your oobee bets password — the link works for ${minutes} minutes.`,
+    footerNote:
+      "If you didn't ask for this, you can ignore it — your password stays as it is, and the link stops working on its own.",
+    cardHtml: `              <h1 style="margin:0 0 16px;font-family:${FONT};font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;color:${c.fg};">Reset your password</h1>
+
+              <p style="margin:0 0 28px;font-family:${FONT};font-size:15px;line-height:1.6;color:${c.fgMuted};">
+                Someone — hopefully you — asked to reset the password for your oobee bets account. Follow the link below to choose a new one. You'll be signed out everywhere else.
+              </p>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td bgcolor="${c.brandBg}" style="background-color:${c.brandBg};border-radius:10px;">
+                    <a href="${resetUrl}" style="display:inline-block;padding:13px 28px;font-family:${FONT};font-size:15px;font-weight:600;color:#000000;text-decoration:none;">Choose a new password</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:28px 0 0;font-family:${FONT};font-size:13px;line-height:1.6;color:${c.fgSubtle};">
+                This link works once, for <strong style="color:${c.fgMuted};">${minutes} minutes</strong>. If the button above doesn't work, paste this into your browser:
+              </p>
+              <p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:1.5;word-break:break-all;">
+                <a href="${resetUrl}" style="color:${c.brand};text-decoration:underline;">${esc(resetUrl)}</a>
+              </p>`,
+  });
+
+  const text = [
+    "Reset your password",
+    "",
+    "Someone — hopefully you — asked to reset the password for your oobee bets",
+    "account. Follow the link below to choose a new one. You'll be signed out",
+    "everywhere else.",
+    "",
+    resetUrl,
+    "",
+    `This link works once, for ${minutes} minutes.`,
+    "",
+    "If you didn't ask for this, you can ignore it — your password stays as it",
+    "is, and the link stops working on its own.",
+  ].join("\n");
+
+  return { subject: "Reset your oobee bets password", html, text };
+}
+
 /* ---------------------------------------------------------- announcements */
 
 /** Blank line starts a paragraph; a single newline is a line break inside one. */

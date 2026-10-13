@@ -133,12 +133,21 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   );
   await page.click('button:has-text("Continue")');
 
-  // Step 4 — spend band, then the real submit.
+  // Step 4 — spend band, then the 18+ / Terms box, then the real submit.
   await page.click('label:has-text("Under $50")');
+  await page.click('button:has-text("Finish")');
+  await page.waitForTimeout(500);
+  check(
+    page.url().includes("/invite/") && (await page.getByText("Confirm you're 18 or older").isVisible()),
+    "Finish is refused until the 18+ / Terms box is ticked",
+  );
+  await page.check('input[name="agreeChoice"]');
   await page.click('button:has-text("Finish")');
   await page.waitForURL("**/home**", { timeout: 15000 });
 
   check(page.url().includes("/home"), "onboarding lands on Home");
+  const [accepted] = await sql`select terms_accepted_at from users where email = ${testEmail}`;
+  check(Boolean(accepted?.terms_accepted_at), "the account records when the Terms were accepted");
   check(
     (await page.content()).includes("Account created"),
     "Home greets a new account",
@@ -538,6 +547,61 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   // Both admins are listed, and the promoted one is not a special case.
   const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
   check(n === 2, "two admins coexist", `admins=${n}`);
+  await ctx.close();
+}
+
+/* ------------------------------------------------------- 6. password reset */
+
+console.log("\nPassword reset");
+{
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+
+  // Asking says the same thing for an address with no account.
+  await page.goto(`${APP_URL}/forgot-password`);
+  await hydrated(page);
+  await page.fill("#email", `nobody-${Date.now()}@example.com`);
+  await page.click('button:has-text("Send reset link")');
+  await page.getByText("If an account uses that email").waitFor({ timeout: 10000 });
+  check(true, "the forgot form answers without saying whether the account exists");
+
+  // The emailed link, minted the way the action mints it (only the hash stored).
+  const resetToken = randomBytes(32).toString("base64url");
+  const resetHash = createHash("sha256").update(resetToken).digest("hex");
+  const [u] = await sql`select id from users where email = ${testEmail}`;
+  await sql`insert into password_resets (user_id, token_hash, expires_at)
+            values (${u.id}, ${resetHash}, ${new Date(Date.now() + 3600_000)})`;
+  const before = (await sql`select id from sessions where user_id = ${u.id}`).map((r) => r.id);
+
+  await page.goto(`${APP_URL}/reset-password/${resetToken}`);
+  await hydrated(page);
+  await page.fill("#password", "a-brand-new-password");
+  await page.fill("#confirm", "a-brand-new-password");
+  await page.click('button:has-text("Set new password")');
+  await page.waitForURL("**/home**", { timeout: 15000 });
+  check(page.url().includes("/home"), "a reset signs you in and lands on Home");
+
+  const after = (await sql`select id from sessions where user_id = ${u.id}`).map((r) => r.id);
+  check(
+    before.length >= 1 && after.length === 1 && !before.includes(after[0]),
+    "every earlier session was signed out",
+    `before=${before.length} after=${after.length}`,
+  );
+  const [{ left }] = await sql`select count(*)::int as left from password_resets where user_id = ${u.id}`;
+  check(left === 0, "the link is spent");
+
+  await page.goto(`${APP_URL}/reset-password/${resetToken}`);
+  check((await page.content()).includes("This link has expired"), "a used link can't be used again");
+
+  // And the new password is the one that works.
+  await ctx.clearCookies();
+  await page.goto(`${APP_URL}/login`);
+  await hydrated(page);
+  await page.fill("#email", testEmail);
+  await page.fill("#password", "a-brand-new-password");
+  await page.click('button:has-text("Sign in")');
+  await page.waitForURL("**/home**", { timeout: 15000 });
+  check(page.url().includes("/home"), "signs in with the new password");
   await ctx.close();
 }
 

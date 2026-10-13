@@ -56,7 +56,12 @@ export function LoginForm({ next }: { next?: string }) {
       </div>
 
       <div>
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor="password">Password</Label>
+          <Link href="/forgot-password" className="text-xs text-brand hover:underline">
+            Forgot password?
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"
@@ -79,11 +84,13 @@ export function LoginForm({ next }: { next?: string }) {
         You&apos;ll stay signed in on this device for 30 days.
       </p>
 
+      {/* Invite-only: "Create one" here used to lead to a page saying you can't. */}
       <p className="text-center text-sm text-fg-muted">
-        No account?{" "}
+        No account? The beta is{" "}
         <Link href="/signup" className="text-brand hover:underline">
-          Create one
-        </Link>
+          invite-only
+        </Link>{" "}
+        for now.
       </p>
     </form>
   );

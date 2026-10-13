@@ -211,6 +211,8 @@ export async function acceptInviteAction(
         role: "user",
         // Clicking a link mailed to this address is a real verification signal.
         emailVerifiedAt: new Date(),
+        // The schema refused the form without the 18+ / Terms box ticked.
+        termsAcceptedAt: new Date(),
       })
       .returning({ id: users.id, email: users.email });
   } catch (err) {

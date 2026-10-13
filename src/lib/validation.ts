@@ -73,6 +73,9 @@ export const onboardingSchema = z
     name: nameSchema,
     phone: phoneSchema,
     spendBand: z.enum(spendBandValues),
+    // The 18+ / Terms checkbox. Required: the account is for adults only, and
+    // this is where they say so (users.terms_accepted_at records when).
+    agree: z.literal("yes", { error: "Confirm you're 18 or older and accept the Terms to finish" }),
   })
   .refine((d) => d.password === d.confirm, {
     message: "Passwords don't match",

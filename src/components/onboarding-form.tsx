@@ -15,7 +15,7 @@ import { nameSchema, passwordSchema, SPEND_BAND_LABELS, spendBandValues } from "
 import type { ActionState } from "@/lib/validation";
 
 type Step = 1 | 2 | 3 | 4;
-type Field = "password" | "confirm" | "name" | "phone" | "spendBand";
+type Field = "password" | "confirm" | "name" | "phone" | "spendBand" | "agree";
 
 const STEP_TITLES: Record<Step, string> = {
   1: "You're in",
@@ -32,13 +32,14 @@ const FIELD_STEP: Record<string, Step> = {
   name: 3,
   phone: 3,
   spendBand: 4,
+  agree: 4,
 };
 
 const STEP_FIELDS: Record<Step, Field[]> = {
   1: [],
   2: ["password", "confirm"],
   3: ["name", "phone"],
-  4: ["spendBand"],
+  4: ["spendBand", "agree"],
 };
 
 type Values = {
@@ -48,6 +49,7 @@ type Values = {
   country: CountryCode;
   phone: string;
   spendBand: string;
+  agree: boolean;
 };
 
 const EMPTY: Values = {
@@ -57,6 +59,7 @@ const EMPTY: Values = {
   country: "US",
   phone: "",
   spendBand: "",
+  agree: false,
 };
 
 /** The number is validated against the selected country's own numbering
@@ -83,6 +86,8 @@ function validate(field: Field, v: Values): string | undefined {
     }
     case "spendBand":
       return v.spendBand ? undefined : "Pick a range";
+    case "agree":
+      return v.agree ? undefined : "Confirm you're 18 or older and accept the Terms to finish";
   }
 }
 
@@ -155,7 +160,7 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    const fields: Field[] = ["password", "confirm", "name", "phone", "spendBand"];
+    const fields: Field[] = ["password", "confirm", "name", "phone", "spendBand", "agree"];
     setTouched(Object.fromEntries(fields.map((f) => [f, true])));
     const firstBad = fields.find((f) => validate(f, values));
     if (firstBad) {
@@ -199,6 +204,7 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
             only ever a display concern. */}
         <input type="hidden" name="phone" value={toE164(values.country, values.phone) ?? values.phone.trim()} />
         <input type="hidden" name="spendBand" value={values.spendBand} />
+        <input type="hidden" name="agree" value={values.agree ? "yes" : ""} />
 
         {/* --------------------------------------------------------- step 1 */}
         <div className={step === 1 ? "space-y-4" : "hidden"}>
@@ -323,6 +329,35 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
             </div>
           </fieldset>
           <FieldError id="spendBand-error" message={errorFor("spendBand")} />
+
+          {/* Opens in a new tab: following it here would leave the wizard
+              and lose the answers above. */}
+          <label className="flex cursor-pointer items-start gap-3 pt-2 text-sm text-fg-muted">
+            <input
+              type="checkbox"
+              name="agreeChoice"
+              checked={values.agree}
+              onChange={(e) => {
+                setField("agree", e.target.checked);
+                markTouched("agree");
+              }}
+              aria-invalid={Boolean(errorFor("agree"))}
+              aria-describedby={errorFor("agree") ? "agree-error" : undefined}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+            />
+            <span>
+              I&apos;m 18 or older, and I accept the{" "}
+              <a href="/legal/terms" target="_blank" rel="noopener" className="text-brand hover:underline">
+                Terms
+              </a>{" "}
+              and{" "}
+              <a href="/legal/privacy" target="_blank" rel="noopener" className="text-brand hover:underline">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+          <FieldError id="agree-error" message={errorFor("agree")} />
         </div>
 
         {/* ------------------------------------------------------------ nav */}
