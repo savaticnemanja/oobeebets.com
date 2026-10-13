@@ -215,13 +215,13 @@ export async function loadBoardDays({
       // included (see the note after this map).
       if (sportFilter && list.length === 0) return null;
       return (
-        <DaySection key={d} date={d} today={today}>
+        <DaySection key={d} date={d} today={today} pillsOnly>
           {list.length === 0 ? (
             <Empty>
               {isToday ? (
                 <>
                   {sportFilter ? `No ${what}parlays shared today yet.` : "Nobody has shared a parlay today yet."}{" "}
-                  <Link href="/picks/new" className="text-brand hover:underline">
+                  <Link href="/community/new" className="text-brand hover:underline">
                     Build one
                   </Link>{" "}
                   and be first.
@@ -332,12 +332,15 @@ function DaySection({
   today,
   draft,
   picks,
+  pillsOnly,
   children,
 }: {
   date: string;
   today: string;
   draft?: boolean;
   picks?: Pick[];
+  /** On Community: only the sport pills sit above it, no tab strip. */
+  pillsOnly?: boolean;
   children: React.ReactNode;
 }) {
   const diff = dayDiff(today, date);
@@ -351,7 +354,15 @@ function DaySection({
 
   return (
     <section aria-labelledby={`day-${date}-heading`} id={`day-${date}`} className="scroll-mt-20">
-      <div className="sticky top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl sm:top-[6.5625rem]">
+      <div
+        className={cn(
+          "sticky z-20 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border bg-black/80 px-4 py-3 backdrop-blur-xl",
+          // Under Picks' tabs and pills, or under Community's pills alone.
+          pillsOnly
+            ? "top-[calc(3.5rem+1px+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[3.5rem]"
+            : "top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[6.5625rem]",
+        )}
+      >
         <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">
           {name && <span>{name}</span>}
           <span className={cn("num", name ? "text-sm font-normal text-fg-muted" : "")}>{formatSlateDate(date)}</span>

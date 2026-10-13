@@ -180,6 +180,7 @@ export async function createCommunityParlayAction(
   });
 
   revalidatePath("/picks");
+  revalidatePath("/community");
   revalidatePath("/my-bets");
   revalidatePath("/home");
   return {
@@ -215,6 +216,7 @@ export async function setParlaySharedAction(parlayId: string, shared: boolean): 
   });
   if (!done) return { ok: false, error: "Parlay not found" };
   revalidatePath("/picks");
+  revalidatePath("/community");
   revalidatePath("/my-bets");
   revalidatePath("/home");
   revalidatePath(`/u/${auth.user.username}`, "layout");
@@ -269,6 +271,7 @@ export async function deleteUserParlayAction(parlayId: string): Promise<ActionSt
   await db.delete(parlays).where(eq(parlays.id, parlayId));
 
   revalidatePath("/picks");
+  revalidatePath("/community");
   revalidatePath("/my-bets");
   return { ok: true, message: "Parlay removed." };
 }
@@ -311,6 +314,7 @@ async function audit(
 
 function revalidateBoard() {
   revalidatePath("/picks");
+  revalidatePath("/community");
   revalidatePath("/admin/slate");
   revalidatePath("/admin/parlays");
 }

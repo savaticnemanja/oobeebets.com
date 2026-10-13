@@ -111,10 +111,17 @@ export const adminBoardTabs = ["game", "prop", "parlay"] as const;
 
 export type BoardTab = (typeof boardTabs)[number];
 
+/**
+ * The tabs on Picks — Oobee's own board. Shared tickets have their own page,
+ * Community (/community), so they're a board tab only internally: the day
+ * loader and the infinite-scroll action still take "community".
+ */
+export const pickTabs = ["game", "prop", "parlay"] as const;
+
 export const TAB_LABELS: Record<BoardTab, string> = {
   ...CATEGORY_LABELS,
-  parlay: "Oobee parlays",
-  community: "Community parlays",
+  parlay: "Parlays",
+  community: "Community",
 };
 
 export const TAB_NOUN: Record<BoardTab, string> = {

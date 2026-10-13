@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Info, Shield, Target, Ticket, User, type LucideIcon } from "lucide-react";
+import { House, Info, Shield, Target, Ticket, User, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -18,25 +18,28 @@ interface NavItem {
  * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
- * four places people actually go back and forth between; the rest (About,
+ * five places people actually go back and forth between; the rest (About,
  * Admin) sit in the drawer behind the avatar in the top bar. Account settings
  * aren't a destination of their own: they're "Edit profile", on your profile.
  */
 function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
   const home = { href: "/home", label: t().nav.home, icon: House };
   const picks = { href: "/picks", label: t().nav.picks, icon: Target };
+  // Testers' shared parlays — their own page, apart from Oobee's picks.
+  const community = { href: "/community", label: "Community", icon: Users };
   const myBets = { href: "/my-bets", label: t().nav.myBets, icon: Ticket };
   const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
   return {
     sidebar: [
       home,
       picks,
+      community,
       myBets,
       profile,
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
-    bottom: [home, picks, myBets, profile],
+    bottom: [home, picks, community, myBets, profile],
   };
 }
 

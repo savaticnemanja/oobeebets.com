@@ -2,20 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
-import { Circle, Plus } from "lucide-react";
+import { Circle } from "lucide-react";
 import { db } from "@/db";
 import { picks as picksTable, slates } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import {
   PICKS_PER_SLATE,
-  SPORT_FILTERS,
   TAB_LABELS,
-  boardTabs,
+  pickTabs,
   categoryFromParam,
   sportFilterFromParam,
   tabFromParam,
 } from "@/lib/board";
-import { SPORT_EMOJI } from "@/components/pick-card";
+import { SportPills } from "@/components/board/sport-pills";
 import { LoadMore } from "@/components/load-more";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -41,8 +40,8 @@ export const dynamic = "force-dynamic";
  * each under its own heading — so the record reads as one list rather than a
  * date to pick. Older days load as you scroll (see board-days.tsx, which
  * renders both this first chunk and every later one). Each day leads with
- * its featured picks. Building a parlay is its own page (/picks/new),
- * behind the + in the header.
+ * its featured picks. Testers' shared parlays live on their own page,
+ * Community (/community), which is also where you build one.
  *
  * Laid out like Home: the 600px column with hairlines either side, and every
  * pick, ticket and day heading a full-width row rather than a boxed card.
@@ -57,9 +56,11 @@ export default async function PicksPage({
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
 
+  // Shared tickets have their own page now; the old tab's links land there.
+  if (params.category === "community") redirect(`/community${params.sport ? `?sport=${params.sport}` : ""}`);
+
   const today = slateDateString();
-  // Three kinds of tab: two pick categories, Oobee's parlays, and the
-  // Community parlays that read a different table entirely.
+  // Three tabs: two pick categories and Oobee's parlays.
   const tab = tabFromParam(params.category);
   const category = categoryFromParam(params.category);
   // The pill under the tabs — a league, or a whole sport for soccer/tennis.
@@ -100,18 +101,9 @@ export default async function PicksPage({
     <SocialShell>
       {/* -------------------------------------------------------------- head */}
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
-        <h1 className="text-xl font-bold tracking-tight">The board</h1>
+        <h1 className="text-xl font-bold tracking-tight">Picks</h1>
         <div className="flex items-center gap-1">
-          {/* The parlay builder has its own page; this is the way in, from any tab. */}
-          <Link
-            href="/picks/new"
-            aria-label="Build a parlay"
-            title="Build a parlay"
-            className="grid size-9 place-items-center rounded-full text-brand transition-colors hover:bg-brand/10"
-          >
-            <Plus className="size-5" aria-hidden="true" />
-          </Link>
-          <InfoTip label="About the board">
+          <InfoTip label="About Picks">
             <p>
               Every day&apos;s picks, newest first, graded against the final score. All free during
               our beta.
@@ -130,7 +122,8 @@ export default async function PicksPage({
       </div>
 
       {/* -------------------------------------------------------------- tabs */}
-      {/* Home's tab strip, but scrollable: four labels don't fit a phone. It
+      {/* Home's tab strip, but scrollable: on a narrow phone three labels and
+          their counts don't always fit. It
           sticks, as Home's does — under the phone's top bar, riding up with
           it as that slides away — with the sport pills and day headings
           stacked below it. Its height is fixed (3.0625rem, border included)
@@ -139,10 +132,10 @@ export default async function PicksPage({
         aria-label="Board"
         className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-[3.0625rem] overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 backdrop-blur-xl [scrollbar-width:none] sm:top-0"
       >
-        {boardTabs.map((c) => {
+        {pickTabs.map((c) => {
           const isActive = c === tab;
-          // Today's count; the parlay tabs count their own tables.
-          const n = c === "parlay" || c === "community" ? 0 : (countFor.get(c) ?? 0);
+          // Today's count; the parlay tab counts its own table.
+          const n = c === "parlay" ? 0 : (countFor.get(c) ?? 0);
           return (
             <Link
               key={c}
@@ -167,35 +160,7 @@ export default async function PicksPage({
       </nav>
 
       {/* ------------------------------------------------------ sport pills */}
-      {/* Sticks right under the tabs (which are 3.0625rem tall), riding up
-          with them as the phone's top bar slides away. Fixed height,
-          3.5rem with its border, because the day headings stick below it
-          and their offset is written in terms of it, in board-days.tsx. */}
-      <nav
-        aria-label="Sport"
-        className="sticky top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-14 items-center gap-2 overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 px-4 backdrop-blur-xl [scrollbar-width:none] sm:top-[3.0625rem]"
-      >
-        {[null, ...SPORT_FILTERS].map((f) => {
-          const isActive = (f?.key ?? null) === (sportFilter?.key ?? null);
-          return (
-            <Link
-              key={f?.key ?? "all"}
-              href={pillHref(f?.key ?? null)}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "border-fg bg-fg text-black"
-                  : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
-              )}
-            >
-              {f && <span aria-hidden="true">{SPORT_EMOJI[f.sport]}</span>}
-              {f?.label ?? "All"}
-            </Link>
-          );
-        })}
-        <ScrollActiveTab />
-      </nav>
+      <SportPills active={sportFilter} hrefFor={pillHref} below="tabs" />
 
       {/* --------------------------------------------------------- the days */}
       {first.node}
@@ -208,8 +173,8 @@ export default async function PicksPage({
       {tab === "parlay" && (
         <p className="px-4 py-6 text-sm text-fg-muted">
           Want your own?{" "}
-          <Link href="/picks/new" className="text-brand hover:underline">
-            Build one
+          <Link href="/community/new" className="text-brand hover:underline">
+            Build one on Community
           </Link>{" "}
           from any line on today&apos;s games.
         </p>

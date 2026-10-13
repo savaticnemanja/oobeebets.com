@@ -172,7 +172,10 @@ export async function deletePostAction(postId: string): Promise<ActionState> {
       await tx.update(parlays).set({ shared: false, updatedAt: new Date() }).where(eq(parlays.id, post.parlayId));
     }
   });
-  if (post.parlayId) revalidatePath("/picks");
+  if (post.parlayId) {
+    revalidatePath("/picks");
+    revalidatePath("/community");
+  }
 
   // A tester deleting their own post is ordinary use. An admin removing
   // someone else's is moderation, and that belongs on the record — with the

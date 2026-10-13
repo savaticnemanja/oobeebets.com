@@ -399,8 +399,8 @@ console.log("\nBuilding a parlay, and grading it from its legs");
   check(built.length === 1 && built[0].legs === 2, "a two-leg parlay is written", `parlays=${built.length} legs=${built[0]?.legs}`);
 
   // The Community tab is on the board, and a parlay nobody shared is not on it.
-  await page.goto(`${APP_URL}/picks?category=community`);
-  check((await page.content()).includes("Community parlays"), "the Community parlays tab renders");
+  await page.goto(`${APP_URL}/community`);
+  check((await page.content()).includes("Community"), "the Community page renders");
   const [{ shared }] = await sql`select shared from parlays where id = ${created.id}`;
   check(shared === false, "a parlay is private unless its builder shares it");
 
