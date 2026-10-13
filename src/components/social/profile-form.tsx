@@ -115,7 +115,7 @@ export function ProfileForm({
       </div>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} className="rounded-full">
           {pending && <Loader2 className="animate-spin" aria-hidden="true" />}
           Save profile
         </Button>

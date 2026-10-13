@@ -1,89 +1,75 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Shield, Sparkles } from "lucide-react";
+import { Shield } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DocPage, DocSection } from "@/components/doc-page";
 import { ProfileForm } from "@/components/social/profile-form";
 
 export const metadata: Metadata = {
-  title: "Account",
+  title: "Edit profile",
   robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Your profile and account settings — reached from "Edit profile" on your
+ * profile, not from the navigation, as on X. Laid out like every other page:
+ * the 600px column, and each part a full-width row.
+ */
 export default async function AccountPage() {
   const auth = await getAuth();
   if (!auth) redirect("/login?next=/account");
 
   return (
-    <div className="shell py-12 [&>*]:max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Account</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">{auth.user.email}</p>
-
-      {auth.isAdmin && (
-        <div className="mt-4 flex items-center gap-2">
-          <Badge variant="brand">
-            <Shield className="size-3" aria-hidden="true" />
-            {auth.user.role}
-          </Badge>
-          <Button variant="link" asChild>
-            <Link href="/admin">Open admin panel</Link>
-          </Button>
-        </div>
-      )}
-
-      {/* -------------------------------------------------------- profile */}
-      <Card className="mt-8 scroll-mt-20" id="profile">
-        <CardHeader>
-          <CardTitle>Public profile</CardTitle>
-          <CardDescription>
-            What other testers see on your profile and next to your posts. Your email
-            and phone number are never shown.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <DocPage title="Edit profile" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
+      <DocSection title="Public profile">
+        <p>
+          What other testers see on your profile and next to your posts. Your email and
+          phone number are never shown.
+        </p>
+        <div className="pt-1 text-fg">
           <ProfileForm
             displayName={auth.user.displayName ?? ""}
             username={auth.user.username}
             bio={auth.user.bio ?? ""}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </DocSection>
 
-      {/* --------------------------------------------------------- access */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Access</CardTitle>
-          <CardDescription>Free during the beta — all 15 picks, every day.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center">
-            <Sparkles className="mx-auto size-8 text-brand" aria-hidden="true" />
-            <p className="mt-3 text-sm text-fg-muted">
-              You have the whole board — all 15 picks, free during our beta. No plan
-              needed.
-            </p>
-            <Button className="mt-4" asChild>
-              <Link href="/picks">See today&apos;s picks</Link>
-            </Button>
+      <DocSection title="Account">
+        <p>
+          Signed in as <span className="text-fg">{auth.user.email}</span>.
+        </p>
+        {auth.isAdmin && (
+          <div className="flex items-center gap-3">
+            <Badge variant="brand">
+              <Shield className="size-3" aria-hidden="true" />
+              {auth.user.role}
+            </Badge>
+            <Link href="/admin" className="text-brand hover:underline">
+              Open admin panel
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </DocSection>
 
-      {/* -------------------------------------------------------------- misc */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Security</CardTitle>
-          <CardDescription>
-            You&apos;re signed in on this device for 30 days. Signing out revokes the
-            session on the server immediately.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    </div>
+      <DocSection title="Access">
+        <p>You have the whole board — all 15 picks, free during our beta. No plan needed.</p>
+        <Button asChild className="rounded-full">
+          <Link href="/picks">See today&apos;s picks</Link>
+        </Button>
+      </DocSection>
+
+      <DocSection title="Security">
+        <p>
+          You&apos;re signed in on this device for 30 days. Signing out revokes the session
+          on the server immediately.
+        </p>
+      </DocSection>
+    </DocPage>
   );
 }

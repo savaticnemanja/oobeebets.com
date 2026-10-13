@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { LogOut, MoreHorizontal, Settings, User } from "lucide-react";
+import { LogOut, MoreHorizontal, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,12 +50,6 @@ export function SidebarAccount({ user }: { user: ShellUser }) {
           <Link href={`/u/${user.username}`}>
             <User aria-hidden="true" />
             {t().nav.profile}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/account">
-            <Settings aria-hidden="true" />
-            {t().nav.account}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

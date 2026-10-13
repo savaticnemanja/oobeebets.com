@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Info, Settings, Shield, Target, Ticket, User, type LucideIcon } from "lucide-react";
+import { House, Info, Shield, Target, Ticket, User, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -18,8 +18,9 @@ interface NavItem {
  * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
- * four places people actually go back and forth between; the rest (Account,
- * About, Admin) sit in the drawer behind the avatar in the top bar.
+ * four places people actually go back and forth between; the rest (About,
+ * Admin) sit in the drawer behind the avatar in the top bar. Account settings
+ * aren't a destination of their own: they're "Edit profile", on your profile.
  */
 function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
   const home = { href: "/home", label: t().nav.home, icon: House };
@@ -32,7 +33,6 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       picks,
       myBets,
       profile,
-      { href: "/account", label: t().nav.account, icon: Settings },
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],

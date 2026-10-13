@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { SocialShell } from "@/components/social/social-shell";
 
@@ -11,9 +13,12 @@ import { SocialShell } from "@/components/social/social-shell";
 export async function DocPage({
   title,
   kicker,
+  back,
   children,
 }: {
   title: string;
+  /** A back arrow before the title, to here — as X's settings pages have. */
+  back?: { href: string; label: string };
   /** A line under the title — the legal pages' "draft" warning. */
   kicker?: React.ReactNode;
   children: React.ReactNode;
@@ -22,7 +27,18 @@ export async function DocPage({
   return (
     <SocialShell className={auth ? undefined : "mx-auto"}>
       <header className="border-b border-border px-4 pb-3 pt-4">
-        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+        <div className="flex items-center gap-3">
+          {back && (
+            <Link
+              href={back.href}
+              aria-label={back.label}
+              className="-ml-2 grid size-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-surface-2"
+            >
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </Link>
+          )}
+          <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+        </div>
         {kicker}
       </header>
       {children}

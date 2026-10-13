@@ -81,7 +81,7 @@ export default async function ProfilePage({
           <div className="pt-3">
             {self ? (
               <Button variant="outline" size="sm" className="rounded-full" asChild>
-                <Link href="/account#profile">Edit profile</Link>
+                <Link href="/account">Edit profile</Link>
               </Button>
             ) : (
               <FollowButton
