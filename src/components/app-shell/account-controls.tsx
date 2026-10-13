@@ -107,6 +107,21 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
                 <LogOut className="size-5" aria-hidden="true" />
                 {t().nav.signOut}
               </button>
+              {/* The small print, which the page itself doesn't carry on a phone. */}
+              <div className="mt-6 text-xs leading-relaxed text-fg-subtle">
+                <p>
+                  <strong className="text-fg-muted">18+ only.</strong> Every pick can lose; never stake
+                  what you cannot afford to lose.
+                </p>
+                <p className="mt-2 flex gap-3">
+                  <DialogClose asChild>
+                    <Link href="/legal/terms" className="hover:underline">Terms</Link>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Link href="/legal/privacy" className="hover:underline">Privacy</Link>
+                  </DialogClose>
+                </p>
+              </div>
             </DialogContent>
           </Dialog>
 

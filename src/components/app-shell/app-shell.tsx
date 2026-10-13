@@ -67,7 +67,9 @@ export async function AppShell({
           <main id="main" className="flex-1">
             {children}
           </main>
-          <LegalNote className="lg:hidden" />
+          {/* Not on a phone — there it lives at the foot of the drawer behind
+              the avatar (account-controls.tsx); the rail carries it from lg. */}
+          <LegalNote className="hidden sm:block lg:hidden" />
         </div>
 
         <aside aria-label="Sidebar" className="hidden w-[21.875rem] shrink-0 lg:block">
