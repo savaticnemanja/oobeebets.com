@@ -217,7 +217,7 @@ export default async function StatsPage({
                   >
                     {mine && (
                       <div className="flex items-center gap-3">
-                        <ShareToggle parlayId={p.id} shared={p.shared} />
+                        <ShareToggle parlayId={p.id} shared={p.shared} open={p.open} />
                         {p.open && <DeleteParlayButton parlayId={p.id} />}
                       </div>
                     )}

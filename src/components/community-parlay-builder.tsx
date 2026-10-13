@@ -3,12 +3,21 @@
 import * as React from "react";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Layers, Loader2, X } from "lucide-react";
+import { Layers, Loader2, Lock, X } from "lucide-react";
 import { toast } from "sonner";
 import { createCommunityParlayAction, setParlaySharedAction } from "@/app/actions/parlays";
 import { LinePicker } from "@/components/odds/line-picker";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/misc";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  Switch,
+} from "@/components/ui/misc";
 import type { GameOption, LineOption } from "@/lib/odds/markets";
 import { MAX_PARLAY_LEGS, MIN_PARLAY_LEGS, PARLAY_STAKE_UNITS } from "@/lib/parlays";
 import { combineOdds, americanToDecimal } from "@/lib/settlement";
@@ -188,28 +197,71 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
 }
 
 /** The owner's share/unshare switch on one of their own tickets. */
-export function ShareToggle({ parlayId, shared }: { parlayId: string; shared: boolean }) {
+/**
+ * Shared or private, for one of your own tickets — until its first leg kicks
+ * off, when it locks along with the ticket. Taking a shared one private
+ * deletes the post that carries it, replies and all, so that asks first.
+ */
+export function ShareToggle({ parlayId, shared, open }: { parlayId: string; shared: boolean; open: boolean }) {
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = React.useState(false);
   const router = useRouter();
-  return (
-    <label className="flex items-center gap-2 text-xs text-fg-muted">
-      <Switch
-        checked={shared}
-        disabled={pending}
-        aria-label="Shared to Community"
-        onCheckedChange={(next) =>
-          startTransition(async () => {
-            const result = await setParlaySharedAction(parlayId, next);
-            if (result?.ok) {
-              toast.success(result.message ?? "Saved");
-              router.refresh();
-            } else if (result) {
-              toast.error(result.error);
-            }
-          })
+
+  if (!open) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-fg-subtle" title="Locked in — a leg has started">
+        <Lock className="size-3" aria-hidden="true" />
+        {shared ? "Shared" : "Private"}
+      </span>
+    );
+  }
+
+  const set = (next: boolean) =>
+    startTransition(async () => {
+      try {
+        const result = await setParlaySharedAction(parlayId, next);
+        if (result?.ok) {
+          toast.success(result.message ?? "Saved");
+          router.refresh();
+        } else if (result) {
+          toast.error(result.error);
         }
-      />
-      {shared ? "Shared" : "Private"}
-    </label>
+      } catch {
+        toast.error("That didn't save — try again.");
+      }
+    });
+
+  return (
+    <>
+      <label className="flex items-center gap-2 text-xs text-fg-muted">
+        <Switch
+          checked={shared}
+          disabled={pending}
+          aria-label="Shared to Community"
+          onCheckedChange={(next) => (next ? set(true) : setConfirming(true))}
+        />
+        {shared ? "Shared" : "Private"}
+      </label>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Make it private?</AlertDialogTitle>
+          <AlertDialogDescription>
+            It comes off Community and everyone&apos;s timelines, and its replies, likes and
+            reposts go with it. You can share it again before the first game starts, but
+            those won&apos;t come back.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button type="button" variant="outline">Keep it shared</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button type="button" variant="danger" onClick={() => set(false)}>
+                Make private
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -189,14 +189,53 @@ export async function createCommunityParlayAction(
   };
 }
 
+/**
+ * The legs of one of the viewer's own parlays — kick-off and status, which is
+ * what the window needs — or null when it isn't theirs. Ownership is part of
+ * the where clause, not a check after the fact: this cannot read, and
+ * therefore cannot leak, somebody else's ticket.
+ */
+async function ownParlayLegs(parlayId: string, ownerId: string) {
+  const [owned] = await db
+    .select({ id: parlays.id })
+    .from(parlays)
+    .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, ownerId)))
+    .limit(1);
+  if (!owned) return null;
+
+  const [pickLegs, selectionLegs] = await Promise.all([
+    db
+      .select({ startsAt: picks.startsAt, status: picks.status })
+      .from(parlayLegs)
+      .innerJoin(picks, eq(picks.id, parlayLegs.pickId))
+      .where(eq(parlayLegs.parlayId, parlayId)),
+    db
+      .select({ startsAt: games.commenceTime, status: selections.status })
+      .from(parlaySelectionLegs)
+      .innerJoin(selections, eq(selections.id, parlaySelectionLegs.selectionId))
+      .innerJoin(games, eq(games.id, selections.gameId))
+      .where(eq(parlaySelectionLegs.parlayId, parlayId)),
+  ]);
+  return [...pickLegs, ...selectionLegs];
+}
+
 /** Flip a tester's own parlay between shared and private. */
 export async function setParlaySharedAction(parlayId: string, shared: boolean): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: "Your session expired — sign in again." };
   if (!z.string().uuid().safeParse(parlayId).success) return { ok: false, error: "Bad request" };
+  const legs = await ownParlayLegs(parlayId, auth.user.id);
+  if (!legs) return { ok: false, error: "Parlay not found" };
+  // Shared or private is settled at the first kick-off, as the ticket itself
+  // is. Otherwise Community is a highlight reel: share the ones that came in
+  // (they even land in For you as new), quietly take back the ones that lost.
+  if (!parlayWindowOpen(legs)) {
+    return { ok: false, error: "This one is locked in — a leg has already started." };
+  }
   // The post that carries a shared parlay comes and goes with sharing: on
   // Community and in timelines it is that post — liked, replied to, reposted
-  // — so a private parlay has none. Unsharing takes its replies with it.
+  // — so a private parlay has none. Unsharing takes its replies with it,
+  // which the switch asks about first.
   const done = await db.transaction(async (tx) => {
     const updated = await tx
       .update(parlays)
@@ -239,30 +278,8 @@ export async function deleteUserParlayAction(parlayId: string): Promise<ActionSt
     return { ok: false, error: "Bad request" };
   }
 
-  // Ownership is part of the where clause, not a check after the fact: this
-  // cannot read, and therefore cannot leak, somebody else's ticket.
-  const [owned] = await db
-    .select({ id: parlays.id })
-    .from(parlays)
-    .where(and(eq(parlays.id, parlayId), eq(parlays.ownerId, auth.user.id)))
-    .limit(1);
-
-  if (!owned) return { ok: false, error: "Parlay not found" };
-
-  const [pickLegs, selectionLegs] = await Promise.all([
-    db
-      .select({ startsAt: picks.startsAt, status: picks.status })
-      .from(parlayLegs)
-      .innerJoin(picks, eq(picks.id, parlayLegs.pickId))
-      .where(eq(parlayLegs.parlayId, parlayId)),
-    db
-      .select({ startsAt: games.commenceTime, status: selections.status })
-      .from(parlaySelectionLegs)
-      .innerJoin(selections, eq(selections.id, parlaySelectionLegs.selectionId))
-      .innerJoin(games, eq(games.id, selections.gameId))
-      .where(eq(parlaySelectionLegs.parlayId, parlayId)),
-  ]);
-  const legs = [...pickLegs, ...selectionLegs];
+  const legs = await ownParlayLegs(parlayId, auth.user.id);
+  if (!legs) return { ok: false, error: "Parlay not found" };
 
   if (!parlayWindowOpen(legs)) {
     return { ok: false, error: "This one is locked in — a leg has already started." };

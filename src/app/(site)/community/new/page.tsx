@@ -79,7 +79,7 @@ export default async function BuildParlayPage() {
           {mineToday.map((pl) => (
             <ParlayCard key={pl.id} parlay={pl} variant="row">
               <div className="flex items-center gap-3">
-                <ShareToggle parlayId={pl.id} shared={pl.shared} />
+                <ShareToggle parlayId={pl.id} shared={pl.shared} open={pl.open} />
                 {pl.open && <DeleteParlayButton parlayId={pl.id} />}
               </div>
             </ParlayCard>
