@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { SITE } from "@/lib/site";
+import { SITE, pageSocial } from "@/lib/site";
 import { DocPage, DocSection } from "@/components/doc-page";
 
 export const metadata: Metadata = {
   title: "Terms of service",
   description: `Terms of service for ${SITE.name}.`,
   alternates: { canonical: "/legal/terms" },
+  ...pageSocial("/legal/terms", `Terms of service · ${SITE.name}`, `Terms of service for ${SITE.name}.`),
 };
 
 /**

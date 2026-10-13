@@ -3,13 +3,15 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
-import { SITE } from "@/lib/site";
+import { SITE, pageSocial } from "@/lib/site";
+
+const description = "Who runs oobee bets, how the board is built, and why every loss stays on the record.";
 
 export const metadata: Metadata = {
   title: "About us",
-  description:
-    "Who runs oobee bets, how the board is built, and why every loss stays on the record.",
+  description,
   alternates: { canonical: "/about" },
+  ...pageSocial("/about", `About us · ${SITE.name}`, description),
 };
 
 export default function AboutPage() {
@@ -18,7 +20,7 @@ export default function AboutPage() {
       <DocSection>
         <p className="text-fg">
           {SITE.name} is a small operation. We bet for a living, we publish what we bet,
-          and we grade all of it in public.
+          and we grade all of it on the record.
         </p>
       </DocSection>
 
@@ -38,23 +40,24 @@ export default function AboutPage() {
 
       <DocSection title="How the board works">
         <p>
-          We put out fifteen plays a day across soccer, basketball, baseball,
-          tennis, hockey and football. They&apos;re ranked 1 to 15 — rank 1 is the
-          bet we&apos;d make if we could only make one, rank 15 is the last one
-          still worth the money.
+          We put out up to fifteen game bets and fifteen player props a day across
+          soccer, basketball, baseball, tennis, hockey and football. Each comes with
+          its price, its stake and the reasoning behind it, and the ones we like most
+          are featured at the top of the day.
         </p>
         <p>
-          During our beta the whole board is free, for everyone — same fifteen
-          picks, same rank 1, no plan required.
+          During our beta the whole board is free for every tester — no plan
+          required.
         </p>
       </DocSection>
 
-      <DocSection title="One unit, every time">
+      <DocSection title="One unit, nearly every time">
         <p>
-          Every pick is staked at one unit unless stated otherwise. No chasing, no
-          tripling up after a bad Saturday, no &ldquo;max play of the year&rdquo;.
-          Flat staking is the only way a track record means anything — variable
-          stakes let you hide a losing record behind one lucky big bet.
+          Picks are staked at one unit, and any pick that isn&apos;t says so on its
+          card. Every stake is set before the game starts and never changed after.
+          No chasing, no tripling up after a bad Saturday, no &ldquo;max play of the
+          year&rdquo; — variable stakes let you hide a losing record behind one lucky
+          big bet.
         </p>
       </DocSection>
 

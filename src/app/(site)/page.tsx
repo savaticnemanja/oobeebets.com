@@ -7,8 +7,9 @@ import { SITE, appUrl } from "@/lib/site";
 import { getAuth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+// No `title`: the root layout's default is this page's title, and a title
+// here would go through its "%s · oobee bets" template — the brand twice.
 export const metadata: Metadata = {
-  title: `${SITE.name} — ${SITE.tagline}`,
   description: SITE.description,
   alternates: { canonical: "/" },
 };
@@ -41,7 +42,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-2">
             <PulseDot />
             <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
-              Beta — all 15 picks free for testers
+              Beta — the whole board free for testers
             </span>
           </div>
         </Reveal>
@@ -49,15 +50,16 @@ export default async function HomePage() {
         <Reveal delay={0.05}>
           <h1 className="mt-5 max-w-3xl text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
             Every pick we make,{" "}
-            <span className="text-brand">settled in public.</span>
+            <span className="text-brand">settled on the record.</span>
           </h1>
         </Reveal>
 
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
-            Fifteen picks a day, ranked best to worst — the whole board free for
-            everyone during our beta. Every one is graded against the real final
-            score, and the losses stay on the page next to the wins.
+            Fifteen game bets and fifteen player props a day, each with the reasoning
+            behind it — the whole board free for every tester during our beta. Every
+            one is graded against the real final score, and the losses stay on the
+            page next to the wins.
           </p>
         </Reveal>
 
@@ -88,18 +90,18 @@ export default async function HomePage() {
           {[
             {
               icon: ListChecks,
-              title: "We rank the board",
-              body: "Fifteen plays a day, ordered 1 to 15 by how much we like them. Rank 1 is the pick we'd make if we could only make one.",
+              title: "We build the board",
+              body: "Fifteen game bets and fifteen player props a day, each with its price, stake and reasoning. The ones we like most are featured at the top.",
             },
             {
               icon: Eye,
               title: "You see all of it",
-              body: "Every one of the fifteen is free during our beta — nothing held back behind a plan. Each comes with the reasoning.",
+              body: "Every pick is free during our beta — nothing held back behind a plan. Mark the ones you take and keep your own record.",
             },
             {
               icon: ShieldCheck,
-              title: "We settle in public",
-              body: "Every pick is graded against the final score and stays on the track record forever. Nothing gets quietly deleted.",
+              title: "We settle every pick",
+              body: "Every pick is graded against the final score and stays on the track record for good. Nothing gets quietly deleted.",
             },
           ].map((step) => (
             <StaggerItem key={step.title}>
@@ -134,9 +136,9 @@ export default async function HomePage() {
                   lands or not.
                 </p>
                 <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-                  No parlay bait, no &ldquo;lock of the century&rdquo;, no screenshots of
-                  slips we never placed. One unit per pick, a public ledger, and a room
-                  we deliberately keep small.
+                  No &ldquo;lock of the century&rdquo;, no screenshots of slips we never
+                  placed. Every pick shows its price and stake before the game starts,
+                  the ledger never gets edited, and we keep the room deliberately small.
                 </p>
                 <Button variant="link" asChild className="mt-4">
                   <Link href="/about">
@@ -149,7 +151,7 @@ export default async function HomePage() {
                 {[
                   "Every pick logged before the game starts",
                   "Losses stay on the record, permanently",
-                  "One unit staked per pick — no chasing",
+                  "Stakes set before kick-off — never raised to chase a loss",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3 text-sm text-fg-muted">
                     <CheckCircle2

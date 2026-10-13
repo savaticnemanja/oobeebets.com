@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { t } from "@/lib/i18n";
+import { localeConfig } from "@/lib/i18n/config";
 
 /** Site-wide constants used by metadata, JSON-LD, sitemap and absolute URLs. */
 
@@ -9,9 +11,9 @@ export const SITE = {
   // without the build arg carries an empty string here rather than nothing at
   // all. `??` would keep that empty string, and `new URL(path, "")` throws.
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://oobeebets.com",
-  tagline: "Every pick, settled in public.",
+  tagline: "Every pick, settled on the record.",
   description:
-    "Daily sports betting picks with a public, unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
+    "Daily sports betting picks with an unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
   twitter: "@oobeebets",
   // Locale lives in lib/i18n/config.ts — it is one value with several
   // representations (lang, og, Intl), and splitting it across two files is how
@@ -22,6 +24,27 @@ export const SITE = {
 
 export function appUrl(path = "/"): string {
   return new URL(path, SITE.url).toString();
+}
+
+/**
+ * Open Graph and Twitter tags for one public page. Metadata merges shallowly:
+ * a page that sets `openGraph` at all replaces the root layout's whole object,
+ * and one that doesn't inherits the home page's title and URL — which is how
+ * a shared About link came to unfurl as the home page. So each public page
+ * passes its own, and this carries the site-wide fields along.
+ */
+export function pageSocial(path: string, title: string, description: string): Pick<Metadata, "openGraph" | "twitter"> {
+  return {
+    openGraph: {
+      type: "website",
+      siteName: SITE.name,
+      locale: localeConfig().ogLocale,
+      title,
+      description,
+      url: appUrl(path),
+    },
+    twitter: { card: "summary_large_image", site: SITE.twitter, title, description },
+  };
 }
 
 /**

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { SITE } from "@/lib/site";
+import { SITE, pageSocial } from "@/lib/site";
 import { DocPage, DocSection } from "@/components/doc-page";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
   description: `Privacy policy for ${SITE.name}.`,
   alternates: { canonical: "/legal/privacy" },
+  ...pageSocial("/legal/privacy", `Privacy policy · ${SITE.name}`, `Privacy policy for ${SITE.name}.`),
 };
 
 /**

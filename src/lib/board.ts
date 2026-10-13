@@ -133,7 +133,7 @@ export const TAB_NOUN: Record<BoardTab, string> = {
 /**
  * Oobee parlays published per day. Lower than the pick lists on purpose —
  * a parlay is a garnish on a board of singles, and fifteen of them a day
- * would be the parlay bait the front page promises not to serve.
+ * would be parlay bait.
  *
  * parlays_rank_range in the database allows 1..15, so raising this is an edit
  * here rather than a migration. Lowering it never needs one either.
