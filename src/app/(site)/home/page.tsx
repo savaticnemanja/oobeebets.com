@@ -84,7 +84,12 @@ export default async function HomePage({
         ]}
       />
 
-      {firstPage && <Composer viewerName={viewerName} id="compose" />}
+      {/* Inline from sm up; on a phone the floating button opens it instead. */}
+      {firstPage && (
+        <div className="hidden sm:block">
+          <Composer viewerName={viewerName} id="compose" />
+        </div>
+      )}
 
       {/* Follows nobody: say why they're seeing what they're seeing, and
           hand them the way out right here — the side rail is hidden on a

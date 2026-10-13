@@ -13,6 +13,7 @@ import { FollowButton } from "@/components/social/follow-button";
 import { PostBody } from "@/components/social/post-body";
 import { Button } from "@/components/ui/button";
 import { SocialShell } from "@/components/social/social-shell";
+import { ComposeDialog } from "@/components/social/compose-dialog";
 import { LoadMore } from "@/components/load-more";
 import { loadProfileAction } from "@/app/actions/feeds";
 import { postItems } from "@/lib/home-feed";
@@ -154,9 +155,11 @@ export default async function ProfilePage({
             }
           >
             {self && tab === "posts" && !before ? (
-              <Link href="/home#compose" className="text-brand hover:underline">
-                Write your first post
-              </Link>
+              <ComposeDialog viewerName={displayNameOf(auth.user)}>
+                <button type="button" className="text-brand hover:underline">
+                  Write your first post
+                </button>
+              </ComposeDialog>
             ) : null}
           </EmptyFeed>
         }

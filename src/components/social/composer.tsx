@@ -27,6 +27,8 @@ export function Composer({
   submitLabel = "Post",
   autoFocus,
   id,
+  onPosted,
+  className,
 }: {
   viewerName: string;
   parentId?: string;
@@ -34,6 +36,9 @@ export function Composer({
   submitLabel?: string;
   autoFocus?: boolean;
   id?: string;
+  /** After a successful post — the compose dialog closes itself here. */
+  onPosted?: () => void;
+  className?: string;
 }) {
   const [body, setBody] = React.useState("");
   // Keyed by the URL it was fetched for, so editing the link away hides the
@@ -49,6 +54,8 @@ export function Composer({
         setBody("");
         setFetched(null);
         if (parentId) toast.success("Reply posted");
+        else if (onPosted) toast.success("Posted");
+        onPosted?.();
       } else if (result && !result.ok) {
         toast.error(result.error);
       }
@@ -96,7 +103,7 @@ export function Composer({
       ref={formRef}
       action={action}
       id={id}
-      className={cn("flex gap-3 border-b border-border px-4 py-3", parentId && "scroll-mt-20")}
+      className={cn("flex gap-3 border-b border-border px-4 py-3", parentId && "scroll-mt-20", className)}
     >
       <Avatar name={viewerName} />
       <div className="min-w-0 flex-1">

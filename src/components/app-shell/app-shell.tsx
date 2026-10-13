@@ -4,6 +4,7 @@ import { Logo, Mark } from "@/components/brand/logo";
 import { BottomNav, SidebarNav } from "@/components/app-shell/app-nav";
 import { MobileTopBar, SidebarAccount, type ShellUser } from "@/components/app-shell/account-controls";
 import { ScrollChrome } from "@/components/app-shell/scroll-chrome";
+import { ComposeDialog } from "@/components/social/compose-dialog";
 import { WhoToFollow } from "@/components/social/user-row";
 import { getWhoToFollow } from "@/lib/social";
 import { SITE } from "@/lib/site";
@@ -42,14 +43,17 @@ export async function AppShell({
 
         <SidebarNav username={user.username} isAdmin={user.isAdmin} />
 
-        <Link
-          href="/home#compose"
-          aria-label="Post"
-          className="mt-4 grid size-12 place-items-center rounded-full bg-brand text-[0.9375rem] font-semibold text-black transition-[background-color,box-shadow] duration-150 hover:bg-brand-bright hover:shadow-[0_0_28px_-6px_var(--color-brand-glow)] xl:flex xl:h-11 xl:w-full xl:items-center xl:justify-center"
-        >
-          <Feather className="size-5 xl:hidden" aria-hidden="true" />
-          <span className="hidden xl:inline">Post</span>
-        </Link>
+        {/* Opens the composer in a dialog, from any page, as X's does. */}
+        <ComposeDialog viewerName={user.name}>
+          <button
+            type="button"
+            aria-label="Post"
+            className="mt-4 grid size-12 place-items-center rounded-full bg-brand text-[0.9375rem] font-semibold text-black transition-[background-color,box-shadow] duration-150 hover:bg-brand-bright hover:shadow-[0_0_28px_-6px_var(--color-brand-glow)] xl:flex xl:h-11 xl:w-full xl:items-center xl:justify-center"
+          >
+            <Feather className="size-5 xl:hidden" aria-hidden="true" />
+            <span className="hidden xl:inline">Post</span>
+          </button>
+        </ComposeDialog>
 
         <div className="mt-auto w-full">
           <SidebarAccount user={user} />
@@ -75,14 +79,17 @@ export async function AppShell({
       </div>
 
       {/* X's compose button floats above the tab bar on a phone, and drops
-          with it when the bars slide away. */}
-      <Link
-        href="/home#compose"
-        aria-label="Post"
-        className="fixed bottom-[calc(4.5rem+var(--spacing-safe-bottom))] right-4 z-40 grid size-14 translate-y-[calc(var(--chrome-p,0)*(3.5rem+1px+var(--spacing-safe-bottom)))] place-items-center rounded-full bg-brand text-black shadow-lg shadow-brand/20 transition-colors hover:bg-brand-bright sm:hidden"
-      >
-        <Feather className="size-6" aria-hidden="true" />
-      </Link>
+          with it when the bars slide away. It opens the composer full screen —
+          Home has no inline composer on a phone; this is the way to post. */}
+      <ComposeDialog viewerName={user.name}>
+        <button
+          type="button"
+          aria-label="Post"
+          className="fixed bottom-[calc(4.5rem+var(--spacing-safe-bottom))] right-4 z-40 grid size-14 translate-y-[calc(var(--chrome-p,0)*(3.5rem+1px+var(--spacing-safe-bottom)))] place-items-center rounded-full bg-brand text-black shadow-lg shadow-brand/20 transition-colors hover:bg-brand-bright sm:hidden"
+        >
+          <Feather className="size-6" aria-hidden="true" />
+        </button>
+      </ComposeDialog>
       <BottomNav username={user.username} isAdmin={user.isAdmin} />
       <ScrollChrome />
     </div>
