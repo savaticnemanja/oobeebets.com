@@ -82,11 +82,28 @@ export default async function PostPage({ params }: { params: Params }) {
         <h1 className="text-lg font-semibold">Post</h1>
       </div>
 
-      {ancestors.map((a) => (
-        <PostCard key={a.id} post={a} viewerId={viewerId} isAdmin={isAdmin} variant="ancestor" />
+      {/* One unbroken thread line from the first post down to this one, as
+          on X — and no "Replying to" when what it replies to is right there. */}
+      {ancestors.map((a, i) => (
+        <PostCard
+          key={a.id}
+          post={a}
+          viewerId={viewerId}
+          isAdmin={isAdmin}
+          variant="ancestor"
+          threadAbove={i > 0}
+          showReplyTo={i === 0}
+        />
       ))}
 
-      <PostCard post={post} viewerId={viewerId} isAdmin={isAdmin} variant="detail" />
+      <PostCard
+        post={post}
+        viewerId={viewerId}
+        isAdmin={isAdmin}
+        variant="detail"
+        threadAbove={ancestors.length > 0}
+        showReplyTo={ancestors.length === 0}
+      />
 
       {auth ? (
         <Composer

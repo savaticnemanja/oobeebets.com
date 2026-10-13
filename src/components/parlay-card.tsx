@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Layers } from "lucide-react";
-import { Avatar, displayNameOf } from "@/components/social/identity";
+import { Avatar, TeamBadge, displayNameOf } from "@/components/social/identity";
+import { relativeTime } from "@/lib/social-rules";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
 import { PICK_STATE, pickBadge, pickState } from "@/components/pick-state";
 import type { ParlayView } from "@/lib/parlay-store";
+import type { Role } from "@/db/schema";
 import { americanToDecimal } from "@/lib/settlement";
 import { formatOdds, formatUnits } from "@/lib/i18n/format";
 import { CATEGORY_LABELS } from "@/lib/board";
@@ -36,8 +38,11 @@ export function ParlayCard({
   className?: string;
   /** "row": a full-width timeline row with a hairline under it, as on Home. */
   variant?: "card" | "row";
-  /** A tester's shared ticket: who built it, in the header where Oobee's show the sports. */
-  owner?: { username: string; displayName: string | null };
+  /**
+   * A tester's shared ticket: who built it and when it was shared, in the
+   * header — the Community tab and the Home timeline both draw it this way.
+   */
+  owner?: { username: string; displayName: string | null; role?: Role };
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -95,8 +100,19 @@ export function ParlayCard({
             >
               <Avatar name={displayNameOf(owner)} size="sm" className="size-6 text-[0.625rem]" />
               <span className="truncate font-semibold text-fg">{displayNameOf(owner)}</span>
+              {owner.role && <TeamBadge role={owner.role} />}
               <span className="truncate text-fg-subtle">@{owner.username}</span>
             </Link>
+          )}
+          {owner && (
+            <time
+              dateTime={parlay.createdAt.toISOString()}
+              title={parlay.createdAt.toLocaleString()}
+              className="shrink-0 text-xs text-fg-subtle"
+              suppressHydrationWarning
+            >
+              · {relativeTime(parlay.createdAt)}
+            </time>
           )}
           <span aria-hidden="true">{sports.map((sp) => SPORT_EMOJI[sp]).join("")}</span>
           {/* A tester's ticket is titled "N-leg parlay" already, so with the

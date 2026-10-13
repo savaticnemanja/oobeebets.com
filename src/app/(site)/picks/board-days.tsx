@@ -224,12 +224,12 @@ export async function loadBoardDays({
           ) : (
             // The same ticket as Oobee's parlays, with who built it in the
             // header where Oobee's show the sports.
-            list.map(({ parlay: pl }) => (
+            list.map(({ parlay: pl, ownerRole }) => (
               <ParlayCard
                 key={pl.id}
                 parlay={pl}
                 variant="row"
-                owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName }}
+                owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName, role: ownerRole }}
               />
             ))
           )}

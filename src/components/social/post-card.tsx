@@ -50,6 +50,7 @@ export function PostCard({
   isAdmin,
   variant = "feed",
   showReplyTo = true,
+  threadAbove = false,
 }: {
   post: FeedPost;
   viewerId: string | null;
@@ -57,6 +58,12 @@ export function PostCard({
   variant?: Variant;
   /** Off when the post being replied to is drawn right above. */
   showReplyTo?: boolean;
+  /**
+   * The post it answers is drawn right above (an `ancestor`): the thread line
+   * carries on down into this row and stops at the avatar, so the two read
+   * as one unbroken conversation, as on X.
+   */
+  threadAbove?: boolean;
 }) {
   const router = useRouter();
   const href = `/p/${post.id}`;
@@ -80,21 +87,35 @@ export function PostCard({
       onClick={openPost}
       className={cn(
         "relative flex gap-3 px-4",
-        detail ? "pt-4" : "py-3",
+        // With the thread line coming in from above, the line itself takes
+        // the place of the top padding.
+        detail
+          ? threadAbove ? "pt-0" : "pt-4"
+          : variant === "ancestor"
+            ? threadAbove ? "" : "pt-3"
+            : threadAbove ? "pb-3" : "py-3",
         variant === "feed" && "cursor-pointer border-b border-border transition-colors hover:bg-surface/60",
-        variant === "ancestor" && "cursor-pointer pb-1 transition-colors hover:bg-surface/60",
+        variant === "ancestor" && "cursor-pointer transition-colors hover:bg-surface/60",
       )}
     >
       {!detail && (
         <div className="flex flex-col items-center">
+          {/* The line from the post above, ending 4px short of the avatar —
+              together with the ancestor's it spans the whole gap. */}
+          {threadAbove && <span className="mb-1 h-2 w-0.5 bg-border-strong" aria-hidden="true" />}
           <Link href={`/u/${post.author.username}`} aria-label={displayNameOf(post.author)}>
             <Avatar name={displayNameOf(post.author)} />
           </Link>
+          {/* Runs to the row's very bottom (no bottom padding on an ancestor),
+              meeting the line at the top of the reply. */}
           {variant === "ancestor" && <span className="mt-1 w-0.5 flex-1 bg-border-strong" aria-hidden="true" />}
         </div>
       )}
 
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0 flex-1", variant === "ancestor" && "pb-1")}>
+        {/* The detail view has no avatar column, so its end of the thread
+            line sits over the header's avatar (40px wide: centred at 19px). */}
+        {detail && threadAbove && <span className="mb-1 ml-[19px] block h-3 w-0.5 bg-border-strong" aria-hidden="true" />}
         {detail ? (
           <div className="flex items-center gap-3">
             <Link href={`/u/${post.author.username}`} aria-label={displayNameOf(post.author)}>

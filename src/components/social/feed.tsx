@@ -74,7 +74,13 @@ export function FeedList({
             {item.parent && (
               <PostCard post={item.parent} viewerId={viewerId} isAdmin={isAdmin} variant="ancestor" />
             )}
-            <PostCard post={item.post} viewerId={viewerId} isAdmin={isAdmin} showReplyTo={!item.parent} />
+            <PostCard
+              post={item.post}
+              viewerId={viewerId}
+              isAdmin={isAdmin}
+              showReplyTo={!item.parent}
+              threadAbove={Boolean(item.parent)}
+            />
           </Fragment>
         ) : (
           <ParlayRow key={item.parlay.id} parlay={item.parlay} owner={item.owner} />
