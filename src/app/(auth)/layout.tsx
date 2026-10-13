@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { HelpLine } from "@/components/help-line";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </main>
       <footer className="px-4 py-6 text-center sm:px-6">
         <p className="text-xs text-fg-subtle">
-          18+ only. Picks are opinion, not guarantees.{" "}
+          18+ only. Picks are opinion, not guarantees. <HelpLine />{" "}
           <Link href="/legal/terms" className="underline hover:text-fg-muted">
             Terms
           </Link>

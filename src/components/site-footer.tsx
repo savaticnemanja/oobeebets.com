@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { SITE } from "@/lib/site";
+import { HelpLine } from "@/components/help-line";
 
 export function SiteFooter() {
   return (
@@ -46,7 +47,7 @@ export function SiteFooter() {
             act as a bookmaker. Every pick is a judgement call that can lose. Past
             performance does not predict future results, and no outcome is guaranteed.
             Never stake money you cannot afford to lose. If gambling stops being fun,
-            stop &mdash; and use the help links above.
+            stop. <HelpLine />
           </p>
           <div className="mt-4 flex flex-col gap-2 text-xs text-fg-subtle sm:flex-row sm:items-center sm:justify-between">
             <p>

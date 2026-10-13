@@ -16,6 +16,7 @@ import { Mark } from "@/components/brand/logo";
 import { drawerItems } from "@/components/app-shell/app-nav";
 import { logoutAction } from "@/app/actions/auth";
 import { t } from "@/lib/i18n";
+import { HelpLine } from "@/components/help-line";
 
 export interface ShellUser {
   name: string;
@@ -111,7 +112,7 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
               <div className="mt-6 text-xs leading-relaxed text-fg-subtle">
                 <p>
                   <strong className="text-fg-muted">18+ only.</strong> Every pick can lose; never stake
-                  what you cannot afford to lose.
+                  what you cannot afford to lose. <HelpLine />
                 </p>
                 <p className="mt-2 flex gap-3">
                   <DialogClose asChild>
