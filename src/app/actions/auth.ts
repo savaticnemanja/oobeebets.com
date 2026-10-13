@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { clientIp, createSession, destroySession, fakeVerify, rateLimit, verifyPassword } from "@/lib/auth";
@@ -11,6 +11,9 @@ import { safeNextPath } from "@/lib/beta-gate";
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+/** Every address, known or not, across all IPs — the backstop against a spread-out guesser. */
+const ACCOUNT_LIMIT = 50;
+const ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 
 /** Deliberately vague — never reveals whether an email is registered. */
 const BAD_CREDENTIALS = "Email or password is incorrect";
@@ -29,14 +32,21 @@ export async function loginAction(
   }
 
   const { email, password } = parsed.data;
-  const h = await headers();
+  const ip = clientIp(await headers());
 
-  // Limit per-email and per-IP: one stops targeting an account, the other
-  // stops spraying many accounts from one host.
-  const emailOk = await rateLimit("login:email", email, LOGIN_LIMIT, LOGIN_WINDOW_MS);
-  const ipOk = await rateLimit("login:ip", clientIp(h), LOGIN_LIMIT * 5, LOGIN_WINDOW_MS);
-  if (!emailOk || !ipOk) {
-    return { ok: false, error: "Too many attempts. Try again in 15 minutes." };
+  // Throttled, never locked. The old lock was keyed on the email alone, so
+  // anyone who knew an address could keep its owner out for good by getting
+  // its password wrong ten times every fifteen minutes. Now the tight limit
+  // is per email *and* IP — a guesser burns only their own attempts — with a
+  // per-IP cap against spraying many accounts, and a looser per-address cap
+  // across all IPs against guessing one account from many. Every limit counts
+  // unknown addresses exactly like real ones, so being throttled says nothing
+  // about whether an account exists.
+  const pairOk = await rateLimit("login:email-ip", `${email} ${ip}`, LOGIN_LIMIT, LOGIN_WINDOW_MS);
+  const ipOk = await rateLimit("login:ip", ip, LOGIN_LIMIT * 5, LOGIN_WINDOW_MS);
+  const accountOk = await rateLimit("login:account", email, ACCOUNT_LIMIT, ACCOUNT_WINDOW_MS);
+  if (!pairOk || !ipOk || !accountOk) {
+    return { ok: false, error: "Too many attempts. Wait a while, or reset your password." };
   }
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -46,31 +56,7 @@ export async function loginAction(
     return { ok: false, error: BAD_CREDENTIALS };
   }
 
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    return { ok: false, error: "Account temporarily locked. Try again shortly." };
-  }
-
-  const valid = await verifyPassword(password, user.passwordHash);
-
-  if (!valid) {
-    // A lock that has served its time resets the counter rather than adding to
-    // it. Incrementing a count that only a *successful* login ever cleared left
-    // an account permanently at the limit: one typo after the fifteen minutes
-    // were up re-locked it immediately, forever. Anyone still holding a stale
-    // `locked_until` here is past it — the live-lock check above returned.
-    const attempts = sql`case
-      when ${users.lockedUntil} is not null then 1
-      else ${users.failedLoginCount} + 1
-    end`;
-
-    await db
-      .update(users)
-      .set({
-        failedLoginCount: attempts,
-        lockedUntil: sql`case when (${attempts}) >= ${LOGIN_LIMIT}
-          then now() + interval '15 minutes' else null end`,
-      })
-      .where(eq(users.id, user.id));
+  if (!(await verifyPassword(password, user.passwordHash))) {
     return { ok: false, error: BAD_CREDENTIALS };
   }
 
