@@ -2,7 +2,7 @@ import "server-only";
 import { Fragment } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick, PickCategory } from "@/db/schema";
@@ -30,7 +30,8 @@ function dayDiff(a: string, b: string): number {
  * One chunk of the day-by-day board: up to five days, newest first, each
  * rendered under its own heading, plus the cursor for the chunk after it.
  *
- * `before` null is the first chunk, which always leads with today. The page
+ * `before` null is the first chunk: any upcoming days already out, then
+ * today, then the days before it. The page
  * renders that one; the infinite-scroll action renders the rest, so both come
  * from this one function and look the same.
  *
@@ -55,38 +56,51 @@ export async function loadBoardDays({
   const isParlayTab = tab === "parlay";
   const isCommunityTab = tab === "community";
 
-  const dayRows: { date: string }[] = isCommunityTab
-    ? await db
-        .selectDistinct({ date: parlaysTable.slateDate })
-        .from(parlaysTable)
-        .where(
-          and(
-            eq(parlaysTable.shared, true),
-            before ? lt(parlaysTable.slateDate, before) : lte(parlaysTable.slateDate, today),
-          ),
-        )
-        .orderBy(desc(parlaysTable.slateDate))
-        .limit(DAYS_PER_CHUNK + 1)
-    : await db
-        .select({ date: slates.date })
-        .from(slates)
-        .where(
-          and(
-            before ? lt(slates.date, before) : lte(slates.date, today),
-            auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`,
-            isParlayTab
-              ? sql`exists (select 1 from ${parlaysTable} where ${parlaysTable.slateDate} = ${slates.date} and ${parlaysTable.ownerId} is null)`
-              : sql`exists (select 1 from ${picksTable} where ${picksTable.slateDate} = ${slates.date} and ${picksTable.category} = ${category})`,
-          ),
-        )
-        .orderBy(desc(slates.date))
-        .limit(DAYS_PER_CHUNK + 1);
+  // Which dates have something on this tab, in a date window: published
+  // slates (plus drafts for admins) with this tab's picks or Oobee parlays, or
+  // for Community the days anyone shared a parlay. Newest first.
+  const datesWhere = (window: { gt?: string; lt?: string; lte?: string }, limit?: number) => {
+    const col = isCommunityTab ? parlaysTable.slateDate : slates.date;
+    const bounds = [
+      window.gt ? gt(col, window.gt) : undefined,
+      window.lt ? lt(col, window.lt) : undefined,
+      window.lte ? lte(col, window.lte) : undefined,
+    ];
+    const q = isCommunityTab
+      ? db
+          .selectDistinct({ date: parlaysTable.slateDate })
+          .from(parlaysTable)
+          .where(and(eq(parlaysTable.shared, true), ...bounds))
+          .orderBy(desc(parlaysTable.slateDate))
+      : db
+          .select({ date: slates.date })
+          .from(slates)
+          .where(
+            and(
+              ...bounds,
+              auth.isAdmin ? undefined : sql`${slates.publishedAt} is not null`,
+              isParlayTab
+                ? sql`exists (select 1 from ${parlaysTable} where ${parlaysTable.slateDate} = ${slates.date} and ${parlaysTable.ownerId} is null)`
+                : sql`exists (select 1 from ${picksTable} where ${picksTable.slateDate} = ${slates.date} and ${picksTable.category} = ${category})`,
+            ),
+          )
+          .orderBy(desc(slates.date));
+    return (limit ? q.limit(limit) : q).then((rows) => rows.map((r) => r.date));
+  };
 
-  const found = dayRows.map((d) => d.date);
-  // Today always leads the first chunk, so there is somewhere to say "nothing yet".
+  // The first chunk opens with every upcoming day that's already out —
+  // furthest first, so the whole board reads newest to oldest — then today.
+  // Upcoming days sit outside the paging, so however many there are, today
+  // is never pushed out of the first chunk.
+  const [upcoming, found] = await Promise.all([
+    before === null ? datesWhere({ gt: today }) : Promise.resolve([] as string[]),
+    datesWhere(before ? { lt: before } : { lte: today }, DAYS_PER_CHUNK + 1),
+  ]);
+  // Today always leads the past, so there is somewhere to say "nothing yet".
   const withToday = before === null && !found.includes(today) ? [today, ...found] : found;
-  const days = withToday.slice(0, DAYS_PER_CHUNK);
-  const next = withToday.length > DAYS_PER_CHUNK || found.length > DAYS_PER_CHUNK ? days.at(-1)! : null;
+  const past = withToday.slice(0, DAYS_PER_CHUNK);
+  const days = [...upcoming, ...past];
+  const next = withToday.length > DAYS_PER_CHUNK || found.length > DAYS_PER_CHUNK ? past.at(-1)! : null;
 
   const slateRows = days.length
     ? await db.select({ date: slates.date, publishedAt: slates.publishedAt }).from(slates).where(inArray(slates.date, days))
@@ -268,7 +282,7 @@ function DaySection({
   children: React.ReactNode;
 }) {
   const diff = dayDiff(today, date);
-  const name = diff === 0 ? "Today" : diff === 1 ? "Yesterday" : null;
+  const name = diff === 0 ? "Today" : diff === 1 ? "Yesterday" : diff === -1 ? "Tomorrow" : null;
 
   const settled = (picks ?? []).filter((p) => p.status !== "pending");
   const won = settled.filter((p) => p.status === "won").length;
