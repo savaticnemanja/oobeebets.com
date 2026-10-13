@@ -873,6 +873,13 @@ export const selections = pgTable(
     settledAt: timestamp("settled_at", { withTimezone: true }),
     /** NULL with a settledAt means the grader did it from the final score. */
     settledBy: uuid("settled_by").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * Set when an admin resets a graded bet to pending, and cleared when it is
+     * settled again. The grader leaves a held bet alone: a correction waits
+     * for the admin's own result, rather than being re-graded from the same
+     * score on the next refresh — which is what made "Reset" undo itself.
+     */
+    manualHold: boolean("manual_hold").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

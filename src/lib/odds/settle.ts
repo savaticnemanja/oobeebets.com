@@ -38,11 +38,11 @@ export async function settleSelection(
     // nothing pending and stops. An admin may re-settle on purpose.
     const updated = await tx
       .update(selections)
-      .set(values)
+      .set({ ...values, manualHold: false })
       .where(
         actor
           ? eq(selections.id, selectionId)
-          : and(eq(selections.id, selectionId), eq(selections.status, "pending")),
+          : and(eq(selections.id, selectionId), eq(selections.status, "pending"), eq(selections.manualHold, false)),
       )
       .returning({ id: selections.id });
     if (updated.length === 0) return;
@@ -61,14 +61,17 @@ export async function settleSelection(
   });
 }
 
-/** Back to pending — a correction, and logged as one. */
+/**
+ * Back to pending — a correction, and logged as one. Held for the admin: the
+ * grader won't settle it again on its own (see selections.manualHold).
+ */
 export async function unsettleSelection(
   selectionId: string,
   actor: { id: string; email: string },
 ): Promise<void> {
   const reset = { status: "pending" as const, finalScore: null, voidReason: null, settledAt: null, settledBy: null };
   await db.transaction(async (tx) => {
-    await tx.update(selections).set(reset).where(eq(selections.id, selectionId));
+    await tx.update(selections).set({ ...reset, manualHold: true }).where(eq(selections.id, selectionId));
     await tx.update(picks).set({ ...reset, updatedAt: new Date() }).where(eq(picks.selectionId, selectionId));
     await tx.insert(auditLog).values({
       actorId: actor.id,
@@ -102,6 +105,7 @@ export async function autoSettle(): Promise<number> {
     .where(
       and(
         eq(selections.status, "pending"),
+        eq(selections.manualHold, false),
         eq(games.completed, true),
         inArray(selections.marketKey, [...GAME_MARKETS]),
       ),

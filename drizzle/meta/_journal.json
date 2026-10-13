@@ -120,6 +120,13 @@
       "when": 1791895996089,
       "tag": "0016_password_resets",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791907572400,
+      "tag": "0017_selection_manual_hold",
+      "breakpoints": true
     }
   ]
 }
