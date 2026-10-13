@@ -12,6 +12,8 @@ import { compactCount, relativeTime } from "@/lib/social-rules";
 import { Avatar, NameLine, displayNameOf } from "@/components/social/identity";
 import { LinkCard } from "@/components/social/link-card";
 import { PostBody } from "@/components/social/post-body";
+import { PostMedia } from "@/components/social/post-media";
+import { PostPoll } from "@/components/social/post-poll";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -166,7 +168,10 @@ export function PostCard({
           <PostBody body={post.body} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
         )}
 
-        {post.preview && <LinkCard preview={post.preview} className="mt-3" />}
+        {post.media && post.media.length > 0 && <PostMedia media={post.media} className="mt-3" />}
+        {post.poll && <PostPoll postId={post.id} poll={post.poll} viewerId={viewerId} authorId={post.author.id} />}
+        {/* A link card only when nothing else is showing, as on X. */}
+        {post.preview && !post.media?.length && !post.poll && <LinkCard preview={post.preview} className="mt-3" />}
         {attachment && <div className="mt-2">{attachment}</div>}
 
         {detail && (

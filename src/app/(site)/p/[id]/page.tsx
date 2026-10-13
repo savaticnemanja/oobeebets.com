@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
-import { getAncestors, getPost, getReplies, withParlays, type FeedPost } from "@/lib/social";
+import { getAncestors, getPost, getReplies, withAttachments, type FeedPost } from "@/lib/social";
 import { ParlayCard } from "@/components/parlay-card";
 import { appUrl } from "@/lib/site";
 import { Composer } from "@/components/social/composer";
@@ -69,8 +69,8 @@ export default async function PostPage({ params }: { params: Params }) {
   if (!found) notFound();
   const [chain, replyList] = await Promise.all([getAncestors(found, viewerId), getReplies(found.id, viewerId)]);
   // A shared parlay's post (or one above it) shows its ticket.
-  const [post, ...ancestors] = await withParlays([found, ...chain]);
-  const replies = replyList;
+  const [post, ...ancestors] = await withAttachments([found, ...chain], viewerId);
+  const replies = await withAttachments(replyList, viewerId);
   const ticket = (p: FeedPost) =>
     p.parlay ? <ParlayCard parlay={p.parlay} featured={p.id === post.id} /> : undefined;
 

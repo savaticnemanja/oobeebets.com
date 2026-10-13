@@ -42,6 +42,27 @@ export const usernameSchema = z
       .refine((u) => !isReservedUsername(u), "That handle is reserved"),
   );
 
+/** Polls: two to four options of up to 25 characters, as on X. */
+export const POLL_OPTION_MAX = 25;
+export const POLL_MIN_OPTIONS = 2;
+export const POLL_MAX_OPTIONS = 4;
+/** How long a poll may run, in hours — the composer's choices. */
+export const POLL_DURATIONS = [1, 6, 24, 72, 168] as const;
+
+export const pollSchema = z.object({
+  options: z
+    .array(z.string().trim().min(1, "Fill in every choice").max(POLL_OPTION_MAX, `Choices are at most ${POLL_OPTION_MAX} characters`))
+    .min(POLL_MIN_OPTIONS, `A poll needs at least ${POLL_MIN_OPTIONS} choices`)
+    .max(POLL_MAX_OPTIONS, `A poll has at most ${POLL_MAX_OPTIONS} choices`),
+  hours: z.number().refine((h) => (POLL_DURATIONS as readonly number[]).includes(h), "Pick a poll length"),
+});
+
+/** The body may be empty only when something else carries the post. */
+export const postBodyOptionalSchema = z
+  .string()
+  .transform((s) => s.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim())
+  .pipe(z.string().max(POST_MAX_LENGTH, `Posts are at most ${POST_MAX_LENGTH} characters`));
+
 export const postBodySchema = z
   .string()
   // Normalised before counting, so the limit means the same thing in the

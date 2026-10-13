@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   check,
   primaryKey,
+  customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -517,10 +518,10 @@ export const posts = pgTable(
     // The For you feed scans recent top-level posts.
     index("posts_created_idx").on(t.createdAt),
     // Keep in step with POST_MAX_LENGTH in lib/social.ts.
-    check(
-      "posts_body_length",
-      sql`char_length(${t.body}) between 1 and 280 or (${t.parlayId} is not null and char_length(${t.body}) <= 280)`,
-    ),
+    // Empty only when something else is the content — a parlay, media or a
+    // poll — which the app checks (lib/social-rules.ts); the database can't
+    // see the other tables from here, so it holds the upper bound.
+    check("posts_body_length", sql`char_length(${t.body}) <= 280`),
   ],
 );
 
@@ -541,6 +542,89 @@ export const postLikes = pgTable(
     // Counting a post's likes, and the cascade when it is deleted.
     index("post_likes_post_idx").on(t.postId),
   ],
+);
+
+/** Raw bytes. postgres-js reads and writes bytea as a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+/**
+ * Images and GIFs on posts, up to four per post. An upload is written before
+ * the post exists (post_id null) and attached when the post is created; one
+ * left unattached is swept after a day (see lib/media.ts). Uploaded files live
+ * in `data` — in the database, so the nightly dump backs them up and there is
+ * no volume to lose — already shrunk in the browser. A GIF picked from GIPHY
+ * is stored as its URL instead.
+ */
+export const postMedia = pgTable(
+  "post_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
+    uploaderId: uuid("uploader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "image" or "gif" — a GIF is shown alone, as on X. */
+    kind: text("kind").notNull(),
+    mime: text("mime").notNull(),
+    data: bytea("data"),
+    url: text("url"),
+    width: integer("width"),
+    height: integer("height"),
+    /** Order within the post. */
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("post_media_post_idx").on(t.postId, t.position),
+    index("post_media_uploader_idx").on(t.uploaderId, t.createdAt),
+    check("post_media_kind", sql`${t.kind} in ('image', 'gif')`),
+    check("post_media_source", sql`${t.data} is not null or ${t.url} is not null`),
+  ],
+);
+
+/** A poll on a post: two to four options, open until ends_at. */
+export const postPolls = pgTable("post_polls", {
+  postId: uuid("post_id")
+    .primaryKey()
+    .references(() => posts.id, { onDelete: "cascade" }),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+});
+
+export const pollOptions = pgTable(
+  "poll_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => postPolls.postId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    label: text("label").notNull(),
+  },
+  (t) => [
+    unique("poll_options_position_unique").on(t.postId, t.position),
+    // Keep in step with POLL_OPTION_MAX in lib/social-rules.ts.
+    check("poll_options_label_length", sql`char_length(${t.label}) between 1 and 25`),
+  ],
+);
+
+/** One vote per person per poll, final once cast — as on X. */
+export const pollVotes = pgTable(
+  "poll_votes",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => postPolls.postId, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    optionId: uuid("option_id")
+      .notNull()
+      .references(() => pollOptions.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.userId] }), index("poll_votes_option_idx").on(t.optionId)],
 );
 
 /**

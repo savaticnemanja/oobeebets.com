@@ -4,7 +4,8 @@ import { cache } from "react";
 import { and, desc, asc, eq, gte, inArray, isNull, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { linkPreviews, postLikes, postReposts, posts, userFollows, users } from "@/db/schema";
+import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts, posts, userFollows, users } from "@/db/schema";
+import { getMediaFor, type MediaView } from "@/lib/media";
 import { getParlaysByIds, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { isReservedUsername } from "@/lib/social-rules";
@@ -52,9 +53,20 @@ export interface FeedPost {
   /** Whether the viewer has reposted it. Always false signed out. */
   reposted: boolean;
   preview: PostPreview | null;
-  /** A shared Community parlay: the post carries this ticket (see withParlays). */
+  /** A shared Community parlay: the post carries this ticket (see withAttachments). */
   parlayId: string | null;
   parlay?: ParlayView | null;
+  /** Photos or a GIF, in order (see withAttachments). */
+  media?: MediaView[];
+  poll?: PollView | null;
+}
+
+export interface PollView {
+  endsAt: Date;
+  options: Array<{ id: string; label: string; votes: number }>;
+  total: number;
+  /** The option the viewer voted for, if they did. */
+  myVote: string | null;
 }
 
 /* ------------------------------------------------------------- the query */
@@ -237,6 +249,51 @@ export async function withParlays(list: FeedPost[]): Promise<FeedPost[]> {
   if (ids.length === 0) return list;
   const byId = new Map((await getParlaysByIds(ids)).map((pl) => [pl.id, pl]));
   return list.map((p) => (p.parlayId ? { ...p, parlay: byId.get(p.parlayId) ?? null } : p));
+}
+
+/**
+ * Everything a post carries besides its text: a parlay's ticket, photos or a
+ * GIF, a poll. One query per kind for the whole page.
+ */
+export async function withAttachments(list: FeedPost[], viewerId: string | null): Promise<FeedPost[]> {
+  if (list.length === 0) return list;
+  const ids = list.map((p) => p.id);
+  const [withTickets, media, polls] = await Promise.all([withParlays(list), getMediaFor(ids), getPollsFor(ids, viewerId)]);
+  return withTickets.map((p) => ({ ...p, media: media.get(p.id) ?? [], poll: polls.get(p.id) ?? null }));
+}
+
+async function getPollsFor(postIds: string[], viewerId: string | null): Promise<Map<string, PollView>> {
+  const polls = await db.select().from(postPolls).where(inArray(postPolls.postId, postIds));
+  if (polls.length === 0) return new Map();
+  const pollIds = polls.map((p) => p.postId);
+  const [options, mine] = await Promise.all([
+    db
+      .select({
+        id: pollOptions.id,
+        postId: pollOptions.postId,
+        label: pollOptions.label,
+        votes: sql<number>`(select count(*)::int from ${pollVotes} where ${pollVotes.optionId} = ${pollOptions.id})`,
+      })
+      .from(pollOptions)
+      .where(inArray(pollOptions.postId, pollIds))
+      .orderBy(pollOptions.position),
+    viewerId
+      ? db
+          .select({ postId: pollVotes.postId, optionId: pollVotes.optionId })
+          .from(pollVotes)
+          .where(and(inArray(pollVotes.postId, pollIds), eq(pollVotes.userId, viewerId)))
+      : Promise.resolve([] as Array<{ postId: string; optionId: string }>),
+  ]);
+  const myVote = new Map(mine.map((m) => [m.postId, m.optionId]));
+  return new Map(
+    polls.map((p) => {
+      const opts = options.filter((o) => o.postId === p.postId).map((o) => ({ id: o.id, label: o.label, votes: Number(o.votes) }));
+      return [
+        p.postId,
+        { endsAt: p.endsAt, options: opts, total: opts.reduce((n, o) => n + o.votes, 0), myVote: myVote.get(p.postId) ?? null },
+      ];
+    }),
+  );
 }
 
 /** Reposts for a timeline: the post, who reposted it, and when. */

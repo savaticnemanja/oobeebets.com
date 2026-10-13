@@ -8,7 +8,7 @@ import {
   getForYouFeed,
   getParents,
   getRecentParlayPosts,
-  withParlays,
+  withAttachments,
   type FeedPost,
   type PostAuthor,
 } from "@/lib/social";
@@ -31,8 +31,8 @@ export interface FeedItem {
 
 /** Posts as timeline items: tickets filled in, each reply carrying its parent. */
 export async function postItems(list: FeedPost[], viewerId: string | null): Promise<FeedItem[]> {
-  const [full, parents] = await Promise.all([withParlays(list), getParents(list, viewerId)]);
-  const fullParents = new Map((await withParlays([...parents.values()])).map((p) => [p.id, p]));
+  const [full, parents] = await Promise.all([withAttachments(list, viewerId), getParents(list, viewerId)]);
+  const fullParents = new Map((await withAttachments([...parents.values()], viewerId)).map((p) => [p.id, p]));
   return full.map((post) => ({
     key: post.id,
     post,
