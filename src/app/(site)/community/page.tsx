@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { sportFilterFromParam } from "@/lib/board";
+import { after } from "next/server";
 import { refreshResults } from "@/lib/odds/sync";
 import { LoadMore } from "@/components/load-more";
 import { SocialShell } from "@/components/social/social-shell";
@@ -33,8 +34,9 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
   if (!auth) redirect("/login?next=/community");
 
   const sportFilter = sportFilterFromParam(params.sport);
-  // Grade anything whose game has finished before reading results.
-  await refreshResults();
+  // Grade anything that has finished — after the response, so nobody waits
+  // on the odds provider to see the page (see refreshResults).
+  after(refreshResults);
   const first = await loadCommunityChunk({ auth, sportFilter, before: null });
   const pillHref = (key: string | null) => `/community${key ? `?sport=${key}` : ""}`;
 

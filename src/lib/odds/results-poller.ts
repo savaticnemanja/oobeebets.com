@@ -7,8 +7,8 @@ import { ensureScores } from "./sync";
  * That used to be the only trigger, and the feed's scores endpoint only
  * reaches back three days: when nobody visited in that window — as happened
  * with the 6–8 October slates — the games aged out and had to be settled by
- * hand. Page loads still call refreshResults() as before; the claim in
- * odds_sync makes the two share one fetch rather than double up.
+ * hand. Page loads still nudge refreshResults() (after the response); the
+ * claim in odds_sync makes the two share one fetch rather than double up.
  *
  * RESULTS_POLL_MINUTES sets the interval (default 30); 0 turns it off. The
  * credit cost is bounded inside ensureScores, which only asks the feed while a

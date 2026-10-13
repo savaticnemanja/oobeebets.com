@@ -19,6 +19,7 @@ import { LoadMore } from "@/components/load-more";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
 import { ScrollActiveTab } from "@/components/ui/scroll-active-tab";
+import { after } from "next/server";
 import { refreshResults } from "@/lib/odds/sync";
 import { slateDateString } from "@/lib/slate-date";
 import { loadBoardAction } from "@/app/actions/feeds";
@@ -66,8 +67,9 @@ export default async function PicksPage({
   const category = categoryFromParam(params.category);
   // The pill under the tabs — a league, or a whole sport for soccer/tennis.
   const sportFilter = sportFilterFromParam(params.sport);
-  // Grade anything whose game has finished before reading results.
-  await refreshResults();
+  // Grade anything that has finished — after the response, so nobody waits
+  // on the odds provider to see the page (see refreshResults).
+  after(refreshResults);
 
   const [first, todaySlate] = await Promise.all([
     loadBoardDays({ auth, tab, category, sportFilter, before: null }),

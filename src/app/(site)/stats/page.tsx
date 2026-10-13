@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Fragment } from "react";
 import { getAuth } from "@/lib/auth";
+import { after } from "next/server";
 import { refreshResults } from "@/lib/odds/sync";
 import { getPlayedParlays, getUserParlays, type ParlayView } from "@/lib/parlay-store";
 import { getMySingles, getMyTakenPicks, summariseMyBets, type MyBets } from "@/lib/stats";
@@ -43,7 +44,9 @@ export default async function StatsPage({
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/stats");
-  await refreshResults();
+  // Grade anything that has finished — after the response, so nobody waits
+  // on the odds provider to see the page (see refreshResults).
+  after(refreshResults);
 
   const tab: Tab = params.tab === "parlays" ? "parlays" : params.tab === "picks" ? "picks" : "overview";
   const show = (["game", "prop", "built", "played"].includes(params.show ?? "") ? params.show : "all") as Show;

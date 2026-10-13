@@ -9,6 +9,7 @@ import { DeleteParlayButton } from "@/components/parlay-builder";
 import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
 import { SocialShell } from "@/components/social/social-shell";
 import { getSlateGames } from "@/lib/odds/board";
+import { after } from "next/server";
 import { ensureSlateOdds } from "@/lib/odds/sync";
 import { slateDateString } from "@/lib/slate-date";
 
@@ -30,9 +31,18 @@ export default async function BuildParlayPage() {
   if (!auth) redirect("/login?next=/community/new");
 
   const today = slateDateString();
-  // Refreshed only if the stored copy is stale, so reloads don't spend credits.
-  await ensureSlateOdds(today);
-  const [games, mine] = await Promise.all([getSlateGames(today), getUserParlays(auth.user.id)]);
+  // The lines on file are shown straight away and refreshed after the
+  // response if they're stale (ensureSlateOdds only fetches past its TTL, so
+  // reloads don't spend credits). Only a day with nothing on file yet waits
+  // for the provider, since there'd be nothing to build from otherwise.
+  const [onFile, mine] = await Promise.all([getSlateGames(today), getUserParlays(auth.user.id)]);
+  let games = onFile;
+  if (games.length === 0) {
+    await ensureSlateOdds(today);
+    games = await getSlateGames(today);
+  } else {
+    after(() => ensureSlateOdds(today));
+  }
   const mineToday = mine.filter((p) => p.slateDate === today);
 
   return (

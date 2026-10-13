@@ -9,11 +9,12 @@ import { FEED_LEAGUES, GAME_MARKETS, LEAGUE_CONFIG, type FeedLeague } from "./ma
  * Pulling the feed from The Odds API into games / lines, and final scores
  * into games.
  *
- * There is no background worker. Pages that need fresh data call the
- * ensure*() functions, which fetch only when the stored copy is older than
- * its TTL — and only one request does the fetching (see claim()), so a burst
- * of visitors costs the provider one call, not one each. Every credit is
- * spent because someone was about to look at the result.
+ * Pages that need fresh data call the ensure*() functions — mostly after the
+ * response, so no visitor waits on the provider — and the results poller
+ * (results-poller.ts) runs ensureScores on a timer. Each fetches only when
+ * the stored copy is older than its TTL, and only one caller does the
+ * fetching (see claim()), so a burst of visitors costs the provider one call,
+ * not one each.
  *
  * Unconfigured (no ODDS_API_KEY) every ensure*() is a no-op and the pickers
  * say the feed is off; nothing throws.
@@ -332,15 +333,21 @@ export async function ensureScores(): Promise<number> {
             daysFrom: "3",
             dateFormat: "iso",
           });
-          for (const s of scores) {
-            if (!s.scores) continue;
+          const rows = scores.flatMap((s) => {
+            if (!s.scores) return [];
             const home = Number(s.scores.find((x) => x.name === s.home_team)?.score);
             const away = Number(s.scores.find((x) => x.name === s.away_team)?.score);
-            if (!Number.isFinite(home) || !Number.isFinite(away)) continue;
-            await db
-              .update(games)
-              .set({ homeScore: home, awayScore: away, completed: s.completed, scoresUpdatedAt: new Date() })
-              .where(eq(games.id, s.id));
+            if (!Number.isFinite(home) || !Number.isFinite(away)) return [];
+            return [sql`(${s.id}, ${Math.round(home)}::int, ${Math.round(away)}::int, ${s.completed}::boolean)`];
+          });
+          // One statement for the whole response, not one round trip per
+          // game — three days of a league is dozens of rows.
+          if (rows.length > 0) {
+            await db.execute(sql`
+              update ${games}
+              set home_score = v.home, away_score = v.away, completed = v.completed, scores_updated_at = now()
+              from (values ${sql.join(rows, sql`, `)}) as v(id, home, away, completed)
+              where ${games.id} = v.id`);
           }
         } catch (err) {
           await release(key, ttl, err);
@@ -356,6 +363,12 @@ export async function ensureScores(): Promise<number> {
 /**
  * ensureScores for a page render: a feed outage or a bad response must never
  * take down the board, so this swallows and logs instead of throwing.
+ *
+ * Pages hand it to `after()` rather than awaiting it: whoever happened to win
+ * the refresh claim used to wait on the provider (up to its 10s timeout)
+ * before seeing anything. Now the page renders from what is stored and the
+ * grading lands for the next view — and the results poller grades on its own
+ * timer regardless.
  */
 export async function refreshResults(): Promise<void> {
   try {
