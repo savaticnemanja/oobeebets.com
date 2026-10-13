@@ -54,6 +54,7 @@ export function Composer({
   autoFocus,
   id,
   onPosted,
+  onDirtyChange,
   className,
 }: {
   viewerName: string;
@@ -64,6 +65,9 @@ export function Composer({
   id?: string;
   /** After a successful post — the compose dialog closes itself here. */
   onPosted?: () => void;
+  /** Whether anything is written or attached — the compose dialog asks before
+   *  throwing it away. Pass a stable function. */
+  onDirtyChange?: (dirty: boolean) => void;
   className?: string;
 }) {
   const [body, setBody] = React.useState("");
@@ -181,6 +185,11 @@ export function Composer({
   const canPhoto = !gif && !poll && photos.length < MAX_PHOTOS && !photos.some((p) => p.kind === "gif");
   const canGif = photos.length === 0 && !poll && !gif;
   const canPoll = !hasMedia && !poll;
+
+  const dirty = length > 0 || hasMedia || poll !== null;
+  React.useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   return (
     <form

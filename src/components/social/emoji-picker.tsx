@@ -51,6 +51,8 @@ export function EmojiPicker({ onPick, className }: { onPick: (emoji: string) => 
         <div
           role="dialog"
           aria-label="Emoji"
+          // The compose dialog looks for this to leave Escape to the panel.
+          data-composer-popup=""
           className="absolute left-0 top-full z-50 mt-1 max-h-72 w-72 overflow-y-auto rounded-xl border border-border-strong bg-surface-2 p-2 shadow-2xl"
         >
           {GROUPS.map((g) => (
