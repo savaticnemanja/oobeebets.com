@@ -43,6 +43,7 @@ export async function ConnectionsPage({
         </div>
       </div>
       <FeedTabs
+        sticky
         active={direction}
         tabs={[
           { key: "followers", label: "Followers", href: `${base}/followers` },

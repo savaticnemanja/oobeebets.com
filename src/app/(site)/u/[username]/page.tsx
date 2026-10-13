@@ -127,6 +127,7 @@ export default async function ProfilePage({
       </div>
 
       <FeedTabs
+        sticky
         active={tab}
         tabs={TABS.map((t) => ({ ...t, href: t.key === "posts" ? base : `${base}?tab=${t.key}` }))}
       />
