@@ -104,7 +104,10 @@ export function SlatePickList({
   return (
     <div>
       {isSaving && <p className="mb-2 text-xs text-fg-subtle">Saving order…</p>}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      {/* A fixed id: dnd-kit otherwise numbers its aria-describedby ids from a
+          counter, which the server and the browser reach differently — a
+          hydration mismatch on every load of this page. */}
+      <DndContext id="slate-picks" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             {items.map((p, i) => (
