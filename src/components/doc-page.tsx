@@ -25,7 +25,7 @@ export async function DocPage({
 }) {
   const auth = await getAuth();
   return (
-    <SocialShell className={auth ? undefined : "mx-auto"}>
+    <SocialShell className={auth ? undefined : "mx-auto sm:max-w-[37.5rem]"}>
       <header className="border-b border-border px-4 pb-3 pt-4">
         <div className="flex items-center gap-3">
           {back && (
