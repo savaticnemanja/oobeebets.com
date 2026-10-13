@@ -174,7 +174,7 @@ export async function loadBoardDays({
               {isToday ? (
                 <>
                   Nobody has shared a parlay today yet.{" "}
-                  <Link href="/picks/build" className="text-brand hover:underline">
+                  <Link href="/picks/new" className="text-brand hover:underline">
                     Build one
                   </Link>{" "}
                   and be first.

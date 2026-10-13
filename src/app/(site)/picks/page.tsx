@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
  * each under its own heading — so the record reads as one list rather than a
  * date to pick. Older days load as you scroll (see board-days.tsx, which
  * renders both this first chunk and every later one). Each day leads with
- * its featured picks. Building a parlay is its own page (/picks/build),
+ * its featured picks. Building a parlay is its own page (/picks/new),
  * behind the + in the header.
  *
  * Laid out like Home: the 600px column with hairlines either side, and every
@@ -84,7 +84,7 @@ export default async function PicksPage({
         <div className="flex items-center gap-1">
           {/* The parlay builder has its own page; this is the way in, from any tab. */}
           <Link
-            href="/picks/build"
+            href="/picks/new"
             aria-label="Build a parlay"
             title="Build a parlay"
             className="grid size-9 place-items-center rounded-full text-brand transition-colors hover:bg-brand/10"
