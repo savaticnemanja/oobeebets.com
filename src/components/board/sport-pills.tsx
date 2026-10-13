@@ -15,39 +15,48 @@ export function SportPills({
   active,
   hrefFor,
   below,
+  actions,
 }: {
   active: SportFilter | null;
   hrefFor: (key: string | null) => string;
   below: "tabs" | "bar";
+  /** Icons at the row's right end (Community's + and info) — outside the
+   *  scrolling strip, so a tooltip's panel isn't clipped by it. */
+  actions?: React.ReactNode;
 }) {
   return (
-    <nav
-      aria-label="Sport"
+    <div
       className={cn(
-        "sticky z-30 flex h-14 items-center gap-2 overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 px-4 backdrop-blur-xl [scrollbar-width:none]",
+        "sticky z-30 flex h-14 items-center border-b border-border bg-black/80 backdrop-blur-xl",
         below === "tabs"
           ? "top-[calc(3.5rem+1px+3.0625rem+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-[3.0625rem]"
           : "top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-0",
       )}
     >
-      {[null, ...SPORT_FILTERS].map((f) => {
-        const isActive = (f?.key ?? null) === (active?.key ?? null);
-        return (
-          <Link
-            key={f?.key ?? "all"}
-            href={hrefFor(f?.key ?? null)}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-              isActive ? "border-fg bg-fg text-black" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
-            )}
-          >
-            {f && <span aria-hidden="true">{SPORT_EMOJI[f.sport]}</span>}
-            {f?.label ?? "All"}
-          </Link>
-        );
-      })}
-      <ScrollActiveTab />
-    </nav>
+      <nav
+        aria-label="Sport"
+        className="relative flex h-full min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain px-4 [scrollbar-width:none]"
+      >
+        {[null, ...SPORT_FILTERS].map((f) => {
+          const isActive = (f?.key ?? null) === (active?.key ?? null);
+          return (
+            <Link
+              key={f?.key ?? "all"}
+              href={hrefFor(f?.key ?? null)}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+                isActive ? "border-fg bg-fg text-black" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
+              )}
+            >
+              {f && <span aria-hidden="true">{SPORT_EMOJI[f.sport]}</span>}
+              {f?.label ?? "All"}
+            </Link>
+          );
+        })}
+        <ScrollActiveTab />
+      </nav>
+      {actions && <div className="flex shrink-0 items-center gap-1 border-l border-border pl-1 pr-2">{actions}</div>}
+    </div>
   );
 }

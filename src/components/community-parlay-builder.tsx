@@ -167,7 +167,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
           <span>
             Share to Community
             <span className="block text-xs text-fg-subtle">
-              {shared ? "Everyone sees it, with your handle." : "Only you see it, on My bets."}
+              {shared ? "Everyone sees it, with your handle." : "Only you see it, on your Stats."}
             </span>
           </span>
           <Switch checked={shared} onCheckedChange={setShared} aria-label="Share to Community" />

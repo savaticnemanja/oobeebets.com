@@ -11,10 +11,13 @@ export function FeedTabs({
   tabs,
   active,
   sticky = false,
+  actions,
 }: {
   tabs: Array<{ key: string; label: string; href: string }>;
   active: string;
   sticky?: boolean;
+  /** Icons at the strip's right end — a page's info tip, say. */
+  actions?: React.ReactNode;
 }) {
   return (
     <nav
@@ -45,6 +48,7 @@ export function FeedTabs({
           </Link>
         );
       })}
+      {actions && <div className="flex shrink-0 items-center pr-2">{actions}</div>}
     </nav>
   );
 }

@@ -39,28 +39,33 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
 
   return (
     <SocialShell>
-      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
-        <h1 className="text-xl font-bold tracking-tight">Community</h1>
-        <div className="flex items-center gap-1">
-          <Link
-            href="/community/new"
-            aria-label="Build a parlay"
-            title="Build a parlay"
-            className="grid size-9 place-items-center rounded-full text-brand transition-colors hover:bg-brand/10"
-          >
-            <Plus className="size-5" aria-hidden="true" />
-          </Link>
-          <InfoTip label="About Community">
-            <p>
-              Parlays testers built from the day&apos;s lines and shared, newest day first, graded
-              leg by leg as the games finish.
-            </p>
-            <p>Build your own with the + — share it here, or keep it on My bets.</p>
-          </InfoTip>
-        </div>
-      </div>
+      {/* The page is named by the nav; the heading is for screen readers. */}
+      <h1 className="sr-only">Community</h1>
 
-      <SportPills active={sportFilter} hrefFor={pillHref} below="bar" />
+      <SportPills
+        active={sportFilter}
+        hrefFor={pillHref}
+        below="bar"
+        actions={
+          <>
+            <Link
+              href="/community/new"
+              aria-label="Build a parlay"
+              title="Build a parlay"
+              className="grid size-9 place-items-center rounded-full text-brand transition-colors hover:bg-brand/10"
+            >
+              <Plus className="size-5" aria-hidden="true" />
+            </Link>
+            <InfoTip label="About Community">
+              <p>
+                Parlays testers built from the day&apos;s lines and shared, newest day first, graded
+                leg by leg as the games finish.
+              </p>
+              <p>Build your own with the + — share it here, or keep it on your Stats.</p>
+            </InfoTip>
+          </>
+        }
+      />
 
       {first.node}
       <LoadMore

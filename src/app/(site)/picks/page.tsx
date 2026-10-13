@@ -99,10 +99,50 @@ export default async function PicksPage({
 
   return (
     <SocialShell>
-      {/* -------------------------------------------------------------- head */}
-      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
-        <h1 className="text-xl font-bold tracking-tight">Picks</h1>
-        <div className="flex items-center gap-1">
+      {/* The page is named by the nav and the tabs; the heading is for screen readers. */}
+      <h1 className="sr-only">Picks</h1>
+
+      {/* -------------------------------------------------------------- tabs */}
+      {/* Home's tab strip, scrollable on a narrow phone, with the info tip at
+          its right end. It sticks, as Home's does — under the phone's top bar,
+          riding up with it as that slides away — with the sport pills and day
+          headings stacked below it. Its height is fixed (3.0625rem, border
+          included) because their offsets are written in terms of it. */}
+      <div className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-[35] flex h-[3.0625rem] border-b border-border bg-black/80 backdrop-blur-xl sm:top-0">
+        <nav
+          aria-label="Board"
+          className="relative flex min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]"
+        >
+          {pickTabs.map((c) => {
+            const isActive = c === tab;
+            // Today's count; the parlay tab counts its own table.
+            const n = c === "parlay" ? 0 : (countFor.get(c) ?? 0);
+            return (
+              <Link
+                key={c}
+                href={tabHref(c)}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "flex flex-1 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm transition-colors hover:bg-surface/60",
+                  isActive ? "font-semibold text-fg" : "text-fg-muted",
+                )}
+              >
+                <span className="relative inline-flex items-center gap-1.5">
+                  {TAB_LABELS[c]}
+                  {n > 0 && <span className="num text-xs font-normal text-fg-subtle">{n}</span>}
+                  {isActive && (
+                    <span className="absolute -bottom-[0.875rem] left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
+                  )}
+                </span>
+              </Link>
+            );
+          })}
+          <ScrollActiveTab />
+        </nav>
+        {/* Outside the scrolling strip, so its panel isn't clipped by it; the
+            strip sits a layer above the sport pills (z 35 over 30) so the
+            panel opens over them, and below the phone's top bar (40). */}
+        <div className="flex shrink-0 items-center pr-2">
           <InfoTip label="About Picks">
             <p>
               Every day&apos;s picks, newest first, graded against the final score. All free during
@@ -120,44 +160,6 @@ export default async function PicksPage({
           </InfoTip>
         </div>
       </div>
-
-      {/* -------------------------------------------------------------- tabs */}
-      {/* Home's tab strip, but scrollable: on a narrow phone three labels and
-          their counts don't always fit. It
-          sticks, as Home's does — under the phone's top bar, riding up with
-          it as that slides away — with the sport pills and day headings
-          stacked below it. Its height is fixed (3.0625rem, border included)
-          because their offsets are written in terms of it. */}
-      <nav
-        aria-label="Board"
-        className="sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] z-30 flex h-[3.0625rem] overflow-x-auto overscroll-x-contain border-b border-border bg-black/80 backdrop-blur-xl [scrollbar-width:none] sm:top-0"
-      >
-        {pickTabs.map((c) => {
-          const isActive = c === tab;
-          // Today's count; the parlay tab counts its own table.
-          const n = c === "parlay" ? 0 : (countFor.get(c) ?? 0);
-          return (
-            <Link
-              key={c}
-              href={tabHref(c)}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex flex-1 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm transition-colors hover:bg-surface/60",
-                isActive ? "font-semibold text-fg" : "text-fg-muted",
-              )}
-            >
-              <span className="relative inline-flex items-center gap-1.5">
-                {TAB_LABELS[c]}
-                {n > 0 && <span className="num text-xs font-normal text-fg-subtle">{n}</span>}
-                {isActive && (
-                  <span className="absolute -bottom-[0.875rem] left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
-                )}
-              </span>
-            </Link>
-          );
-        })}
-        <ScrollActiveTab />
-      </nav>
 
       {/* ------------------------------------------------------ sport pills */}
       <SportPills active={sportFilter} hrefFor={pillHref} below="tabs" />

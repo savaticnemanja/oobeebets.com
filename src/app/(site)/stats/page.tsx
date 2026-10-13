@@ -81,19 +81,8 @@ export default async function StatsPage({
 
   return (
     <SocialShell>
-      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
-        <h1 className="text-xl font-bold tracking-tight">Stats</h1>
-        <InfoTip label="About your stats">
-          <p>
-            Everything you&apos;ve logged: picks you ticked, parlays you built, and parlays you
-            played off Community or Oobee&apos;s board.
-          </p>
-          <p>
-            Every bet counts at a flat {stake.toFixed(2)}u, since we never ask for a stake — so
-            these are units, not money.
-          </p>
-        </InfoTip>
-      </div>
+      {/* The page is named by the nav; the heading is for screen readers. */}
+      <h1 className="sr-only">Stats</h1>
 
       {/* ---------------------------------------------------------- numbers */}
       <dl className="grid grid-cols-2 border-y border-border">
@@ -151,6 +140,18 @@ export default async function StatsPage({
           { key: "picks", label: "Picks", href: href("picks") },
           { key: "parlays", label: "Parlays", href: href("parlays") },
         ]}
+        actions={
+          <InfoTip label="About your stats">
+            <p>
+              Everything you&apos;ve logged: picks you ticked, parlays you built, and parlays you
+              played off Community or Oobee&apos;s board.
+            </p>
+            <p>
+              Every bet counts at a flat {stake.toFixed(2)}u, since we never ask for a stake — so
+              these are units, not money.
+            </p>
+          </InfoTip>
+        }
       />
       <nav aria-label="Show" className="flex gap-2 overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none]">
         {pills.map((p) => (

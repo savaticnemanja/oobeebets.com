@@ -63,7 +63,7 @@ export default async function BuildParlayPage() {
               <Link href="/community" className="text-brand hover:underline">
                 Community
               </Link>
-              ; private ones only here and on My bets.
+              ; private ones only here and on your Stats.
             </p>
           </div>
           {mineToday.map((pl) => (
