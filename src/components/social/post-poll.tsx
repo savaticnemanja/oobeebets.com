@@ -1,6 +1,7 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
+import { useTransition } from "react";
+import { useKeptOptimistic } from "@/components/use-kept-optimistic";
 import { CircleCheck } from "lucide-react";
 import { toast } from "sonner";
 import { votePollAction } from "@/app/actions/social";
@@ -33,7 +34,7 @@ export function PostPoll({
   viewerId: string | null;
   authorId: string;
 }) {
-  const [state, setState] = useOptimistic({ myVote: poll.myVote, options: poll.options, total: poll.total });
+  const [state, setState, keep] = useKeptOptimistic({ myVote: poll.myVote, options: poll.options, total: poll.total });
   const [pending, startTransition] = useTransition();
   // eslint-disable-next-line react-hooks/purity -- re-evaluated per render on purpose: a poll closes while you look at it
   const closed = poll.endsAt.getTime() <= Date.now();
@@ -42,13 +43,15 @@ export function PostPoll({
 
   function vote(optionId: string) {
     startTransition(async () => {
-      setState({
+      const value = {
         myVote: optionId,
         options: state.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
         total: state.total + 1,
-      });
+      };
+      setState(value);
       const result = await votePollAction(postId, optionId);
       if (result && !result.ok) toast.error(result.error);
+      else keep(value);
     });
   }
 

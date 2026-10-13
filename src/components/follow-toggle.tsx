@@ -1,6 +1,7 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
+import { useTransition } from "react";
+import { useKeptOptimistic } from "@/components/use-kept-optimistic";
 import { Circle, CircleCheck } from "lucide-react";
 import { toast } from "sonner";
 import { setParlayFollowAction, setPickFollowAction } from "@/app/actions/follows";
@@ -17,11 +18,11 @@ import { PICK_STATE, type PickState } from "@/components/pick-state";
  * One tap, no form, no stake — the row it writes holds nothing but "this user,
  * this pick" (see pickFollows in db/schema.ts).
  *
- * `useOptimistic` rather than local state: the tick has to land on the frame of
- * the tap, and the action revalidates /picks, so the real value arrives as a
- * new prop a moment later and the optimistic one dissolves into it. A failed
+ * Optimistic, so the tick lands on the frame of the tap, and kept once the
+ * action succeeds (use-kept-optimistic.ts) — a ticket infinite scroll loaded
+ * never gets a new prop, so without that it would untick itself. A failed
  * action reverts the circle on its own when the transition ends, which is why
- * the catch path only has to say what went wrong.
+ * the error path only has to say what went wrong.
  *
  * Deliberately shows no count of how many other testers took the pick. "Which
  * types of bets users follow most" is one of the questions this data is meant
@@ -47,7 +48,7 @@ export function FollowToggle({
   /** Under way or graded: the circle shows why it's locked (see pick-state.ts). */
   state?: PickState | null;
 }) {
-  const [taken, setTaken] = useOptimistic(follow.taken);
+  const [taken, setTaken, keepTaken] = useKeptOptimistic(follow.taken);
   const [pending, startTransition] = useTransition();
 
   // Brand cyan for the checked state, not hit green. Green means "this pick
@@ -129,6 +130,7 @@ export function FollowToggle({
       setTaken(next);
       const result = kind === "parlay" ? await setParlayFollowAction(pickId, next) : await setPickFollowAction(pickId, next);
       if (result && !result.ok) toast.error(result.error);
+      else keepTaken(next);
     });
   }
 

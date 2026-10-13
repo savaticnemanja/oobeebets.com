@@ -1,6 +1,7 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useKeptOptimistic } from "@/components/use-kept-optimistic";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setUserFollowAction } from "@/app/actions/social";
@@ -27,7 +28,7 @@ export function FollowButton({
   size?: "sm" | "default";
   className?: string;
 }) {
-  const [state, setState] = useOptimistic(following);
+  const [state, setState, keep] = useKeptOptimistic(following);
   const [, startTransition] = useTransition();
   const [hover, setHover] = useState(false);
   const router = useRouter();
@@ -42,6 +43,7 @@ export function FollowButton({
       setState(next);
       const result = await setUserFollowAction(userId, next);
       if (result && !result.ok) toast.error(result.error);
+      else keep(next);
     });
   }
 

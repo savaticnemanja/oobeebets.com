@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useOptimistic, useTransition } from "react";
+import { useTransition } from "react";
+import { useKeptOptimistic } from "@/components/use-kept-optimistic";
 import { BarChart2, Heart, MessageCircle, MoreHorizontal, Repeat2, Share, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
@@ -229,8 +230,8 @@ export function PostActions({
   detail?: boolean;
   className?: string;
 }) {
-  const [like, setLike] = useOptimistic({ liked: post.liked, count: post.likeCount });
-  const [repost, setRepost] = useOptimistic({ reposted: post.reposted, count: post.repostCount });
+  const [like, setLike, keepLike] = useKeptOptimistic({ liked: post.liked, count: post.likeCount });
+  const [repost, setRepost, keepRepost] = useKeptOptimistic({ reposted: post.reposted, count: post.repostCount });
   const [, startTransition] = useTransition();
   const router = useRouter();
 
@@ -241,9 +242,11 @@ export function PostActions({
     }
     const next = !like.liked;
     startTransition(async () => {
-      setLike({ liked: next, count: like.count + (next ? 1 : -1) });
+      const value = { liked: next, count: like.count + (next ? 1 : -1) };
+      setLike(value);
       const result = await setPostLikeAction(post.id, next);
       if (result && !result.ok) toast.error(result.error);
+      else keepLike(value);
     });
   }
 
@@ -254,10 +257,14 @@ export function PostActions({
     }
     const next = !repost.reposted;
     startTransition(async () => {
-      setRepost({ reposted: next, count: repost.count + (next ? 1 : -1) });
+      const value = { reposted: next, count: repost.count + (next ? 1 : -1) };
+      setRepost(value);
       const result = await setPostRepostAction(post.id, next);
       if (result && !result.ok) toast.error(result.error);
-      else if (next) toast.success("Reposted");
+      else {
+        keepRepost(value);
+        if (next) toast.success("Reposted");
+      }
     });
   }
 
