@@ -9,8 +9,8 @@ import { LoadMore } from "@/components/load-more";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
 import { SportPills } from "@/components/board/sport-pills";
-import { loadBoardAction } from "@/app/actions/feeds";
-import { loadBoardDays } from "../picks/board-days";
+import { loadCommunityAction } from "@/app/actions/feeds";
+import { loadCommunityChunk } from "./community-feed";
 
 export const metadata: Metadata = {
   title: "Community",
@@ -23,7 +23,8 @@ export const dynamic = "force-dynamic";
 /**
  * Community: the parlays testers built and shared, day by day — its own page,
  * apart from Picks, which is Oobee's board. Same layout as Picks (the 600px
- * column, sport pills, sticky day headings) without the tab strip. The + in
+ * column, sport pills, sticky day headings) without the tab strip, loaded a
+ * dozen tickets at a time as you scroll, like Home. The + in
  * the header is the way to build one (/community/new). Each ticket is a post,
  * so it can be liked, replied to and reposted.
  */
@@ -34,7 +35,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
   const sportFilter = sportFilterFromParam(params.sport);
   // Grade anything whose game has finished before reading results.
   await refreshResults();
-  const first = await loadBoardDays({ auth, tab: "community", category: "game", sportFilter, before: null });
+  const first = await loadCommunityChunk({ auth, sportFilter, before: null });
   const pillHref = (key: string | null) => `/community${key ? `?sport=${key}` : ""}`;
 
   return (
@@ -71,7 +72,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
       <LoadMore
         key={sportFilter?.key ?? "all"}
         next={first.next}
-        load={loadBoardAction.bind(null, "community", sportFilter?.key ?? "")}
+        load={loadCommunityAction.bind(null, sportFilter?.key ?? "")}
       />
     </SocialShell>
   );

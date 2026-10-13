@@ -290,14 +290,43 @@ export async function getAllUserParlays(limit = 200): Promise<ParlayView[]> {
 }
 
 /**
- * The Community tab: every parlay a tester chose to share for one slate day,
- * newest first, with who built it — role included, for the badge, since the
- * board draws these as timeline rows just like Home does.
+ * One page of the Community stream: shared tickets, newest slate first and,
+ * within a day, newest first — so upcoming days lead, then today, then the
+ * past, as on Picks. Paged by keyset on (slate_date, created_at, id) after
+ * the ticket `before`, as Home pages posts, so a page boundary can fall
+ * mid-day and a ticket shared while you scroll never shifts what comes next.
+ *
+ * `sport` narrows to tickets with a leg in that sport (and league): either
+ * one of Oobee's picks, or a feed selection on a game in one of `leagues`.
  */
-export async function getCommunityParlays(
-  slateDate: string,
-  limit = 100,
-): Promise<Array<{ parlay: ParlayView; ownerRole: Role }>> {
+export async function getCommunityParlayPage({
+  before,
+  sport,
+  leagues,
+  limit,
+}: {
+  before: string | null;
+  sport: { sport: Sport; league: string | null } | null;
+  /** The feed leagues in that sport (or just the one), for selection legs. */
+  leagues: string[];
+  limit: number;
+}): Promise<{ items: Array<{ parlay: ParlayView; ownerRole: Role }>; next: string | null }> {
+  const legInSport = sport
+    ? sql`(exists (select 1 from ${parlayLegs} join ${picks} on ${picks.id} = ${parlayLegs.pickId}
+          where ${parlayLegs.parlayId} = ${parlays.id} and ${picks.sport} = ${sport.sport}${
+            sport.league ? sql` and ${picks.league} = ${sport.league}` : sql``
+          })
+        or exists (select 1 from ${parlaySelectionLegs} join ${selections} on ${selections.id} = ${parlaySelectionLegs.selectionId}
+          join ${games} on ${games.id} = ${selections.gameId}
+          where ${parlaySelectionLegs.parlayId} = ${parlays.id} and ${
+            leagues.length ? inArray(games.league, leagues) : sql`false`
+          }))`
+    : undefined;
+  const after = before
+    ? sql`(${parlays.slateDate}, ${parlays.createdAt}, ${parlays.id}) <
+        (select c.slate_date, c.created_at, c.id from ${parlays} c where c.id = ${before})`
+    : undefined;
+
   const rows = await db
     .select({
       ...PARLAY_COLUMNS,
@@ -308,13 +337,17 @@ export async function getCommunityParlays(
     })
     .from(parlays)
     .innerJoin(users, eq(users.id, parlays.ownerId))
-    .where(and(eq(parlays.slateDate, slateDate), eq(parlays.shared, true)))
-    .orderBy(desc(parlays.createdAt))
-    .limit(limit);
+    .where(and(eq(parlays.shared, true), legInSport, after))
+    .orderBy(desc(parlays.slateDate), desc(parlays.createdAt), desc(parlays.id))
+    .limit(limit + 1);
 
-  const views = await hydrate(rows);
-  const roles = new Map(rows.map((r) => [r.id, r.ownerRole]));
-  return views.map((parlay) => ({ parlay, ownerRole: roles.get(parlay.id) ?? "user" }));
+  const pageRows = rows.slice(0, limit);
+  const views = await hydrate(pageRows);
+  const roles = new Map(pageRows.map((r) => [r.id, r.ownerRole]));
+  return {
+    items: views.map((parlay) => ({ parlay, ownerRole: roles.get(parlay.id) ?? "user" })),
+    next: rows.length > limit ? pageRows.at(-1)!.id : null,
+  };
 }
 
 /** Marks which of these tickets the viewer has played (parlay_follows). One query. */

@@ -5,6 +5,7 @@ import { getHomeFollowing, getHomeForYou, postItems } from "@/lib/home-feed";
 import { getProfilePosts, type ProfileTab } from "@/lib/social";
 import { FeedList } from "@/components/social/feed";
 import { loadBoardDays } from "@/app/(site)/picks/board-days";
+import { loadCommunityChunk } from "@/app/(site)/community/community-feed";
 import { categoryFromParam, sportFilterFromParam, tabFromParam } from "@/lib/board";
 import { isValidSlateDate } from "@/lib/slate-date";
 import type { Chunk } from "@/components/load-more";
@@ -57,13 +58,20 @@ export async function loadProfileAction(profileId: string, tab: ProfileTab, curs
 
 export async function loadBoardAction(tab: string, sport: string, before: string): Promise<Chunk> {
   const auth = await viewer();
-  if (!isValidSlateDate(before)) throw new Error("Bad cursor");
+  const boardTab = tabFromParam(tab);
+  if (!isValidSlateDate(before) || boardTab === "community") throw new Error("Bad cursor");
   const { node, next } = await loadBoardDays({
     auth,
-    tab: tabFromParam(tab),
+    tab: boardTab,
     category: categoryFromParam(tab),
     sportFilter: sportFilterFromParam(sport),
     before,
   });
   return { node, next };
+}
+
+export async function loadCommunityAction(sport: string, before: string): Promise<Chunk> {
+  const auth = await viewer();
+  if (!UUID.test(before)) throw new Error("Bad cursor");
+  return loadCommunityChunk({ auth, sportFilter: sportFilterFromParam(sport), before });
 }

@@ -61,7 +61,8 @@ export default async function PicksPage({
 
   const today = slateDateString();
   // Three tabs: two pick categories and Oobee's parlays.
-  const tab = tabFromParam(params.category);
+  const requested = tabFromParam(params.category);
+  const tab = requested === "community" ? "game" : requested;
   const category = categoryFromParam(params.category);
   // The pill under the tabs — a league, or a whole sport for soccer/tennis.
   const sportFilter = sportFilterFromParam(params.sport);

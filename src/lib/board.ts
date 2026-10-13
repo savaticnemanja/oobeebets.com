@@ -113,8 +113,8 @@ export type BoardTab = (typeof boardTabs)[number];
 
 /**
  * The tabs on Picks — Oobee's own board. Shared tickets have their own page,
- * Community (/community), so they're a board tab only internally: the day
- * loader and the infinite-scroll action still take "community".
+ * Community (/community), paged by ticket (community/community-feed.tsx);
+ * "community" stays a tab value only so old ?category= links redirect there.
  */
 export const pickTabs = ["game", "prop", "parlay"] as const;
 
