@@ -148,8 +148,14 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(page.url().includes("/home"), "onboarding lands on Home");
   const [accepted] = await sql`select terms_accepted_at from users where email = ${testEmail}`;
   check(Boolean(accepted?.terms_accepted_at), "the account records when the Terms were accepted");
+  // Waited for, not read straight off the page: Home has a loading skeleton,
+  // and the client-side redirect after Finish lands while it is still showing.
   check(
-    (await page.content()).includes("Account created"),
+    await page
+      .getByText("Account created")
+      .first()
+      .waitFor({ timeout: 15000 })
+      .then(() => true, () => false),
     "Home greets a new account",
   );
 
