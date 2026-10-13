@@ -32,6 +32,16 @@ function minutes(name: string, fallback: number): number {
 const ODDS_TTL_MIN = () => minutes("ODDS_TTL_MINUTES", 30);
 /** Props: ~1 credit per prop market per game per refresh — the expensive one. */
 const PROPS_TTL_MIN = () => minutes("PROPS_TTL_MINUTES", 120);
+/**
+ * Credits held back from player props. The free plan has 500 a month and one
+ * game's props cost ~6, so a builder opening every game could spend the
+ * month in a day — and the last credits have to go on scores (grading) and
+ * game lines. Below this, props stop refreshing and show what's stored.
+ */
+const PROPS_CREDIT_FLOOR = () => {
+  const n = Number(process.env.PROPS_CREDIT_FLOOR);
+  return Number.isFinite(n) && n >= 0 ? n : 100;
+};
 /** Scores: 2 credits per league per refresh, and only while a bet awaits one. */
 const SCORES_TTL_MIN = () => minutes("SCORES_TTL_MINUTES", 20);
 /**
@@ -291,6 +301,13 @@ export async function ensureGameProps(gameId: string): Promise<void> {
   const league = game.league as FeedLeague;
   const config = LEAGUE_CONFIG[league];
   if (!config) return;
+
+  const [quota] = await db
+    .select({ left: oddsSync.creditsRemaining })
+    .from(oddsSync)
+    .where(eq(oddsSync.key, "quota"))
+    .limit(1);
+  if (quota?.left != null && quota.left < PROPS_CREDIT_FLOOR()) return;
 
   const key = `props:${gameId}`;
   if (!(await claim(key, PROPS_TTL_MIN()))) return;
