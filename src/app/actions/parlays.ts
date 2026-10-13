@@ -181,7 +181,7 @@ export async function createCommunityParlayAction(
 
   revalidatePath("/picks");
   revalidatePath("/community");
-  revalidatePath("/my-bets");
+  revalidatePath("/stats");
   revalidatePath("/home");
   return {
     ok: true,
@@ -217,7 +217,7 @@ export async function setParlaySharedAction(parlayId: string, shared: boolean): 
   if (!done) return { ok: false, error: "Parlay not found" };
   revalidatePath("/picks");
   revalidatePath("/community");
-  revalidatePath("/my-bets");
+  revalidatePath("/stats");
   revalidatePath("/home");
   revalidatePath(`/u/${auth.user.username}`, "layout");
   return { ok: true, message: shared ? "Shared to Community." : "Made private." };
@@ -272,7 +272,7 @@ export async function deleteUserParlayAction(parlayId: string): Promise<ActionSt
 
   revalidatePath("/picks");
   revalidatePath("/community");
-  revalidatePath("/my-bets");
+  revalidatePath("/stats");
   return { ok: true, message: "Parlay removed." };
 }
 

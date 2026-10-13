@@ -5,6 +5,8 @@ import { relativeTime } from "@/lib/social-rules";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
+import { FollowToggle } from "@/components/follow-toggle";
+import type { ViewerFollow } from "@/lib/follows";
 import { PICK_STATE, pickBadge, pickState } from "@/components/pick-state";
 import type { ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
@@ -34,6 +36,7 @@ export function ParlayCard({
   postHref,
   kicker,
   footer,
+  follow,
   children,
 }: {
   parlay: ParlayView;
@@ -52,6 +55,8 @@ export function ParlayCard({
   kicker?: React.ReactNode;
   /** A row under everything — the post's Reply / Repost / Like. */
   footer?: React.ReactNode;
+  /** The viewer can play (tail) this ticket: its circle, as on a pick. */
+  follow?: ViewerFollow;
   /** Slot for an action — the owner's delete control, say. */
   children?: React.ReactNode;
 }) {
@@ -152,11 +157,24 @@ export function ParlayCard({
       </div>
 
       <div className="mt-3 flex items-start gap-2.5">
-        <StateMark
-          state={state}
-          featured={featured}
-          idle={<Layers className={cn("text-brand", featured ? "size-5" : "size-4")} aria-hidden="true" />}
-        />
+        {/* "I played this" where the viewer can tail it, as a pick's circle;
+            otherwise the ticket's status mark. */}
+        {follow ? (
+          <FollowToggle
+            kind="parlay"
+            pickId={parlay.id}
+            selection={parlay.title ?? `${legs.length}-leg parlay`}
+            follow={follow}
+            featured={featured}
+            state={state}
+          />
+        ) : (
+          <StateMark
+            state={state}
+            featured={featured}
+            idle={<Layers className={cn("text-brand", featured ? "size-5" : "size-4")} aria-hidden="true" />}
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <h3 className={cn("font-semibold tracking-tight text-fg", featured ? "text-2xl" : "text-lg")}>
@@ -252,7 +270,13 @@ export function ParlayCard({
       {(children || legs.length > 0) && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           {legs.length > 0 ? (
-            <StatusLine at={new Date(firstStart)} state={state} prefix="First leg" />
+            <StatusLine
+              at={new Date(firstStart)}
+              state={state}
+              prefix="First leg"
+              taken={follow?.taken ?? parlay.played}
+              takenLabel="You played it"
+            />
           ) : (
             <span />
           )}

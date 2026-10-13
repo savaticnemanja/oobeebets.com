@@ -6,7 +6,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
 import { getMediaFor, type MediaView } from "@/lib/media";
-import { getParlaysByIds, type ParlayView } from "@/lib/parlay-store";
+import { getParlaysByIds, markPlayed, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { isReservedUsername } from "@/lib/social-rules";
 
@@ -249,10 +249,10 @@ export async function getParents(list: FeedPost[], viewerId: string | null): Pro
  * for the lot, graded the way every other surface grades a parlay. A post
  * whose parlay can't be read (deleted mid-render) keeps parlay = null.
  */
-export async function withParlays(list: FeedPost[]): Promise<FeedPost[]> {
+export async function withParlays(list: FeedPost[], viewerId: string | null = null): Promise<FeedPost[]> {
   const ids = [...new Set(list.map((p) => p.parlayId).filter((id): id is string => id !== null))];
   if (ids.length === 0) return list;
-  const byId = new Map((await getParlaysByIds(ids)).map((pl) => [pl.id, pl]));
+  const byId = new Map((await markPlayed(await getParlaysByIds(ids), viewerId)).map((pl) => [pl.id, pl]));
   return list.map((p) => (p.parlayId ? { ...p, parlay: byId.get(p.parlayId) ?? null } : p));
 }
 
@@ -263,7 +263,7 @@ export async function withParlays(list: FeedPost[]): Promise<FeedPost[]> {
 export async function withAttachments(list: FeedPost[], viewerId: string | null): Promise<FeedPost[]> {
   if (list.length === 0) return list;
   const ids = list.map((p) => p.id);
-  const [withTickets, media, polls] = await Promise.all([withParlays(list), getMediaFor(ids), getPollsFor(ids, viewerId)]);
+  const [withTickets, media, polls] = await Promise.all([withParlays(list, viewerId), getMediaFor(ids), getPollsFor(ids, viewerId)]);
   return withTickets.map((p) => ({ ...p, media: media.get(p.id) ?? [], poll: polls.get(p.id) ?? null }));
 }
 

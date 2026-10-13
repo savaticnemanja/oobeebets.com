@@ -653,7 +653,7 @@ export async function getPlayerFollows(userId: string): Promise<PlayerFollows | 
 /* ------------------------------------------------- a tester's own numbers */
 
 /**
- * What a tester sees about themselves on /my-bets.
+ * What a tester sees about themselves on /stats.
  *
  * Singles and parlays are reported apart and then together, because they are
  * different bets with different variance and averaging them into one line
@@ -730,3 +730,17 @@ export async function getMySingles(userId: string) {
  * Exported as an alias so there is still exactly one implementation.
  */
 export { summarise as summariseRecord };
+
+/**
+ * The picks a tester took, whole — for drawing them as the board draws them
+ * on their Stats page. Newest day first, then by kick-off.
+ */
+export async function getMyTakenPicks(userId: string) {
+  const rows = await db
+    .select({ pick: picks })
+    .from(pickFollows)
+    .innerJoin(picks, eq(picks.id, pickFollows.pickId))
+    .where(and(eq(pickFollows.userId, userId), publishedSlate))
+    .orderBy(desc(picks.slateDate), asc(picks.startsAt), asc(picks.rank));
+  return rows.map((r) => r.pick);
+}

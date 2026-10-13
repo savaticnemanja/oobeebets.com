@@ -416,9 +416,9 @@ console.log("\nBuilding a parlay, and grading it from its legs");
   `;
   const expected = combineOdds(legs.map((l) => l.price));
 
-  await page.goto(`${APP_URL}/my-bets`);
+  await page.goto(`${APP_URL}/stats?tab=parlays`);
   let html = await page.content();
-  check(html.includes("Your parlays"), "the parlay shows on the tester's dashboard");
+  check(html.includes("You built this"), "the parlay shows on the tester's Stats");
   const sign = expected > 0 ? `+${expected}` : `${expected}`;
   check(html.includes(sign), "the dashboard quotes the combined price", sign);
   // Ungraded tickets read Upcoming before the first leg starts and Live after.
@@ -429,7 +429,7 @@ console.log("\nBuilding a parlay, and grading it from its legs");
   const [{ updated_at: before }] = await sql`select updated_at from parlays where id = ${parlayId}`;
   await sql`update picks set status = 'lost', settled_at = now() where id = ${legs[0].id}`;
 
-  await page.goto(`${APP_URL}/my-bets`);
+  await page.goto(`${APP_URL}/stats?tab=parlays`);
   html = await page.content();
   check(html.includes("Lost"), "settling one leg lost grades the whole parlay lost");
 
@@ -441,7 +441,7 @@ console.log("\nBuilding a parlay, and grading it from its legs");
 
   // Put it back and win both legs instead.
   await sql`update picks set status = 'won' where id = any(${legs.map((l) => l.id)})`;
-  await page.goto(`${APP_URL}/my-bets`);
+  await page.goto(`${APP_URL}/stats?tab=parlays`);
   html = await page.content();
   check(html.includes("Won"), "winning every leg grades the parlay won");
 

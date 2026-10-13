@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Info, Shield, Target, Ticket, User, Users, type LucideIcon } from "lucide-react";
+import { ChartColumn, House, Info, Shield, Target, User, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -27,19 +27,20 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
   const picks = { href: "/picks", label: t().nav.picks, icon: Target };
   // Testers' shared parlays — their own page, apart from Oobee's picks.
   const community = { href: "/community", label: "Community", icon: Users };
-  const myBets = { href: "/my-bets", label: t().nav.myBets, icon: Ticket };
+  // Your record — the picks and parlays you took, built and played.
+  const stats = { href: "/stats", label: "Stats", icon: ChartColumn };
   const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
   return {
     sidebar: [
       home,
       picks,
       community,
-      myBets,
+      stats,
       profile,
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
-    bottom: [home, picks, community, myBets, profile],
+    bottom: [home, picks, community, stats, profile],
   };
 }
 

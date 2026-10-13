@@ -48,12 +48,14 @@ export function StatusLine({
   finalScore,
   taken,
   prefix,
+  takenLabel = "You took it",
 }: {
   at: Date;
   state: PickState | null;
   finalScore?: string | null;
   taken?: boolean;
   prefix?: string;
+  takenLabel?: string;
 }) {
   const time = (
     <time dateTime={at.toISOString()} className="num">
@@ -87,7 +89,7 @@ export function StatusLine({
           </span>
         </>
       )}
-      {taken && <span className="text-brand">· You took it</span>}
+      {taken && <span className="text-brand">· {takenLabel}</span>}
     </span>
   );
 }

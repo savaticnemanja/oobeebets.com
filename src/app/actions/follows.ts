@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { pickFollows, picks, slates } from "@/db/schema";
+import { parlayFollows, parlays, pickFollows, picks, slates } from "@/db/schema";
+import { getParlaysByIds } from "@/lib/parlay-store";
 import { getAuth } from "@/lib/auth";
 import { followWindowOpen } from "@/lib/follows";
 import type { ActionState } from "@/lib/validation";
@@ -105,5 +106,45 @@ export async function setPickFollowAction(
   // settle, void, role changes — and a tester ticking a box is ordinary product
   // use, logged by the row itself. Writing one would put a line in the admin
   // activity feed for every tap on the board.
+  return { ok: true };
+}
+
+/**
+ * "I played this parlay" — tail a shared Community ticket or one of Oobee's,
+ * or take it back, while every leg is still ahead of kick-off. Not your own
+ * ticket (you built it — it's already yours), not a private one, not a draft.
+ */
+export async function setParlayFollowAction(parlayId: string, played: boolean): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) return { ok: false, error: "Your session expired — sign in again to log this." };
+  const parsed = z.object({ parlayId: z.string().uuid(), played: z.boolean() }).safeParse({ parlayId, played });
+  if (!parsed.success) return { ok: false, error: "Bad request" };
+
+  const [row] = await db
+    .select({ ownerId: parlays.ownerId, shared: parlays.shared, publishedAt: slates.publishedAt })
+    .from(parlays)
+    .leftJoin(slates, eq(slates.date, parlays.slateDate))
+    .where(eq(parlays.id, parsed.data.parlayId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That parlay is gone." };
+  if (row.ownerId === auth.user.id) return { ok: false, error: "That's your own ticket — it's already on your stats." };
+  if (row.ownerId === null ? !row.publishedAt : !row.shared) return { ok: false, error: "That parlay isn't public." };
+
+  const [view] = await getParlaysByIds([parsed.data.parlayId]);
+  if (!view?.open) {
+    return { ok: false, error: played ? "Too late — a leg has already started." : "This one is locked in — a leg has started." };
+  }
+
+  if (parsed.data.played) {
+    await db.insert(parlayFollows).values({ userId: auth.user.id, parlayId: parsed.data.parlayId }).onConflictDoNothing();
+  } else {
+    await db
+      .delete(parlayFollows)
+      .where(and(eq(parlayFollows.userId, auth.user.id), eq(parlayFollows.parlayId, parsed.data.parlayId)));
+  }
+  revalidatePath("/stats");
+  revalidatePath("/community");
+  revalidatePath("/picks");
+  revalidatePath("/stats");
   return { ok: true };
 }

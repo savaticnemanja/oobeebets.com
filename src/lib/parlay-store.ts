@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { games, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
+import { games, parlayFollows, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
 import { LEAGUE_CONFIG, eventLabel, lineLabel, marketCategory, marketEnum, type FeedLeague } from "./odds/markets";
 import type { Market, PickCategory, PickStatus, Role, Sport } from "@/db/schema";
 import { PARLAY_STAKE_UNITS, parlayPrice, parlayProfit, parlayStatus, parlayWindowOpen } from "./parlays";
@@ -80,6 +80,8 @@ export interface ParlayView {
   profit: number;
   /** Still editable: every leg is ahead of kick-off. */
   open: boolean;
+  /** Whether the viewer has played (tailed) it — set by markPlayed. */
+  played?: boolean;
 }
 
 /** Oobee's parlays carry their own stake; a tester's is always flat. */
@@ -313,6 +315,34 @@ export async function getCommunityParlays(
   const views = await hydrate(rows);
   const roles = new Map(rows.map((r) => [r.id, r.ownerRole]));
   return views.map((parlay) => ({ parlay, ownerRole: roles.get(parlay.id) ?? "user" }));
+}
+
+/** Marks which of these tickets the viewer has played (parlay_follows). One query. */
+export async function markPlayed(views: ParlayView[], viewerId: string | null): Promise<ParlayView[]> {
+  if (!viewerId || views.length === 0) return views;
+  const rows = await db
+    .select({ parlayId: parlayFollows.parlayId })
+    .from(parlayFollows)
+    .where(and(eq(parlayFollows.userId, viewerId), inArray(parlayFollows.parlayId, views.map((v) => v.id))));
+  const played = new Set(rows.map((r) => r.parlayId));
+  return views.map((v) => ({ ...v, played: played.has(v.id) }));
+}
+
+/** The parlays a tester played — someone's shared ticket, or Oobee's — newest slate first. */
+export async function getPlayedParlays(userId: string): Promise<ParlayView[]> {
+  const rows = await db
+    .select({
+      ...PARLAY_COLUMNS,
+      ownerEmail: sql<string | null>`null`,
+      ownerUsername: users.username,
+      ownerDisplayName: users.displayName,
+    })
+    .from(parlayFollows)
+    .innerJoin(parlays, eq(parlays.id, parlayFollows.parlayId))
+    .leftJoin(users, eq(users.id, parlays.ownerId))
+    .where(eq(parlayFollows.userId, userId))
+    .orderBy(desc(parlays.slateDate), desc(parlayFollows.createdAt));
+  return (await hydrate(rows)).map((v) => ({ ...v, played: true }));
 }
 
 /** Several parlays by id, graded, with who built them — for posts that carry one. */

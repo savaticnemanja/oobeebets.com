@@ -1,6 +1,8 @@
 import { Repeat2 } from "lucide-react";
 import Link from "next/link";
 import type { FeedPost } from "@/lib/social";
+import type { ParlayView } from "@/lib/parlay-store";
+import type { ViewerFollow } from "@/lib/follows";
 import { ParlayCard } from "@/components/parlay-card";
 import { PostActions } from "@/components/social/post-card";
 import { displayNameOf } from "@/components/social/identity";
@@ -37,8 +39,19 @@ export function ParlayPost({
         ) : null
       }
       footer={<PostActions post={post} viewerId={viewerId} className="mt-2" />}
+      follow={playable(post.parlay, post.author.id, viewerId)}
     />
   );
+}
+
+/**
+ * The viewer's "I played this" circle on someone else's ticket — while it's
+ * open, or once they've played it (then it shows locked, ticked).
+ */
+export function playable(parlay: ParlayView, ownerId: string | null, viewerId: string | null): ViewerFollow | undefined {
+  if (!viewerId || ownerId === viewerId) return undefined;
+  if (!parlay.open && !parlay.played) return undefined;
+  return { taken: Boolean(parlay.played), open: parlay.open };
 }
 
 /** Narrows a post to one that carries a readable ticket. */

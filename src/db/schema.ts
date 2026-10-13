@@ -544,6 +544,26 @@ export const postLikes = pgTable(
   ],
 );
 
+/**
+ * "I played this parlay" — the parlay twin of pick_follows: a tester tailing
+ * someone's shared ticket, or one of Oobee's. Just the pair and when; the
+ * stake is the flat one every logged bet uses (lib/follows.ts), and the
+ * window closes when the ticket's first leg starts.
+ */
+export const parlayFollows = pgTable(
+  "parlay_follows",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parlayId: uuid("parlay_id")
+      .notNull()
+      .references(() => parlays.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.parlayId] }), index("parlay_follows_parlay_idx").on(t.parlayId)],
+);
+
 /** Raw bytes. postgres-js reads and writes bytea as a Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",

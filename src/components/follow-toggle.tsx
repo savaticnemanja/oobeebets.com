@@ -3,7 +3,7 @@
 import { useOptimistic, useTransition } from "react";
 import { Circle, CircleCheck } from "lucide-react";
 import { toast } from "sonner";
-import { setPickFollowAction } from "@/app/actions/follows";
+import { setParlayFollowAction, setPickFollowAction } from "@/app/actions/follows";
 import { FOLLOW_LABELS, type ViewerFollow } from "@/lib/follows";
 import { cn } from "@/lib/utils";
 import { PICK_STATE, type PickState } from "@/components/pick-state";
@@ -34,8 +34,12 @@ export function FollowToggle({
   follow,
   featured,
   state,
+  kind = "pick",
 }: {
+  /** The pick's id — or the parlay's, with kind="parlay". */
   pickId: string;
+  /** A parlay ticket logs "I played this parlay" (parlay_follows) instead. */
+  kind?: "pick" | "parlay";
   /** Named in the control's label, so a screen reader knows which bet. */
   selection: string;
   follow: ViewerFollow;
@@ -123,7 +127,7 @@ export function FollowToggle({
     const next = !taken;
     startTransition(async () => {
       setTaken(next);
-      const result = await setPickFollowAction(pickId, next);
+      const result = kind === "parlay" ? await setParlayFollowAction(pickId, next) : await setPickFollowAction(pickId, next);
       if (result && !result.ok) toast.error(result.error);
     });
   }
@@ -136,8 +140,8 @@ export function FollowToggle({
       // because the element underneath is still a real <button>.
       role="checkbox"
       aria-checked={taken}
-      aria-label={`${FOLLOW_LABELS.take}: ${selection}`}
-      title={taken ? FOLLOW_LABELS.took : FOLLOW_LABELS.take}
+      aria-label={`${kind === "parlay" ? "I played this parlay" : FOLLOW_LABELS.take}: ${selection}`}
+      title={kind === "parlay" ? (taken ? "You played this parlay" : "I played this parlay") : taken ? FOLLOW_LABELS.took : FOLLOW_LABELS.take}
       onClick={toggle}
       // Not `disabled` while pending: that drops focus out of the control
       // mid-interaction and makes a fast second tap feel broken. The action is

@@ -2,7 +2,7 @@ import { ensureScores } from "./sync";
 
 /**
  * Grades finished games on a timer, so results no longer wait for someone to
- * open /picks, /my-bets or /admin/settle.
+ * open /picks, /stats or /admin/settle.
  *
  * That used to be the only trigger, and the feed's scores endpoint only
  * reaches back three days: when nobody visited in that window — as happened

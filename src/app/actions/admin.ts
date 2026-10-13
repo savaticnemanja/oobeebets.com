@@ -556,7 +556,7 @@ export async function settleSelectionAction(
     { id: actor.user.id, email: actor.user.email },
   );
   revalidateSlate();
-  revalidatePath("/my-bets");
+  revalidatePath("/stats");
   return { ok: true, message: `Settled as ${status}.` };
 }
 
@@ -569,6 +569,6 @@ export async function unsettleSelectionAction(
   if (!id.success) return { ok: false, error: "Bad selection id" };
   await unsettleSelection(id.data, { id: actor.user.id, email: actor.user.email });
   revalidateSlate();
-  revalidatePath("/my-bets");
+  revalidatePath("/stats");
   return { ok: true, message: "Reset to pending." };
 }

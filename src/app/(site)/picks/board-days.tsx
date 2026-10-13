@@ -8,13 +8,13 @@ import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } fro
 import type { Pick, PickCategory } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { CATEGORY_NOUN, matchesSportFilter, visiblePicks, type BoardTab, type SportFilter } from "@/lib/board";
-import { getCommunityParlays, getOobeeParlays, type ParlayView } from "@/lib/parlay-store";
+import { getCommunityParlays, getOobeeParlays, markPlayed, type ParlayView } from "@/lib/parlay-store";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { pickProfit } from "@/lib/settlement";
 import { slateDateString } from "@/lib/slate-date";
 import { formatSlateDate } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
-import { ParlayPost } from "@/components/social/parlay-row";
+import { ParlayPost, playable } from "@/components/social/parlay-row";
 import { getParlayPosts, type FeedPost } from "@/lib/social";
 import { PickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
@@ -182,14 +182,24 @@ export async function loadBoardDays({
       ? await Promise.all(
           visibleDays.map(async (d) => {
             const first = (pl: ParlayView) => Math.min(...pl.legs.map((l) => l.startsAt.getTime()));
-            const list = (await getOobeeParlays(d)).sort((a, b) => first(a) - first(b) || (a.rank ?? 0) - (b.rank ?? 0));
+            const list = (await markPlayed(await getOobeeParlays(d), auth.user.id)).sort(
+              (a, b) => first(a) - first(b) || (a.rank ?? 0) - (b.rank ?? 0),
+            );
             return [d, list] as const;
           }),
         )
       : [],
   );
   const communityOn = new Map<string, Awaited<ReturnType<typeof getCommunityParlays>>>(
-    isCommunityTab ? await Promise.all(days.map(async (d) => [d, await getCommunityParlays(d)] as const)) : [],
+    isCommunityTab
+      ? await Promise.all(
+          days.map(async (d) => {
+            const list = await getCommunityParlays(d);
+            const marked = await markPlayed(list.map((x) => x.parlay), auth.user.id);
+            return [d, list.map((x, i) => ({ ...x, parlay: marked[i] }))] as const;
+          }),
+        )
+      : [],
   );
   // Each shared ticket is carried by a post — its likes, replies and reposts.
   const postFor = isCommunityTab
@@ -267,7 +277,13 @@ export async function loadBoardDays({
               {featuredFirst(list, (pl) => pl.featured).map(({ item: pl, label }) => (
                 <Fragment key={pl.id}>
                   {label && <FeaturedLabel tone="brand">Featured parlays</FeaturedLabel>}
-                  <ParlayCard parlay={pl} featured={pl.featured} variant="row" />
+                  <ParlayCard
+                    parlay={pl}
+                    featured={pl.featured}
+                    variant="row"
+                    // Oobee's tickets can be played once the day is out.
+                    follow={publishedOn.has(d) ? playable(pl, null, auth.user.id) : undefined}
+                  />
                 </Fragment>
               ))}
             </>
