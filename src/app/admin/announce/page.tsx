@@ -6,7 +6,7 @@ import { auditLog } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import { selectableRecipients } from "@/lib/announcements";
 import { AnnounceComposer } from "@/components/admin/announce-composer";
-import { formatDateTime } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 
 export const metadata: Metadata = { title: "Announce" };
 
@@ -72,7 +72,7 @@ export default async function AdminAnnouncePage() {
                     dateTime={row.createdAt.toISOString()}
                     className="num shrink-0 text-xs text-fg-subtle"
                   >
-                    {formatDateTime(row.createdAt)}
+                    <LocalTime at={row.createdAt} format="datetime" />
                   </time>
                 </li>
               );

@@ -4,7 +4,8 @@ import * as React from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { loadGamePropsAction } from "@/app/actions/odds";
 import type { GameOption, LineOption, PropGroup } from "@/lib/odds/markets";
-import { formatKickoff, formatOdds, timeZoneLabel } from "@/lib/i18n/format";
+import { formatOdds } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,9 +77,7 @@ function GameCard({
     <section className={cn("card-hairline overflow-hidden", blocked && "opacity-60")} aria-label={`${game.awayTeam} at ${game.homeTeam}`}>
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-fg-subtle">
         <span className="font-medium text-fg-muted">{game.league}</span>
-        <span className="num">
-          {formatKickoff(game.commenceTime)} {timeZoneLabel()}
-        </span>
+        <LocalTime at={game.commenceTime} format="kickoff" className="num" />
       </div>
 
       {show.lines && (

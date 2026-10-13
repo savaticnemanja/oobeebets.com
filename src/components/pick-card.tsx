@@ -6,13 +6,8 @@ import { FollowToggle } from "@/components/follow-toggle";
 import type { ViewerFollow } from "@/lib/follows";
 import { PICK_STATE, pickBadge, pickState, type PickState } from "@/components/pick-state";
 import type { Pick, PickStatus, Sport } from "@/db/schema";
-import {
-  formatKickoff,
-  formatOdds,
-  formatSignedPct,
-  formatUnits,
-  timeZoneLabel,
-} from "@/lib/i18n/format";
+import { formatOdds, formatSignedPct, formatUnits } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { t } from "@/lib/i18n";
 
 // The emoji does not come from the catalogue, because a picture of a ball is
@@ -58,11 +53,7 @@ export function StatusLine({
   prefix?: string;
   takenLabel?: string;
 }) {
-  const time = (
-    <time dateTime={at.toISOString()} className="num">
-      {formatKickoff(at)} {timeZoneLabel()}
-    </time>
-  );
+  const time = <LocalTime at={at} format="kickoff" className="num" />;
   const lead = prefix ? `${prefix} ` : "";
   if (!state) {
     return (

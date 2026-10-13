@@ -12,7 +12,8 @@ import {
   MIN_PARLAY_LEGS,
 } from "@/lib/parlays";
 import { americanToDecimal, combineOdds } from "@/lib/settlement";
-import { formatKickoff, formatOdds, timeZoneLabel } from "@/lib/i18n/format";
+import { formatOdds } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { CATEGORY_LABELS, PARLAYS_PER_SLATE } from "@/lib/board";
 import type { SelectableLeg } from "@/components/parlay-builder";
 import { cn } from "@/lib/utils";
@@ -165,9 +166,7 @@ export function ParlayComposer({
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-fg-subtle">
                       {CATEGORY_LABELS[l.category]} · {l.event} ·{" "}
-                      <span className="num">
-                        {formatKickoff(l.startsAt)} {timeZoneLabel()}
-                      </span>
+                      <LocalTime at={l.startsAt} format="kickoff" className="num" />
                     </span>
                   </span>
                 </button>

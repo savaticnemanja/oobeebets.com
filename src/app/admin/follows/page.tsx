@@ -24,12 +24,12 @@ import { SlateDatePicker } from "@/components/slate-date-picker";
 import { CATEGORY_LABELS } from "@/lib/board";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import {
-  formatDateTime,
   formatOdds,
   formatRate,
   formatSlateDate,
   formatUnits,
 } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { TrackRecord } from "@/lib/stats";
@@ -436,7 +436,7 @@ export default async function AdminFollowsPage({
                       <Units units={u.record.netUnits} settled={u.record.settled} />
                     </TableCell>
                     <TableCell className="num text-right text-xs text-fg-subtle">
-                      {u.lastFollowAt ? formatDateTime(u.lastFollowAt) : "—"}
+                      {u.lastFollowAt ? <LocalTime at={u.lastFollowAt} format="datetime" /> : "—"}
                     </TableCell>
                   </TableRow>
                 ))}

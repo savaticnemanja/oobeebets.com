@@ -176,24 +176,6 @@ export function linkDomain(url: string): string {
   }
 }
 
-/* ---------------------------------------------------------------- time */
-
-/** X-style relative time: "now", "42s", "5m", "3h", then "Oct 4", then "Oct 4, 2025". */
-export function relativeTime(at: Date, now = new Date()): string {
-  const s = Math.max(0, Math.round((now.getTime() - at.getTime()) / 1000));
-  if (s < 10) return "now";
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  const sameYear = at.getUTCFullYear() === now.getUTCFullYear();
-  return at.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-    timeZone: "UTC",
-  });
-}
-
 /** "1.2K", "34K" — counts on the action row. */
 export function compactCount(n: number): string {
   if (n < 1000) return String(n);

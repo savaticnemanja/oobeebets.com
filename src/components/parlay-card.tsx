@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Layers } from "lucide-react";
 import { Avatar, TeamBadge, displayNameOf } from "@/components/social/identity";
-import { relativeTime } from "@/lib/social-rules";
+import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { FeaturedMark, SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
@@ -122,13 +122,9 @@ export function ParlayCard({
           {owner &&
             (() => {
               const time = (
-                <time
-                  dateTime={parlay.createdAt.toISOString()}
-                  title={parlay.createdAt.toLocaleString()}
-                  suppressHydrationWarning
-                >
-                  · {relativeTime(parlay.createdAt)}
-                </time>
+                <>
+                  · <LocalTime at={parlay.createdAt} format="ago" />
+                </>
               );
               return postHref ? (
                 <Link href={postHref} className="shrink-0 text-xs text-fg-subtle hover:underline">

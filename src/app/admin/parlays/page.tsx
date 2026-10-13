@@ -21,12 +21,12 @@ import {
 import { ParlayLegList } from "@/components/parlay-card";
 import { slateDateString } from "@/lib/slate-date";
 import {
-  formatDateTime,
   formatOdds,
   formatRate,
   formatSlateDate,
   formatUnits,
 } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -256,7 +256,7 @@ export default async function AdminParlaysPage() {
                       />
                     </TableCell>
                     <TableCell className="num align-top text-right text-xs text-fg-subtle">
-                      {formatDateTime(p.createdAt)}
+                      <LocalTime at={p.createdAt} format="datetime" />
                     </TableCell>
                   </TableRow>
                 ))}

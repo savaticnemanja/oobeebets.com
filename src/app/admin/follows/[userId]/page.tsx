@@ -21,12 +21,12 @@ import {
 import { CATEGORY_LABELS } from "@/lib/board";
 import { pickProfit } from "@/lib/settlement";
 import {
-  formatDateTime,
   formatOdds,
   formatRate,
   formatSlateDate,
   formatUnits,
 } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +88,7 @@ function PickRow({ p }: { p: FollowedPick }) {
         )}
       </TableCell>
       <TableCell className="num whitespace-nowrap text-right text-xs text-fg-subtle">
-        {formatDateTime(p.takenAt)}
+        <LocalTime at={p.takenAt} format="datetime" />
       </TableCell>
     </TableRow>
   );
@@ -156,10 +156,14 @@ export default async function PlayerFollowsPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{user.email}</h1>
           <p className="mt-1.5 text-sm text-fg-muted">
-            Joined {formatSlateDate(user.createdAt.toISOString().slice(0, 10))} ·{" "}
-            {user.lastLoginAt
-              ? `last seen ${formatDateTime(user.lastLoginAt)}`
-              : "never signed in"}
+            Joined <LocalTime at={user.createdAt} format="date" /> ·{" "}
+            {user.lastLoginAt ? (
+              <>
+                last seen <LocalTime at={user.lastLoginAt} format="datetime" />
+              </>
+            ) : (
+              "never signed in"
+            )}
           </p>
         </div>
         {user.role === "admin" && <Badge variant="brand">admin</Badge>}

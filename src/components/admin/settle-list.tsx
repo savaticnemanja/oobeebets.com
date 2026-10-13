@@ -21,7 +21,8 @@ import type { Pick } from "@/db/schema";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
-import { formatDateTime, formatOdds, formatSlateDate, formatUnits } from "@/lib/i18n/format";
+import { formatOdds, formatSlateDate, formatUnits } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 
 export function SettleList({
   picks,
@@ -93,7 +94,7 @@ export function SettleList({
                   </div>
                   <p className="mt-0.5 truncate text-xs text-fg-muted">{p.event}</p>
                   <p className="num mt-0.5 text-[0.6875rem] text-fg-subtle">
-                    {formatSlateDate(p.slateDate)} · {formatDateTime(p.startsAt)}
+                    {formatSlateDate(p.slateDate)} · <LocalTime at={p.startsAt} format="datetime" />
                     {p.finalScore && ` · Final ${p.finalScore}`}
                   </p>
                 </div>

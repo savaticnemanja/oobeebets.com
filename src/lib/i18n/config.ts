@@ -1,3 +1,5 @@
+import { SLATE_TIMEZONE } from "@/lib/slate-date";
+
 /**
  * The one place that knows what a locale means here.
  *
@@ -29,13 +31,11 @@ export interface LocaleConfig {
    */
   readonly formats: string;
   /**
-   * IANA zone every date is rendered in. Currently UTC for everyone, printed
-   * with the zone name beside it so nobody has to guess. This is the field a
-   * per-account time zone would override.
+   * IANA zone a time is shown in when the viewer's own is unknown — the
+   * server's first render, an email. Once the page is running, times switch
+   * to the browser's zone (components/local-time.tsx).
    */
   readonly timeZone: string;
-  /** Shown beside the zone so a time is never ambiguous. */
-  readonly timeZoneLabel: string;
 }
 
 export const LOCALE_CONFIG: Record<Locale, LocaleConfig> = {
@@ -44,8 +44,9 @@ export const LOCALE_CONFIG: Record<Locale, LocaleConfig> = {
     ogLocale: "en_US",
     dir: "ltr",
     formats: "en-GB",
-    timeZone: "UTC",
-    timeZoneLabel: "UTC",
+    // The slate's zone, so before the switch a time agrees with the day
+    // heading above it.
+    timeZone: SLATE_TIMEZONE,
   },
 };
 

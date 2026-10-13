@@ -18,7 +18,8 @@ import {
 } from "@/lib/board";
 import { slateDateString } from "@/lib/slate-date";
 import type { Metadata } from "next";
-import { formatDateTime, formatSlateDate, formatUnits } from "@/lib/i18n/format";
+import { formatSlateDate, formatUnits } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -169,7 +170,7 @@ export default async function AdminOverviewPage() {
                     dateTime={a.createdAt.toISOString()}
                     className="num shrink-0 text-fg-subtle"
                   >
-                    {formatDateTime(a.createdAt)}
+                    <LocalTime at={a.createdAt} format="datetime" />
                   </time>
                 </li>
               ))}

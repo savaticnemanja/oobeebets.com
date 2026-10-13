@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { sendInviteAction, resendInviteAction, revokeInviteAction } from "@/app/actions/invite";
 import type { InviteStatus } from "@/db/schema";
-import { formatDate } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 
 interface InviteRow {
   id: string;
@@ -115,10 +115,10 @@ export function InvitePanel({ invitations }: { invitations: InviteRow[] }) {
                     {inv.invitedByEmail ?? "—"}
                   </TableCell>
                   <TableCell className="num text-xs text-fg-subtle">
-                    {formatDate(inv.createdAt, { year: "2-digit" })}
+                    <LocalTime at={inv.createdAt} format="date" year="2-digit" />
                   </TableCell>
                   <TableCell className="num text-xs text-fg-subtle">
-                    {formatDate(inv.expiresAt, { year: "2-digit" })}
+                    <LocalTime at={inv.expiresAt} format="date" year="2-digit" />
                   </TableCell>
                   <TableCell className="text-right">
                     {inv.status === "pending" && (

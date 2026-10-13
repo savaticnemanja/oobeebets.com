@@ -5,7 +5,7 @@ import { CalendarDays } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getProfile, getProfilePosts, type ProfileTab } from "@/lib/social";
 import { compactCount } from "@/lib/social-rules";
-import { formatDate } from "@/lib/i18n/format";
+import { LocalTime } from "@/components/local-time";
 import { appUrl } from "@/lib/site";
 import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
 import { Avatar, TeamBadge, displayNameOf } from "@/components/social/identity";
@@ -111,7 +111,7 @@ export default async function ProfilePage({
 
         <p className="mt-3 flex items-center gap-1.5 text-sm text-fg-subtle">
           <CalendarDays className="size-4" aria-hidden="true" />
-          Joined {formatDate(profile.createdAt)}
+          Joined <LocalTime at={profile.createdAt} format="date" />
         </p>
 
         <div className="mt-3 flex gap-5 text-sm">

@@ -9,7 +9,8 @@ import { BarChart2, Heart, MessageCircle, MoreHorizontal, Repeat2, Share, Trash2
 import { toast } from "sonner";
 import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
 import type { FeedPost } from "@/lib/social";
-import { compactCount, relativeTime } from "@/lib/social-rules";
+import { compactCount } from "@/lib/social-rules";
+import { LocalTime } from "@/components/local-time";
 import { Avatar, NameLine, displayNameOf } from "@/components/social/identity";
 import { LinkCard } from "@/components/social/link-card";
 import { PostBody } from "@/components/social/post-body";
@@ -142,14 +143,8 @@ export function PostCard({
           <div className="flex items-center gap-1">
             <NameLine user={post.author} />
             <span className="text-sm text-fg-subtle" aria-hidden="true">·</span>
-            <Link
-              href={href}
-              className="shrink-0 text-sm text-fg-subtle hover:underline"
-              title={post.createdAt.toLocaleString()}
-            >
-              <time dateTime={post.createdAt.toISOString()} suppressHydrationWarning>
-                {relativeTime(post.createdAt)}
-              </time>
+            <Link href={href} className="shrink-0 text-sm text-fg-subtle hover:underline">
+              <LocalTime at={post.createdAt} format="ago" />
             </Link>
             <div className="ml-auto -my-1">
               <PostMenu post={post} viewerId={viewerId} isAdmin={isAdmin} />
@@ -178,15 +173,7 @@ export function PostCard({
 
         {detail && (
           <p className="mt-4 border-b border-border pb-3 text-sm text-fg-subtle">
-            <time dateTime={post.createdAt.toISOString()} suppressHydrationWarning>
-              {post.createdAt.toLocaleString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </time>
+            <LocalTime at={post.createdAt} format="stamp" />
           </p>
         )}
 
