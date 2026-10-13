@@ -4,7 +4,7 @@ import { Avatar, TeamBadge, displayNameOf } from "@/components/social/identity";
 import { relativeTime } from "@/lib/social-rules";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
+import { FeaturedMark, SPORT_EMOJI, StateMark, StatusLine } from "@/components/pick-card";
 import { FollowToggle } from "@/components/follow-toggle";
 import type { ViewerFollow } from "@/lib/follows";
 import { PICK_STATE, pickBadge, pickState } from "@/components/pick-state";
@@ -91,15 +91,15 @@ export function ParlayCard({
         variant === "row"
           ? cn(
               "border-b border-border px-4 py-3 transition-colors hover:bg-surface/60",
-              featured && "bg-brand/5 py-4",
+              featured && "bg-white/[0.035]",
               status === "won" && "shadow-[inset_2px_0_0_var(--color-hit)]",
               status === "lost" && "shadow-[inset_2px_0_0_var(--color-miss)]",
             )
           : cn(
               "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
-              featured && "border-brand/25 bg-brand/5 p-5",
-              status === "won" && !featured && "border-hit/20",
-              status === "lost" && !featured && "border-miss/20",
+              featured && "bg-white/[0.035]",
+              status === "won" && "border-hit/20",
+              status === "lost" && "border-miss/20",
             ),
         className,
       )}
@@ -147,6 +147,7 @@ export function ParlayCard({
               {dropped > 0 && <span className="text-fg-subtle">{owner ? "" : " · "}{dropped} dropped</span>}
             </span>
           )}
+          {featured && <FeaturedMark />}
         </div>
         <Badge variant={badge.variant}>
           {badge.live && (
@@ -165,22 +166,20 @@ export function ParlayCard({
             pickId={parlay.id}
             selection={parlay.title ?? `${legs.length}-leg parlay`}
             follow={follow}
-            featured={featured}
             state={state}
           />
         ) : (
           <StateMark
             state={state}
-            featured={featured}
-            idle={<Layers className={cn("text-brand", featured ? "size-5" : "size-4")} aria-hidden="true" />}
+            idle={<Layers className="size-4 text-brand" aria-hidden="true" />}
           />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <h3 className={cn("font-semibold tracking-tight text-fg", featured ? "text-2xl" : "text-lg")}>
+            <h3 className="text-lg font-semibold tracking-tight text-fg">
               {parlay.title ?? `${legs.length}-leg parlay`}
             </h3>
-            <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
+            <span className="num text-sm text-fg-muted">
               {price === null ? "—" : formatOdds(price)}
             </span>
             {parlay.book && <span className="text-[0.6875rem] text-fg-subtle">{parlay.book}</span>}

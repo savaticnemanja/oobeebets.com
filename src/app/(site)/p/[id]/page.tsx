@@ -72,7 +72,7 @@ export default async function PostPage({ params }: { params: Params }) {
   const [post, ...ancestors] = await withAttachments([found, ...chain], viewerId);
   const replies = await withAttachments(replyList, viewerId);
   const ticket = (p: FeedPost) =>
-    p.parlay ? <ParlayCard parlay={p.parlay} featured={p.id === post.id} /> : undefined;
+    p.parlay ? <ParlayCard parlay={p.parlay} /> : undefined;
 
   return (
     <SocialShell>

@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
@@ -101,19 +102,31 @@ export function StatusLine({
  */
 export function StateMark({
   state,
-  featured,
   idle,
 }: {
   state: PickState | null;
-  featured?: boolean;
   idle: React.ReactNode;
 }) {
-  const box = featured ? "size-10 -ml-1" : "size-9 -ml-1 -mt-1";
+  const box = "size-9 -ml-1 -mt-1";
   if (!state) return <span className={cn("grid shrink-0 place-items-center", box)}>{idle}</span>;
   const s = PICK_STATE[state];
   return (
     <span className={cn("grid shrink-0 place-items-center", box, s.color)} title={s.label}>
-      <s.icon className={featured ? "size-5" : "size-4"} strokeWidth={2.25} aria-hidden="true" />
+      <s.icon className="size-4" strokeWidth={2.25} aria-hidden="true" />
+    </span>
+  );
+}
+
+/**
+ * The star on a featured pick, prop or parlay — next to the league (or the
+ * sport icons) in its header. Featured items differ from the rest only by
+ * this and a pinch lighter background, and they lead their day.
+ */
+export function FeaturedMark() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-pending">
+      <Star className="size-3 fill-current" aria-hidden="true" />
+      Featured
     </span>
   );
 }
@@ -153,7 +166,8 @@ export function PickCard({
         variant === "row"
           ? cn(
               "border-b border-border px-4 py-3 transition-colors hover:bg-surface/60",
-              featured && "bg-hit-dim/20 py-4",
+              // Featured: a pinch lighter, nothing else — same size and type.
+              featured && "bg-white/[0.035]",
               // The row's answer to the card's tinted border: a thin bar down
               // the left edge, so a graded day scans as a column of results.
               pick.status === "won" && "shadow-[inset_2px_0_0_var(--color-hit)]",
@@ -161,9 +175,9 @@ export function PickCard({
             )
           : cn(
               "card-hairline p-4 transition-all duration-300 hover:border-border-strong",
-              featured && "border-hit/25 bg-hit-dim/30 p-5",
-              pick.status === "won" && !featured && "border-hit/20",
-              pick.status === "lost" && !featured && "border-miss/20",
+              featured && "bg-white/[0.035]",
+              pick.status === "won" && "border-hit/20",
+              pick.status === "lost" && "border-miss/20",
             ),
       )}
       aria-label={`Pick ${pick.rank}: ${pick.selection} at ${formatOdds(pick.price)}, ${badge.label}`}
@@ -172,6 +186,7 @@ export function PickCard({
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true">{SPORT_EMOJI[pick.sport]}</span>
           <span className="truncate text-xs text-fg-muted">{pick.league}</span>
+          {featured && <FeaturedMark />}
         </div>
         <Badge variant={badge.variant}>
           {badge.live && (
@@ -191,7 +206,6 @@ export function PickCard({
             pickId={pick.id}
             selection={pick.selection}
             follow={follow}
-            featured={featured}
             state={state}
           />
         )}
@@ -200,15 +214,10 @@ export function PickCard({
             hang a quarter-inch to the left of the headline it describes. */}
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <h3
-              className={cn(
-                "font-semibold tracking-tight text-fg",
-                featured ? "text-2xl" : "text-lg",
-              )}
-            >
+            <h3 className="text-lg font-semibold tracking-tight text-fg">
               {pick.selection}
             </h3>
-            <span className={cn("num text-fg-muted", featured ? "text-lg" : "text-sm")}>
+            <span className="num text-sm text-fg-muted">
               {formatOdds(pick.price)}
             </span>
             {pick.book && <span className="text-[0.6875rem] text-fg-subtle">{pick.book}</span>}

@@ -1,7 +1,5 @@
 import "server-only";
-import { Fragment } from "react";
 import Link from "next/link";
-import { Star } from "lucide-react";
 import { and, asc, desc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
@@ -274,17 +272,15 @@ export async function loadBoardDays({
             </Empty>
           ) : (
             <>
-              {featuredFirst(list, (pl) => pl.featured).map(({ item: pl, label }) => (
-                <Fragment key={pl.id}>
-                  {label && <FeaturedLabel tone="brand">Featured parlays</FeaturedLabel>}
-                  <ParlayCard
-                    parlay={pl}
-                    featured={pl.featured}
-                    variant="row"
-                    // Oobee's tickets can be played once the day is out.
-                    follow={publishedOn.has(d) ? playable(pl, null, auth.user.id) : undefined}
-                  />
-                </Fragment>
+              {featuredFirst(list, (pl) => pl.featured).map((pl) => (
+                <ParlayCard
+                  key={pl.id}
+                  parlay={pl}
+                  featured={pl.featured}
+                  variant="row"
+                  // Oobee's tickets can be played once the day is out.
+                  follow={publishedOn.has(d) ? playable(pl, null, auth.user.id) : undefined}
+                />
               ))}
             </>
           )}
@@ -292,8 +288,9 @@ export async function loadBoardDays({
       );
     }
 
-    // Pick tabs: every day leads with its featured picks, then the rest, each
-    // group by kick-off. Under a pill an empty today is dropped too.
+    // Pick tabs: every day leads with its featured picks (starred, a pinch
+    // lighter), then the rest, each group by kick-off. Under a pill an empty
+    // today is dropped too.
     if (sportFilter && dayPicks.length === 0) return null;
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
@@ -304,15 +301,8 @@ export async function loadBoardDays({
               : `No ${what}${CATEGORY_NOUN[category]}s this day.`}
           </Empty>
         ) : (
-          featuredFirst(dayPicks, (p) => p.featured).map(({ item: p, label }) => (
-            <Fragment key={p.id}>
-              {label && (
-                <FeaturedLabel tone="hit">
-                  Featured {category === "prop" ? "props" : "picks"}
-                </FeaturedLabel>
-              )}
-              <PickCard pick={p} follow={followFor(p)} featured={p.featured} variant="row" />
-            </Fragment>
+          featuredFirst(dayPicks, (p) => p.featured).map((p) => (
+            <PickCard key={p.id} pick={p} follow={followFor(p)} featured={p.featured} variant="row" />
           ))
         )}
       </DaySection>
@@ -402,33 +392,9 @@ function DaySection({
   );
 }
 
-/**
- * A day's list with its featured items moved to the front, order otherwise
- * kept (kick-off). `label` marks the first featured item, where the group's
- * heading goes.
- */
-function featuredFirst<T>(items: T[], isFeatured: (t: T) => boolean): { item: T; label: boolean }[] {
-  const featured = items.filter(isFeatured);
-  const rest = items.filter((t) => !isFeatured(t));
-  return [...featured.map((item, i) => ({ item, label: i === 0 })), ...rest.map((item) => ({ item, label: false }))];
-}
-
-/**
- * The heading over a day's featured group, in the group's tint so it reads as
- * one block with the rows under it.
- */
-function FeaturedLabel({ tone, children }: { tone: "hit" | "brand"; children: React.ReactNode }) {
-  return (
-    <p
-      className={cn(
-        "flex items-center gap-2 px-4 pt-3 text-[0.6875rem] font-semibold uppercase tracking-[0.2em]",
-        tone === "hit" ? "bg-hit-dim/20 text-hit" : "bg-brand/5 text-brand",
-      )}
-    >
-      <Star className="size-3.5 fill-current" aria-hidden="true" />
-      {children}
-    </p>
-  );
+/** A day's list with its featured items moved to the front, order otherwise kept (kick-off). */
+function featuredFirst<T>(items: T[], isFeatured: (t: T) => boolean): T[] {
+  return [...items.filter(isFeatured), ...items.filter((t) => !isFeatured(t))];
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
