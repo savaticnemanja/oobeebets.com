@@ -193,6 +193,47 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   await ctx.close();
 }
 
+/* ------------------------------------- 1a. phone and spend are optional */
+
+console.log("\nOnboarding without phone or spend");
+
+const quietEmail = `e2e-quiet-${Date.now()}@example.com`;
+{
+  const inviteToken = randomBytes(32).toString("base64url");
+  const inviteTokenHash = createHash("sha256").update(inviteToken).digest("hex");
+  await sql`insert into invitations (email, token_hash, status, expires_at)
+            values (${quietEmail}, ${inviteTokenHash}, 'pending', ${new Date(Date.now() + 3600_000)})`;
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/invite/${inviteToken}`);
+  await hydrated(page);
+  await page.click('button:has-text("Continue")');
+  await page.fill("#password", "correct-horse-battery");
+  await page.fill("#confirm", "correct-horse-battery");
+  await page.click('button:has-text("Continue")');
+  // A display name, and the phone left empty.
+  await page.fill("#name", "Quiet Tester");
+  await page.click('button:has-text("Continue")');
+  check(
+    await page.getByText("How much do you typically spend").isVisible(),
+    "an empty phone doesn't stop step 3",
+  );
+  await page.click('label:has-text("Prefer not to say")');
+  await page.check('input[name="agreeChoice"]');
+  await page.click('button:has-text("Finish")');
+  await page.waitForURL("**/home**", { timeout: 15000 }).catch(() => {});
+  check(page.url().includes("/home"), "onboarding without phone or spend lands on Home", page.url());
+
+  const [quiet] = await sql`select phone, monthly_spend_band, display_name from users where email = ${quietEmail}`;
+  check(
+    quiet?.phone === null && quiet?.monthly_spend_band === null,
+    "no phone and no spend band are stored as empty",
+    `phone=${quiet?.phone} band=${quiet?.monthly_spend_band}`,
+  );
+  await ctx.close();
+}
+
 /* ---------------------------------------------- 1b. /picks is gated */
 
 console.log("\nSigned-out visitors are gated");
@@ -609,9 +650,9 @@ console.log("\nPassword reset");
 
 // The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
-await sql`delete from users where email in (${testEmail}, ${secondAdmin})`;
+await sql`delete from users where email in (${testEmail}, ${quietEmail}, ${secondAdmin})`;
 await dropTester(sql, TESTER_EMAIL);
-await sql`delete from invitations where email = ${testEmail}`;
+await sql`delete from invitations where email in (${testEmail}, ${quietEmail})`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;
 await dropSlate(sql, latestSlate);
 await browser.close();

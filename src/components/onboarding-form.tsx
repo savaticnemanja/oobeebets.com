@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PhoneField, toE164 } from "@/components/phone-field";
 import { Reveal } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
+import { HelpLine } from "@/components/help-line";
 import { acceptInviteAction } from "@/app/actions/invite";
 import { nameSchema, passwordSchema, SPEND_BAND_LABELS, spendBandValues } from "@/lib/validation";
 import type { ActionState } from "@/lib/validation";
@@ -41,6 +42,9 @@ const STEP_FIELDS: Record<Step, Field[]> = {
   3: ["name", "phone"],
   4: ["spendBand", "agree"],
 };
+
+/** The spend question's "Prefer not to say" — posted as no answer. */
+const SKIP = "skip" as const;
 
 type Values = {
   password: string;
@@ -79,13 +83,13 @@ function validate(field: Field, v: Values): string | undefined {
       return parsed.success ? undefined : parsed.error.issues[0]?.message;
     }
     case "phone": {
-      if (!v.phone.trim()) return "Enter a phone number";
+      if (!v.phone.trim()) return undefined;
       return isValidPhoneNumber(v.phone, v.country)
         ? undefined
         : "That doesn't look like a valid number for that country";
     }
     case "spendBand":
-      return v.spendBand ? undefined : "Pick a range";
+      return undefined;
     case "agree":
       return v.agree ? undefined : "Confirm you're 21 or older and accept the Terms to finish";
   }
@@ -203,7 +207,7 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
         {/* E.164 is what the server stores; the formatted national number is
             only ever a display concern. */}
         <input type="hidden" name="phone" value={toE164(values.country, values.phone) ?? values.phone.trim()} />
-        <input type="hidden" name="spendBand" value={values.spendBand} />
+        <input type="hidden" name="spendBand" value={values.spendBand === SKIP ? "" : values.spendBand} />
         <input type="hidden" name="agree" value={values.agree ? "yes" : ""} />
 
         {/* --------------------------------------------------------- step 1 */}
@@ -264,22 +268,33 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
         {/* --------------------------------------------------------- step 3 */}
         <div className={step === 3 ? "space-y-4" : "hidden"}>
           <div>
-            <Label htmlFor="name">Full name</Label>
+            <Label htmlFor="name">Display name</Label>
             <Input
               id="name"
               name="name"
-              autoComplete="name"
+              autoComplete="nickname"
               value={values.name}
               onChange={(e) => setField("name", e.target.value)}
               onBlur={() => markTouched("name")}
               className="mt-1.5"
               aria-invalid={Boolean(errorFor("name"))}
-              aria-describedby={errorFor("name") ? "name-error" : undefined}
+              aria-describedby={errorFor("name") ? "name-error" : "name-hint"}
             />
-            <FieldError id="name-error" message={errorFor("name")} />
+            {errorFor("name") ? (
+              <FieldError id="name-error" message={errorFor("name")} />
+            ) : (
+              // It becomes the public name on posts and the profile, and seeds
+              // the @handle — which used to happen without a word.
+              <p id="name-hint" className="mt-1.5 text-xs text-fg-subtle">
+                Shown on your profile and posts, so it doesn&apos;t have to be your real name. You
+                can change it, and your @handle, in your account.
+              </p>
+            )}
           </div>
           <div>
-            <Label htmlFor="phone-local">Phone</Label>
+            <Label htmlFor="phone-local">
+              Phone <span className="font-normal text-fg-subtle">(optional)</span>
+            </Label>
             <div className="mt-1.5">
               <PhoneField
                 id="phone-local"
@@ -289,10 +304,16 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
                 onValueChange={(v) => setField("phone", v)}
                 onBlur={() => markTouched("phone")}
                 invalid={Boolean(errorFor("phone"))}
-                describedBy={errorFor("phone") ? "phone-error" : undefined}
+                describedBy={errorFor("phone") ? "phone-error" : "phone-hint"}
               />
             </div>
-            <FieldError id="phone-error" message={errorFor("phone")} />
+            {errorFor("phone") ? (
+              <FieldError id="phone-error" message={errorFor("phone")} />
+            ) : (
+              <p id="phone-hint" className="mt-1.5 text-xs text-fg-subtle">
+                Only for reaching you about your account. Never shown to anyone.
+              </p>
+            )}
           </div>
         </div>
 
@@ -300,10 +321,14 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
         <div className={step === 4 ? "space-y-4" : "hidden"}>
           <fieldset>
             <legend className="text-sm text-fg-muted">
-              How much do you typically spend on sports betting a month?
+              How much do you typically spend on sports betting a month?{" "}
+              <span className="text-fg-subtle">(optional)</span>
             </legend>
+            <p className="mt-1 text-xs text-fg-subtle">
+              Never shown to anyone — it helps us understand who&apos;s testing.
+            </p>
             <div className="mt-4 grid gap-2">
-              {spendBandValues.map((value) => (
+              {([...spendBandValues, SKIP] as const).map((value) => (
                 <label
                   key={value}
                   className="flex cursor-pointer items-center rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg transition-colors has-[:checked]:border-brand/60 has-[:checked]:bg-brand/5 hover:border-border-strong"
@@ -319,7 +344,7 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
                     }}
                     className="peer sr-only"
                   />
-                  <span>{SPEND_BAND_LABELS[value]}</span>
+                  <span>{value === SKIP ? "Prefer not to say" : SPEND_BAND_LABELS[value]}</span>
                   <span
                     className="ml-auto size-4 shrink-0 rounded-full border border-border-strong peer-checked:border-brand peer-checked:bg-brand"
                     aria-hidden="true"
@@ -329,6 +354,10 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
             </div>
           </fieldset>
           <FieldError id="spendBand-error" message={errorFor("spendBand")} />
+          {/* Right where someone has just told us how much they spend. */}
+          <p className="text-xs text-fg-subtle">
+            <HelpLine />
+          </p>
 
           {/* Opens in a new tab: following it here would leave the wizard
               and lose the answers above. */}
