@@ -83,6 +83,26 @@ export async function getHomeFollowing(
   return { items, nextCursor: feed.nextCursor };
 }
 
+/** For you's cursor: "<page>.<asOf in ms>". */
+export function forYouCursor(page: number, asOf: Date): string {
+  return `${page}.${asOf.getTime()}`;
+}
+
+/**
+ * Reads a For you cursor back. The moment has to be in the past and recent —
+ * a scroll that has sat open for a day starts over from now rather than
+ * ranking a day-old snapshot.
+ */
+export function parseForYouCursor(cursor: string): { page: number; asOf: Date } | null {
+  const [p, t] = cursor.split(".");
+  const page = Number.parseInt(p, 10);
+  if (!(page >= 1 && page <= 50)) return null;
+  const ms = Number(t);
+  const now = Date.now();
+  const fresh = Number.isSafeInteger(ms) && ms <= now + 60_000 && ms > now - 24 * 60 * 60 * 1000;
+  return { page, asOf: fresh ? new Date(ms) : new Date(now) };
+}
+
 /** How many shared parlays a For you page carries, and how often one appears. */
 const PARLAYS_PER_PAGE = 6;
 const POSTS_BETWEEN_PARLAYS = 5;
@@ -96,10 +116,11 @@ const POSTS_BETWEEN_PARLAYS = 5;
 export async function getHomeForYou(
   viewerId: string,
   pageIndex = 0,
-): Promise<{ items: FeedItem[]; nextPage: number | null }> {
+  asOf: Date = new Date(),
+): Promise<{ items: FeedItem[]; nextPage: number | null; asOf: Date }> {
   const [feed, parlayPosts] = await Promise.all([
-    getForYouFeed(viewerId, pageIndex),
-    getRecentParlayPosts(viewerId, pageIndex * PARLAYS_PER_PAGE, PARLAYS_PER_PAGE + 1),
+    getForYouFeed(viewerId, pageIndex, asOf),
+    getRecentParlayPosts(viewerId, pageIndex * PARLAYS_PER_PAGE, PARLAYS_PER_PAGE + 1, asOf),
   ]);
   const extra = await postItems(parlayPosts.slice(0, PARLAYS_PER_PAGE), viewerId);
 
@@ -111,5 +132,5 @@ export async function getHomeForYou(
   items.push(...extra);
 
   const moreParlays = parlayPosts.length > PARLAYS_PER_PAGE;
-  return { items, nextPage: feed.nextPage ?? (moreParlays ? pageIndex + 1 : null) };
+  return { items, nextPage: feed.nextPage ?? (moreParlays ? pageIndex + 1 : null), asOf };
 }

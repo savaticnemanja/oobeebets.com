@@ -97,9 +97,20 @@ function repostedBy(viewerId: string | null): SQL<boolean> {
  * gravity 1.5. A reply or a repost counts double a like — each costs more than
  * a tap and says more about whether a post started something — and the +1
  * lets a brand-new post with nothing yet still outrank a stale one.
+ *
+ * Age is measured to `asOf`, not to now(): one scroll down the feed ranks
+ * against one moment, so the order holds still between the chunks it loads.
  */
-const HOT_SCORE = sql<number>`((${LIKE_COUNT}) + 2 * (${REPLY_COUNT}) + 2 * (${REPOST_COUNT}) + 1)
-  / power(extract(epoch from (now() - ${posts.createdAt})) / 3600 + 2, 1.5)`;
+function hotScore(asOf: Date) {
+  return sql<number>`((${LIKE_COUNT}) + 2 * (${REPLY_COUNT}) + 2 * (${REPOST_COUNT}) + 1)
+  / power(greatest(extract(epoch from (${asOf.toISOString()}::timestamptz - ${posts.createdAt})), 0) / 3600 + 2, 1.5)`;
+}
+
+/** Posts from the `days` before `asOf`, and none after it. */
+function inWindow(asOf: Date, days: number) {
+  const at = asOf.toISOString();
+  return sql`${posts.createdAt} <= ${at}::timestamptz and ${posts.createdAt} > ${at}::timestamptz - make_interval(days => ${days}::int)`;
+}
 
 function selectPosts(viewerId: string | null) {
   return db
@@ -217,16 +228,22 @@ export async function getFollowingFeed(viewerId: string, before?: string): Promi
 
 /**
  * For you: the default curation, and the whole feed for anyone who follows
- * nobody yet. Every post and reply from the last 30 days, ranked by HOT_SCORE.
- * Paged by offset rather than cursor, because a ranking that moves while you
- * read has no stable "older than this one".
+ * nobody yet. Every post and reply from the 30 days before `asOf`, ranked by
+ * hotScore. Paged by offset rather than cursor, because a ranking has no
+ * stable "older than this one" — so every page of one scroll is ranked as of
+ * the same moment (the cursor carries it), and a post that goes up meanwhile
+ * waits for the next visit rather than shifting every page after it by one.
  */
-export async function getForYouFeed(viewerId: string | null, pageIndex = 0): Promise<FeedPage & { nextPage: number | null }> {
+export async function getForYouFeed(
+  viewerId: string | null,
+  pageIndex = 0,
+  asOf: Date = new Date(),
+): Promise<FeedPage & { nextPage: number | null }> {
   // Shared parlays take turns with these instead of competing on the score —
   // see getRecentParlayPosts and lib/home-feed.ts.
   const rows = await selectPosts(viewerId)
-    .where(and(sql`${posts.createdAt} > now() - interval '30 days'`, isNull(posts.parlayId)))
-    .orderBy(desc(HOT_SCORE), desc(posts.createdAt))
+    .where(and(inWindow(asOf, 30), isNull(posts.parlayId)))
+    .orderBy(desc(hotScore(asOf)), desc(posts.createdAt), desc(posts.id))
     .limit(FEED_PAGE_SIZE + 1)
     .offset(pageIndex * FEED_PAGE_SIZE);
   const result = page(rows, FEED_PAGE_SIZE);
@@ -357,9 +374,14 @@ export async function getFollowingReposts(opts: {
  * in between its ranked posts. A fresh ticket has no engagement to rank on
  * yet, so on the score alone it would never surface.
  */
-export async function getRecentParlayPosts(viewerId: string | null, offset: number, limit: number): Promise<FeedPost[]> {
+export async function getRecentParlayPosts(
+  viewerId: string | null,
+  offset: number,
+  limit: number,
+  asOf: Date = new Date(),
+): Promise<FeedPost[]> {
   const rows = await selectPosts(viewerId)
-    .where(and(isNotNull(posts.parlayId), sql`${posts.createdAt} > now() - interval '7 days'`))
+    .where(and(isNotNull(posts.parlayId), inWindow(asOf, 7)))
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(limit)
     .offset(offset);

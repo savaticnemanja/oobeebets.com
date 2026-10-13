@@ -20,6 +20,16 @@ export interface Chunk {
 export function LoadMore({ next, load }: { next: string | null; load: (cursor: string) => Promise<Chunk> }) {
   const [chunks, setChunks] = useState<React.ReactNode[]>([]);
   const [cursor, setCursor] = useState(next);
+  // The page above can re-render under this — an action revalidated it, say
+  // a post went up — and hand down a new `next`. Until a chunk has loaded,
+  // that one is right and the old one is not: the first page now ends
+  // somewhere else, and continuing from where it used to end skips or
+  // repeats rows. Once chunks are showing, they carry on from their own.
+  const [seenNext, setSeenNext] = useState(next);
+  if (next !== seenNext) {
+    setSeenNext(next);
+    if (chunks.length === 0) setCursor(next);
+  }
   const [failed, setFailed] = useState(false);
   const [pending, start] = useTransition();
   const sentinel = useRef<HTMLDivElement>(null);

@@ -1,7 +1,7 @@
 "use server";
 
 import { getAuth } from "@/lib/auth";
-import { getHomeFollowing, getHomeForYou, postItems } from "@/lib/home-feed";
+import { forYouCursor, getHomeFollowing, getHomeForYou, parseForYouCursor, postItems } from "@/lib/home-feed";
 import { getProfilePosts, type ProfileTab } from "@/lib/social";
 import { FeedList } from "@/components/social/feed";
 import { loadBoardDays } from "@/app/(site)/picks/board-days";
@@ -35,12 +35,12 @@ export async function loadHomeAction(tab: "for-you" | "following", cursor: strin
       next: feed.nextCursor,
     };
   }
-  const page = Number.parseInt(cursor, 10);
-  if (!(page >= 1 && page <= 50)) throw new Error("Bad cursor");
-  const feed = await getHomeForYou(auth.user.id, page);
+  const at = parseForYouCursor(cursor);
+  if (!at) throw new Error("Bad cursor");
+  const feed = await getHomeForYou(auth.user.id, at.page, at.asOf);
   return {
     node: <FeedList items={feed.items} viewerId={auth.user.id} isAdmin={auth.isAdmin} />,
-    next: feed.nextPage !== null && feed.nextPage <= 50 ? String(feed.nextPage) : null,
+    next: feed.nextPage !== null && feed.nextPage <= 50 ? forYouCursor(feed.nextPage, feed.asOf) : null,
   };
 }
 

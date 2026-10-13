@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { PICKS_PER_SLATE } from "@/lib/board";
 import { getFollowingCount, getWhoToFollow } from "@/lib/social";
-import { getHomeFollowing, getHomeForYou } from "@/lib/home-feed";
+import { forYouCursor, getHomeFollowing, getHomeForYou } from "@/lib/home-feed";
 import { Composer } from "@/components/social/composer";
 import { EmptyFeed, FeedList, FeedTabs } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
@@ -54,10 +54,15 @@ export default async function HomePage({
     getWhoToFollow(viewerId, 5),
   ]);
 
-  // The cursor for infinite scroll: the oldest post's id on Following, the
-  // next page number on the ranked For you.
+  // The cursor for infinite scroll: the oldest post's id on Following; on the
+  // ranked For you, the next page number and the moment this page was ranked
+  // at, so every later page is ranked at that same moment.
   const next =
-    "nextCursor" in feed ? feed.nextCursor : feed.nextPage !== null ? String(feed.nextPage) : null;
+    "nextCursor" in feed
+      ? feed.nextCursor
+      : feed.nextPage !== null
+        ? forYouCursor(feed.nextPage, feed.asOf)
+        : null;
 
   const firstPage = !before && pageIndex === 0;
   const viewerName = displayNameOf(auth.user);

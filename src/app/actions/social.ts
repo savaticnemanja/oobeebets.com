@@ -223,7 +223,12 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
       .where(and(eq(postLikes.userId, auth.user.id), eq(postLikes.postId, parsed.data.postId)));
   }
 
-  revalidateSocial();
+  // Nothing is revalidated, here or on reposts and votes. Any revalidation
+  // re-renders the page the tap came from, and on For you — ranked by
+  // engagement — that re-ranked the first page under the rows infinite scroll
+  // had already added, so posts repeated or went missing. The button keeps
+  // its own state (useKeptOptimistic), and every page renders fresh when it
+  // is next opened.
   return { ok: true };
 }
 
@@ -278,7 +283,7 @@ export async function votePollAction(postId: string, optionId: string): Promise<
     .insert(pollVotes)
     .values({ postId: ids.data.postId, userId: auth.user.id, optionId: ids.data.optionId })
     .onConflictDoNothing();
-  revalidateSocial();
+  // Not revalidated — see setPostLikeAction.
   return { ok: true };
 }
 
@@ -326,7 +331,7 @@ export async function setPostRepostAction(postId: string, reposted: boolean): Pr
       .where(and(eq(postReposts.userId, auth.user.id), eq(postReposts.postId, parsed.data.postId)));
   }
 
-  revalidateSocial(auth.user.username);
+  // Not revalidated — see setPostLikeAction.
   return { ok: true, message: parsed.data.reposted ? "Reposted." : undefined };
 }
 
