@@ -6,6 +6,7 @@ import {
   safeNextPath,
   verifyBetaGateToken,
 } from "@/lib/beta-gate";
+import { siteNoIndex } from "@/lib/indexing";
 
 /**
  * Holds the beta deployment shut until a visitor knows the password.
@@ -14,6 +15,9 @@ import {
  * is absent — main, production — the first line of `middleware` hands every
  * request straight back, so this file costs a function call and changes no
  * behaviour.
+ *
+ * The one exception is SITE_NOINDEX: a deployment that sets it without the
+ * gate is open to everyone but still marks every response noindex.
  */
 
 export const config = {
@@ -41,7 +45,7 @@ const ALWAYS_OPEN = new Set([
 
 export async function middleware(request: NextRequest) {
   const password = betaGatePassword();
-  if (!password) return NextResponse.next();
+  if (!password) return siteNoIndex() ? noIndex(NextResponse.next()) : NextResponse.next();
 
   const { pathname, search } = request.nextUrl;
 
