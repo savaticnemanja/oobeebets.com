@@ -127,6 +127,13 @@
       "when": 1791907572400,
       "tag": "0017_selection_manual_hold",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792003506811,
+      "tag": "0018_player_stats",
+      "breakpoints": true
     }
   ]
 }

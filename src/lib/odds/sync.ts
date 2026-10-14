@@ -3,6 +3,7 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { games, lines, oddsSync, picks, selections } from "@/db/schema";
 import { addDays, zonedTimeToUtc } from "@/lib/slate-date";
+import { claim, release } from "@/lib/sync-claim";
 import { FEED_LEAGUES, GAME_MARKETS, LEAGUE_CONFIG, type FeedLeague } from "./markets";
 
 /**
@@ -94,33 +95,6 @@ async function call<T>(path: string, params: Record<string, string>): Promise<T>
     throw new FeedError(`Odds API ${res.status} on ${path}: ${body}`);
   }
   return (await res.json()) as T;
-}
-
-/**
- * Takes the right to refresh `key` if it is older than `ttlMin`. True for
- * exactly one caller per window — the update's WHERE is the lock.
- */
-async function claim(key: string, ttlMin: number): Promise<boolean> {
-  const rows = await db.execute<{ key: string }>(sql`
-    insert into ${oddsSync} (key, synced_at) values (${key}, now())
-    on conflict (key) do update set synced_at = now(), last_error = null
-    where ${oddsSync.syncedAt} < now() - make_interval(mins => ${ttlMin})
-    returning key
-  `);
-  return rows.length > 0;
-}
-
-/** A failed refresh retries after two minutes rather than a whole TTL. */
-async function release(key: string, ttlMin: number, err: unknown) {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`[odds] ${key}: ${message}`);
-  await db
-    .update(oddsSync)
-    .set({
-      syncedAt: sql`now() - make_interval(mins => ${Math.max(0, ttlMin - 2)})`,
-      lastError: message.slice(0, 500),
-    })
-    .where(eq(oddsSync.key, key));
 }
 
 /* --------------------------------------------------------- feed payloads */

@@ -915,19 +915,108 @@ export const parlaySelectionLegs = pgTable(
 );
 
 /**
- * When each slice of the feed was last fetched, so pages can trigger a sync
+ * When each slice of a feed was last fetched, so pages can trigger a sync
  * without a stampede: whoever moves `syncedAt` forward first does the fetch,
- * everyone else reads what is already there. Also keeps the provider's
- * remaining-credit count, which /admin/slate shows.
+ * everyone else reads what is already there (lib/sync-claim.ts). Also keeps
+ * the odds provider's remaining-credit count, which /admin/slate shows.
+ *
+ * Named for the odds feed, which came first; the player-stats feed keeps its
+ * timestamps here too, under its own keys.
  */
 export const oddsSync = pgTable("odds_sync", {
-  /** e.g. "odds:MLB:2026-10-07", "props:<gameId>", "scores:NFL", "quota". */
+  /**
+   * Odds: "odds:MLB:2026-10-07", "props:<gameId>", "scores:NFL", "quota".
+   * Player stats: "stats:NBA:2025:regular", "gamelog:nba:246:2025".
+   */
   key: text("key").primaryKey(),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull(),
   creditsRemaining: integer("credits_remaining"),
   creditsUsed: integer("credits_used"),
   lastError: text("last_error"),
 });
+
+/* ----------------------------------------------------------- player stats */
+
+/**
+ * A player as the stats provider (BALLDONTLIE) knows them — one row per
+ * league, since the provider numbers each league's players separately. The
+ * id is "<league>:<provider id>" in lower case ("nba:246"), which is what
+ * /players/<league>/<id> links carry.
+ *
+ * team and position are the latest the feed reported; a season row keeps the
+ * team the player had that season.
+ */
+export const statPlayers = pgTable(
+  "stat_players",
+  {
+    id: text("id").primaryKey(),
+    /** "NFL" | "NBA" | "MLB" | "NHL" — the leagues in lib/players/catalog.ts. */
+    league: text("league").notNull(),
+    providerId: text("provider_id").notNull(),
+    name: text("name").notNull(),
+    teamAbbr: text("team_abbr"),
+    position: text("position"),
+    jersey: text("jersey"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("stat_players_league_provider_unique").on(t.league, t.providerId)],
+);
+
+/**
+ * One player's numbers for one season — the rows of the /players tables.
+ *
+ * `stats` holds numbers under the catalog's own keys (lib/players/catalog.ts),
+ * not the provider's, so the pages never learn whose feed it is. A key that
+ * is missing means the feed had no value, which is not the same as zero.
+ *
+ * A season is the provider's: the year it starts in, so NBA 2025 is 2025–26.
+ */
+export const playerSeasonStats = pgTable(
+  "player_season_stats",
+  {
+    league: text("league").notNull(),
+    season: integer("season").notNull(),
+    seasonType: text("season_type", { enum: ["regular", "postseason"] }).notNull(),
+    playerId: text("player_id")
+      .notNull()
+      .references(() => statPlayers.id, { onDelete: "cascade" }),
+    teamAbbr: text("team_abbr"),
+    gamesPlayed: integer("games_played"),
+    stats: jsonb("stats").$type<Record<string, number>>().notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.league, t.season, t.seasonType, t.playerId] }),
+    index("player_season_stats_player_idx").on(t.playerId),
+  ],
+);
+
+/**
+ * One player's line in one game — the game log on a player's page. Fetched
+ * per player when someone opens the page, not for the whole league.
+ */
+export const playerGameStats = pgTable(
+  "player_game_stats",
+  {
+    playerId: text("player_id")
+      .notNull()
+      .references(() => statPlayers.id, { onDelete: "cascade" }),
+    gameId: text("game_id").notNull(),
+    season: integer("season").notNull(),
+    seasonType: text("season_type", { enum: ["regular", "postseason"] }).notNull(),
+    playedAt: timestamp("played_at", { withTimezone: true }).notNull(),
+    teamAbbr: text("team_abbr"),
+    opponentAbbr: text("opponent_abbr"),
+    home: boolean("home"),
+    teamScore: integer("team_score"),
+    opponentScore: integer("opponent_score"),
+    stats: jsonb("stats").$type<Record<string, number>>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.playerId, t.gameId] }),
+    index("player_game_stats_player_season_idx").on(t.playerId, t.season, t.playedAt),
+  ],
+);
 
 /* -------------------------------------------------------------- audit log */
 
@@ -1016,6 +1105,9 @@ export type Game = typeof games.$inferSelect;
 export type Line = typeof lines.$inferSelect;
 export type Selection = typeof selections.$inferSelect;
 export type LinkPreview = typeof linkPreviews.$inferSelect;
+export type StatPlayer = typeof statPlayers.$inferSelect;
+export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
+export type PlayerGameStat = typeof playerGameStats.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type Role = (typeof roleEnum.enumValues)[number];

@@ -200,6 +200,59 @@ export async function dropSlate(sql, date) {
   await sql`delete from slates where date = ${date}`;
 }
 
+/* ---------------------------------------------------------- player stats */
+
+/**
+ * An invented NBA season for the Players pages: 1999 (1999–00), far enough
+ * back that no real sync ever writes it. Sixty players, so the table has a
+ * second page to scroll into; player 1 leads in points and has a game log.
+ * Ids are "nba:fx-<n>", so dropping them can't touch a real player.
+ */
+export const STATS_SEASON = 1999;
+export const STATS_PLAYERS = 60;
+
+export async function seedStatsFixture(sql) {
+  await dropStatsFixture(sql);
+  const players = Array.from({ length: STATS_PLAYERS }, (_, i) => {
+    const n = i + 1;
+    return { id: `nba:fx-${n}`, league: "NBA", provider_id: `fx-${n}`, name: `Fixture Player ${String(n).padStart(2, "0")}`, team_abbr: "FXT", position: "G" };
+  });
+  await sql`insert into stat_players ${sql(players)}`;
+  await sql`insert into player_season_stats ${sql(
+    players.map((p, i) => ({
+      league: "NBA",
+      season: STATS_SEASON,
+      season_type: "regular",
+      player_id: p.id,
+      team_abbr: "FXT",
+      // Points fall with the number, so player 01 leads and 60 trails; the
+      // last ten played too little to qualify.
+      games_played: i < 50 ? 70 : 10,
+      stats: { gp: i < 50 ? 70 : 10, min: 30, pts: 40 - i * 0.5, reb: 5 + (i % 7), ast: 3 + (i % 5), fga: 15, fgm: 7, fg_pct: 0.467 },
+    })),
+  )}`;
+  await sql`insert into player_game_stats ${sql(
+    Array.from({ length: 3 }, (_, g) => ({
+      player_id: "nba:fx-1",
+      game_id: `fx-game-${g}`,
+      season: STATS_SEASON,
+      season_type: "regular",
+      played_at: new Date(Date.UTC(2000, 0, 10 + g)),
+      team_abbr: "FXT",
+      opponent_abbr: "OPP",
+      home: g % 2 === 0,
+      team_score: 100 + g,
+      opponent_score: 101,
+      stats: { min: 34, pts: 30 + g, reb: 6, ast: 4 },
+    })),
+  )}`;
+}
+
+export async function dropStatsFixture(sql) {
+  // Season and game rows cascade with the players.
+  await sql`delete from stat_players where id like 'nba:fx-%'`;
+}
+
 /**
  * The app's own slate day, computed the same way the app computes it — a
  * betting day starts at 04:00 ET, so between 00:00 and 08:00 UTC the UTC

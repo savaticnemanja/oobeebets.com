@@ -12,21 +12,30 @@ export function FeedTabs({
   active,
   sticky = false,
   actions,
+  label = "Feed",
 }: {
   tabs: Array<{ key: string; label: string; href: string }>;
   active: string;
-  sticky?: boolean;
+  /**
+   * true: stuck straight under the phone's top bar. A string: the sticky
+   * offset classes for a strip that sits under another sticky row (Players'
+   * tabs, under its sport pills).
+   */
+  sticky?: boolean | string;
   /** Icons at the strip's right end — a page's info tip, say. */
   actions?: React.ReactNode;
+  /** The nav's accessible name. */
+  label?: string;
 }) {
   return (
     <nav
-      aria-label="Feed"
+      aria-label={label}
       className={cn(
         "flex border-b border-border bg-black/80 backdrop-blur-xl",
         // On a phone it slides away with the top bar (by its own height too)
         // and comes back with it; see scroll-chrome.tsx.
-        sticky && "sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*3.0625rem)] z-30 sm:top-0",
+        sticky === true && "sticky top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*3.0625rem)] z-30 sm:top-0",
+        typeof sticky === "string" && cn("sticky z-30", sticky),
       )}
     >
       {tabs.map((tab) => {

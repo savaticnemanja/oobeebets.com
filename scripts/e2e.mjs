@@ -23,7 +23,17 @@ import { chromium } from "playwright";
 // package.json.
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
-import { createSlate, dropSlate, ensureTester, dropTester, slateDateString } from "./fixtures.mjs";
+import {
+  STATS_PLAYERS,
+  STATS_SEASON,
+  createSlate,
+  dropSlate,
+  dropStatsFixture,
+  ensureTester,
+  dropTester,
+  seedStatsFixture,
+  slateDateString,
+} from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
@@ -651,6 +661,66 @@ console.log("\nPassword reset");
   check(page.url().includes("/home"), "signs in with the new password");
   await ctx.close();
 }
+
+/* ------------------------------------------------------------- 7. players */
+
+console.log("\nPlayers");
+
+await seedStatsFixture(sql);
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  const rows = page.locator('[role="table"] [role="row"].cursor-pointer');
+
+  // The nav leads there.
+  await page.goto(`${APP_URL}/home`);
+  await page.getByRole("link", { name: "Players" }).first().click();
+  await page.waitForURL(/\/players/);
+  check(true, "sidebar links to Players");
+
+  await page.goto(`${APP_URL}/players?sport=nba&season=${STATS_SEASON}&all=1`);
+  await hydrated(page, '[role="table"]');
+  check((await rows.count()) === 50, "first page is fifty rows", `rows=${await rows.count()}`);
+  await page.mouse.wheel(0, 20_000);
+  await page.waitForFunction((n) => document.querySelectorAll('[role="table"] [role="row"].cursor-pointer').length === n, STATS_PLAYERS, { timeout: 15_000 }).catch(() => {});
+  check((await rows.count()) === STATS_PLAYERS, "scrolling loads the rest", `rows=${await rows.count()}`);
+
+  // Points are sorted most-first; a click on the header flips it.
+  await page.getByRole("link", { name: "Sort by Points per game" }).click();
+  await page.waitForURL(/dir=asc/);
+  await page.waitForFunction(() => document.querySelector('[role="table"] [role="row"].cursor-pointer')?.textContent?.includes("Fixture Player 60"));
+  check(true, "header click sorts ascending, fewest points first");
+
+  // The season picker offers the season, marked current.
+  await page.getByRole("button", { name: /^Season:/ }).click();
+  const option = page.getByRole("menuitem", { name: /1999–00/ });
+  check((await option.getAttribute("aria-current")) === "true", "season picker marks the season shown");
+  await page.keyboard.press("Escape");
+
+  // A tap anywhere on a row opens the player.
+  await rows.first().locator('[role="cell"]').last().click();
+  await page.waitForURL(/\/players\/nba\/fx-/);
+  await page.getByText("By season").waitFor();
+  check(true, "a row opens the player's page");
+  await ctx.close();
+}
+{
+  // On a phone, Players lives in the drawer; the bottom bar keeps its five.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/players?sport=nba&season=${STATS_SEASON}`);
+  await hydrated(page, "button");
+  check((await page.locator('nav.fixed a[href="/players"]').count()) === 0, "Players is not in the bottom bar");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  const link = page.getByRole("dialog").getByRole("link", { name: "Players" });
+  check(await link.isVisible(), "Players is in the phone drawer");
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  check(width <= 390, "the table never scrolls the page sideways", `scrollWidth=${width}`);
+  await ctx.close();
+}
+await dropStatsFixture(sql);
 
 /* ------------------------------------------------------------- teardown */
 

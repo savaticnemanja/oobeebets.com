@@ -18,6 +18,7 @@ import { playable } from "@/components/social/parlay-row";
 import { FeedTabs } from "@/components/social/feed";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
+import { StatCell } from "@/components/stat-cell";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -117,8 +118,8 @@ export default async function StatsPage({
         <>
           {/* ---------------------------------------------------------- numbers */}
           <dl className="grid grid-cols-2 border-b border-border">
-            <Cell label="Bets logged" value={singles.length + parlays.length} sub={`${singles.length} pick${singles.length === 1 ? "" : "s"} · ${parlays.length} parlay${parlays.length === 1 ? "" : "s"}`} />
-            <Cell
+            <StatCell label="Bets logged" value={singles.length + parlays.length} sub={`${singles.length} pick${singles.length === 1 ? "" : "s"} · ${parlays.length} parlay${parlays.length === 1 ? "" : "s"}`} />
+            <StatCell
               label="Record"
               value={`${stats.combined.wins}–${stats.combined.losses}`}
               sub={
@@ -129,12 +130,12 @@ export default async function StatsPage({
                     : undefined
               }
             />
-            <Cell
+            <StatCell
               label="Net units"
               value={stats.combined.settled === 0 ? "—" : formatUnits(stats.combined.netUnits)}
               tone={stats.combined.settled === 0 ? undefined : stats.combined.netUnits >= 0 ? "hit" : "miss"}
             />
-            <Cell label="Still running" value={running} sub="not graded yet" tone="brand" />
+            <StatCell label="Still running" value={running} sub="not graded yet" tone="brand" />
           </dl>
 
           {/* ------------------------------------------------ picks v parlays */}
@@ -259,33 +260,6 @@ function Origin({ parlay, mine }: { parlay: ParlayView; mine: boolean }) {
       ? "Played · Oobee's parlay"
       : `Played · from @${parlay.ownerUsername}`;
   return <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.15em] text-fg-subtle">{text}</p>;
-}
-
-function Cell({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: React.ReactNode;
-  tone?: "hit" | "miss" | "brand";
-}) {
-  return (
-    <div className="border-border px-4 py-3 odd:border-r [&:nth-child(-n+2)]:border-b">
-      <dt className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">{label}</dt>
-      <dd
-        className={cn(
-          "num mt-1 text-2xl font-bold tracking-tight",
-          tone === "hit" ? "text-hit" : tone === "miss" ? "text-miss" : tone === "brand" ? "text-brand" : "text-fg",
-        )}
-      >
-        {value}
-        {sub && <span className="mt-0.5 block text-xs font-normal tracking-normal text-fg-subtle">{sub}</span>}
-      </dd>
-    </div>
-  );
 }
 
 function RecordRow({ label, record }: { label: string; record: MyBets["singles"] }) {

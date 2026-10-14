@@ -9,6 +9,10 @@ import { loadCommunityChunk } from "@/app/(site)/community/community-feed";
 import { categoryFromParam, sportFilterFromParam, tabFromParam } from "@/lib/board";
 import { isValidSlateDate } from "@/lib/slate-date";
 import type { Chunk } from "@/components/load-more";
+import { GridRows } from "@/components/players/stats-grid";
+import { getSeasons } from "@/lib/players/queries";
+import { leagueFromParam } from "@/lib/players/catalog";
+import { resolveView, tableRows, type PlayersParams } from "@/app/(site)/players/view";
 
 /**
  * The next chunk of a list, for infinite scroll (components/load-more.tsx).
@@ -74,4 +78,22 @@ export async function loadCommunityAction(sport: string, before: string): Promis
   const auth = await viewer();
   if (!UUID.test(before)) throw new Error("Bad cursor");
   return loadCommunityChunk({ auth, sportFilter: sportFilterFromParam(sport), before });
+}
+
+/**
+ * The next fifty rows of a Players table. `href` is the page's own canonical
+ * link (playersHref), so the chunk is read exactly as the page was; `offset`
+ * is where the page left off.
+ */
+export async function loadPlayersAction(href: string, offset: string): Promise<Chunk> {
+  await viewer();
+  const at = Number(offset);
+  if (!href.startsWith("/players?") || !Number.isInteger(at) || at <= 0 || at > 10_000) throw new Error("Bad cursor");
+  const params = Object.fromEntries(new URLSearchParams(href.slice("/players?".length))) as PlayersParams;
+  const view = resolveView(params, await getSeasons(leagueFromParam(params.sport).league));
+  const { rows, next } = await tableRows(view, at);
+  return {
+    node: <GridRows columns={view.category.columns} rows={rows} rank={!view.q} activeKey={view.sort.key} />,
+    next: next === null ? null : String(next),
+  };
 }

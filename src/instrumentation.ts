@@ -6,4 +6,6 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { startResultsPoller } = await import("@/lib/odds/results-poller");
   startResultsPoller();
+  const { startStatsPoller } = await import("@/lib/players/poller");
+  startStatsPoller();
 }

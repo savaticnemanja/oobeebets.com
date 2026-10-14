@@ -131,3 +131,30 @@ export function StatsSkeleton() {
     </Loading>
   );
 }
+
+/** Players: pills, the table tabs, the filter row, then table rows. */
+export function PlayersSkeleton() {
+  return (
+    <Loading>
+      <PillsBone />
+      <TabsBone count={2} />
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+        {["w-32", "w-20", "w-24", "w-24"].map((w, i) => (
+          <Bone key={i} className={cn("h-8 shrink-0", w)} />
+        ))}
+      </div>
+      {Array.from({ length: 10 }, (_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b border-border px-4 py-3">
+          <Bone className="h-3 w-4 shrink-0" />
+          <div className="w-36 shrink-0 space-y-1.5">
+            <Bone className="h-3 w-28" />
+            <Bone className="h-2.5 w-16" />
+          </div>
+          {Array.from({ length: 4 }, (_, j) => (
+            <Bone key={j} className="ml-auto h-3 w-8 shrink-0" />
+          ))}
+        </div>
+      ))}
+    </Loading>
+  );
+}

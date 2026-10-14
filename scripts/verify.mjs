@@ -38,6 +38,18 @@ import {
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
 import { safeNextPath } from "../src/lib/beta-gate.ts";
+import { LEAGUES } from "../src/lib/players/catalog.ts";
+import {
+  NHL_STAT_NAMES,
+  mlbGameRow,
+  mlbSeasonRow,
+  nbaGameRow,
+  nbaSeasonRow,
+  nflGameRow,
+  nflSeasonRow,
+  nhlGameRow,
+  nhlSeasonRow,
+} from "../src/lib/players/bdl-map.ts";
 import { americanToDecimal, decimalToAmerican } from "../src/lib/settlement.ts";
 import {
   MAX_PARLAY_LEGS,
@@ -54,6 +66,9 @@ import {
   ensureTester,
   dropTester,
   slateDateString,
+  STATS_SEASON,
+  seedStatsFixture,
+  dropStatsFixture,
 } from "./fixtures.mjs";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
@@ -693,6 +708,84 @@ console.log("\nParlays");
   check(afterPickDelete === 0, "deleting a pick takes the legs pointing at it", `rows=${afterPickDelete}`);
 
   await sql`delete from parlays where id = any(${[built.id, oobee1.id, second.id]})`;
+}
+
+/* -------------------------------------------------------------- 7. players */
+
+console.log("\nPlayers");
+
+{
+  for (const route of ["/players", "/players/nba/fx-1"]) {
+    const res = await fetch(`${APP_URL}${route}`, { redirect: "manual" });
+    const { ok, location } = redirectsToLogin(res);
+    check(ok, `(anonymous) ${route} is gated`, `-> ${res.status} ${location}`);
+  }
+
+  // The catalog and the mapper agree: every column a table shows, sorts by or
+  // qualifies on is a key the mapper writes — so no column reads "—" for
+  // everyone because of a typo on one side. A row whose every field is 1
+  // stands in for the provider.
+  const any = (known = {}) => new Proxy(known, { get: (t, k) => (k in t ? t[k] : 1) });
+  const game = { id: 1, date: "2025-01-01T00:00:00Z", home_team_id: 1, visitor_team_id: 2, home_team: { id: 1 }, visitor_team: { id: 2 }, away_team: { id: 2 } };
+  const keysOf = (...rows) => new Set(rows.flatMap((r) => Object.keys(r?.stats ?? {})));
+  const season = {
+    NBA: keysOf(nbaSeasonRow(any({ player: { id: 1 }, stats: any() }))),
+    NFL: keysOf(nflSeasonRow(any({ player: { id: 1 } }), "X")),
+    MLB: keysOf(mlbSeasonRow(any({ player: { id: 1 } }), new Map())),
+    NHL: keysOf(
+      ...["C", "G"].map((position) =>
+        nhlSeasonRow({ id: "1", name: "x", position, teamAbbr: null }, NHL_STAT_NAMES.map((name) => ({ name, value: 1 }))),
+      ),
+    ),
+  };
+  const games = {
+    NBA: keysOf(nbaGameRow(any({ game, team: { id: 1 } }), new Map())),
+    NFL: keysOf(nflGameRow(any({ game, team: { id: 1 } }))),
+    MLB: keysOf(mlbGameRow(any({ game_id: 1, team: { id: 1 } }), new Map([[1, { id: 1, date: game.date, season: 2025 }]]))),
+    NHL: keysOf(nhlGameRow(any({ game: { ...game, start_time_utc: game.date }, team: { id: 1 } }))),
+  };
+  for (const cfg of LEAGUES) {
+    const wanted = cfg.categories.flatMap((c) => [...c.columns.map((x) => x.key), c.sort, c.has, c.qualify.key, ...c.headline]);
+    const missing = [...new Set(wanted.filter((k) => !season[cfg.league].has(k)))];
+    check(missing.length === 0, `${cfg.league} table columns come from the feed`, missing.length ? `missing: ${missing}` : "");
+    const gameMissing = [...new Set(cfg.categories.flatMap((c) => c.gameColumns.map((x) => x.key)).filter((k) => !games[cfg.league].has(k)))];
+    check(gameMissing.length === 0, `${cfg.league} game-log columns come from the feed`, gameMissing.length ? `missing: ${gameMissing}` : "");
+  }
+
+  // The pages, against an invented season (fixtures.mjs).
+  await seedStatsFixture(sql);
+  const { token, cleanup } = await sessionFor(TESTER_EMAIL);
+  const get = (path) => fetch(`${APP_URL}${path}`, { headers: { cookie: `oobee_session=${token}` }, redirect: "manual" });
+  const base = `/players?sport=nba&season=${STATS_SEASON}`;
+  const has = (html, n) => html.includes(`Fixture Player ${String(n).padStart(2, "0")}`);
+
+  let res = await get(base);
+  let html = await res.text();
+  check(res.status === 200 && has(html, 1) && !has(html, 55), "qualified table leaves out short samples", `-> ${res.status}`);
+
+  html = await (await get(`${base}&all=1`)).text();
+  check(has(html, 50) && !has(html, 51), "All players: first 50 rows, the rest left to scroll");
+
+  html = await (await get(`${base}&all=1&sort=pts&dir=asc`)).text();
+  check(html.indexOf("Fixture Player 60") >= 0 && html.indexOf("Fixture Player 60") < html.indexOf("Fixture Player 59"), "sorting ascending puts the fewest points first");
+
+  html = await (await get(`${base}&q=Player%2007`)).text();
+  check(has(html, 7) && !has(html, 8), "search narrows the table");
+
+  res = await get("/players?sport=zzz&season=abc&cat=nope&sort=x%27%3Bdrop&dir=sideways&type=bad&q=%25_");
+  check(res.status === 200, "unknown params fall back to defaults", `-> ${res.status}`);
+
+  res = await get(`/players/nba/fx-1?season=${STATS_SEASON}`);
+  html = await res.text();
+  check(res.status === 200 && has(html, 1) && html.includes("Game log") && html.includes("OPP"), "player page: seasons and game log", `-> ${res.status}`);
+
+  for (const path of ["/players/nba/no-such-player", "/players/zzz/fx-1"]) {
+    res = await get(path);
+    check(res.status === 404, `${path} is a 404`, `-> ${res.status}`);
+  }
+
+  await cleanup();
+  await dropStatsFixture(sql);
 }
 
 /* ---------------------------------------------------------------- teardown */

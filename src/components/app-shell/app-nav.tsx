@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumn, House, Info, Shield, Target, User, Users, type LucideIcon } from "lucide-react";
+import { ChartColumn, House, Info, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -18,8 +18,8 @@ interface NavItem {
  * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
- * five places people actually go back and forth between; the rest (About,
- * Admin) sit in the drawer behind the avatar in the top bar. Account settings
+ * five places people actually go back and forth between; the rest (Players,
+ * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
  * aren't a destination of their own: they're "Edit profile", on your profile.
  */
 function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
@@ -29,6 +29,8 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
   const community = { href: "/community", label: "Community", icon: Users };
   // Your record — the picks and parlays you took, built and played.
   const stats = { href: "/stats", label: "Stats", icon: ChartColumn };
+  // Everyone else's numbers — league tables and player pages.
+  const players = { href: "/players", label: "Players", icon: Shirt };
   const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
   return {
     sidebar: [
@@ -36,6 +38,7 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       picks,
       community,
       stats,
+      players,
       profile,
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
