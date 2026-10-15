@@ -38,7 +38,8 @@ export default function PrivacyPage() {
           <strong className="text-fg">What you do here.</strong> Your posts and replies, the
           photos and GIFs you add to them, your poll votes, likes, reposts and follows, and which
           posts you have viewed (that is how view counts work). The picks you mark as taken, and
-          the parlays you build, share or play.
+          the parlays you build, share or play. Feedback you send us, with the page you sent it
+          from and your browser.
         </p>
         <p>
           <strong className="text-fg">Signing in and security.</strong> For each device you sign

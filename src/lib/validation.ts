@@ -138,6 +138,28 @@ export const settleSchema = z.object({
   voidReason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
+export const feedbackKindValues = ["bug", "idea", "other"] as const;
+export type FeedbackKindValue = (typeof feedbackKindValues)[number];
+
+export const FEEDBACK_KIND_LABELS: Record<FeedbackKindValue, string> = {
+  bug: "Something's broken",
+  idea: "Idea",
+  other: "Other",
+};
+
+export const FEEDBACK_MAX_LENGTH = 2000;
+
+export const feedbackSchema = z.object({
+  kind: z.enum(feedbackKindValues, { message: "Pick what this is about" }),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Tell us what's on your mind")
+    .max(FEEDBACK_MAX_LENGTH, "That's too long"),
+  /** Where the dialog was opened. Ours to record, never shown back as a link. */
+  pagePath: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
 

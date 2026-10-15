@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumn, House, Info, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { ChartColumn, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -51,12 +52,42 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Icon-only from `sm`, icon and label from `xl` — X's own breakpoints. */
+/** Send feedback: in the sidebar here, in the phone drawer (account-controls.tsx). */
+export const FEEDBACK_LABEL = "Send feedback";
+export const FeedbackIcon = MessageSquareText;
+
+/** One sidebar entry's pill: the icon, and the label from `xl`. */
+function SidebarItem({ label, icon: Icon, active = false }: { label: string; icon: LucideIcon; active?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-4 rounded-full px-3 py-2.5 text-[1.0625rem] leading-6 transition-colors duration-150",
+        "group-hover:bg-white/[0.07] group-active:bg-white/[0.11] group-focus-visible:ring-2 group-focus-visible:ring-brand/60 xl:pr-5",
+        active ? "font-semibold text-fg" : "text-fg-muted group-hover:text-fg",
+      )}
+    >
+      <Icon
+        className={cn(
+          "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
+          active && "text-brand",
+        )}
+        strokeWidth={active ? 2.25 : 1.75}
+        aria-hidden="true"
+      />
+      <span className="hidden xl:inline">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Icon-only from `sm`, icon and label from `xl` — X's own breakpoints. Send
+ * feedback closes the list: a button that opens a dialog, not a destination.
+ */
 export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: boolean }) {
   const pathname = usePathname();
   return (
     <nav aria-label={t().nav.mainNav} className="flex flex-col items-center gap-1 xl:items-stretch">
-      {items(username, isAdmin).sidebar.map(({ href, label, icon: Icon }) => {
+      {items(username, isAdmin).sidebar.map(({ href, label, icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -66,26 +97,15 @@ export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: b
             title={label}
             className="group flex rounded-full outline-none"
           >
-            <span
-              className={cn(
-                "inline-flex items-center gap-4 rounded-full px-3 py-2.5 text-[1.0625rem] leading-6 transition-colors duration-150",
-                "group-hover:bg-white/[0.07] group-active:bg-white/[0.11] group-focus-visible:ring-2 group-focus-visible:ring-brand/60 xl:pr-5",
-                active ? "font-semibold text-fg" : "text-fg-muted group-hover:text-fg",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
-                  active && "text-brand",
-                )}
-                strokeWidth={active ? 2.25 : 1.75}
-                aria-hidden="true"
-              />
-              <span className="hidden xl:inline">{label}</span>
-            </span>
+            <SidebarItem label={label} icon={icon} active={active} />
           </Link>
         );
       })}
+      <FeedbackDialog>
+        <button type="button" title={FEEDBACK_LABEL} className="group flex rounded-full text-left outline-none">
+          <SidebarItem label={FEEDBACK_LABEL} icon={FeedbackIcon} />
+        </button>
+      </FeedbackDialog>
     </nav>
   );
 }

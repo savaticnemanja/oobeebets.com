@@ -596,7 +596,7 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   await ctx.addCookies([await sessionCookie(secondAdmin)]);
   const page = await ctx.newPage();
 
-  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/parlays", "/admin/announce"]) {
+  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/parlays", "/admin/announce", "/admin/feedback"]) {
     const res = await page.goto(`${APP_URL}${route}`);
     check(res.status() === 200, `second admin opens ${route}`, `${res.status()}`);
   }
@@ -721,6 +721,67 @@ await seedStatsFixture(sql);
   await ctx.close();
 }
 await dropStatsFixture(sql);
+
+/* -------------------------------------------------------------- feedback */
+
+console.log("\nFeedback");
+
+const feedbackNote = `e2e feedback ${Date.now()}`;
+{
+  // A tester sends it from the sidebar; it lands with the page it came from.
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/stats`);
+  await hydrated(page, 'nav button[title="Send feedback"]');
+  await page.getByRole("button", { name: "Send feedback" }).click();
+  const dialog = page.getByRole("dialog");
+  const send = dialog.getByRole("button", { name: "Send", exact: true });
+  check(await send.isDisabled(), "Send waits for a kind and a message");
+  await dialog.getByRole("button", { name: "Idea", exact: true }).click();
+  await dialog.locator("#feedback-body").fill(feedbackNote);
+  await send.click();
+  await dialog.waitFor({ state: "hidden" });
+  const [row] = await sql`
+    select f.kind, f.page_path, f.user_agent, u.email from feedback f
+    join users u on u.id = f.user_id where f.body = ${feedbackNote}
+  `;
+  check(row?.email === TESTER_EMAIL && row.kind === "idea", "feedback is stored against the tester", `${row?.kind}`);
+  check(row?.page_path === "/stats" && Boolean(row.user_agent), "it carries the page and the browser", `${row?.page_path}`);
+  await ctx.close();
+}
+{
+  // On a phone it's in the drawer, which steps aside for the dialog.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/stats`);
+  await hydrated(page, "button");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("dialog", { name: "Send feedback" }).waitFor();
+  check((await page.getByRole("dialog").count()) === 1, "the drawer closes and the feedback dialog opens");
+  await ctx.close();
+}
+{
+  // An admin reads it, resolves it, and finds it under Resolved.
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const page = await ctx.newPage();
+  const res = await page.goto(`${APP_URL}/admin/feedback`);
+  check(res.status() === 200, "admin opens the feedback inbox", `${res.status()}`);
+  const item = page.locator("li[data-feedback-id]", { hasText: feedbackNote });
+  check((await item.count()) === 1, "the tester's feedback is listed as open");
+  await hydrated(page, "li[data-feedback-id] button");
+  await item.getByRole("button", { name: "Mark resolved" }).click();
+  await item.waitFor({ state: "detached" });
+  const [row] = await sql`select resolved_at, resolved_by from feedback where body = ${feedbackNote}`;
+  check(row?.resolved_at !== null && row?.resolved_by === seedAdmin.id, "resolving records when and by whom");
+  await page.goto(`${APP_URL}/admin/feedback?show=resolved`);
+  check((await page.locator("li[data-feedback-id]", { hasText: feedbackNote }).count()) === 1, "it moves to Resolved");
+  await ctx.close();
+}
+await sql`delete from feedback where body = ${feedbackNote}`;
 
 /* ------------------------------------------------------------- teardown */
 

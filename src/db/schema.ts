@@ -1018,6 +1018,32 @@ export const playerGameStats = pgTable(
   ],
 );
 
+/* --------------------------------------------------------------- feedback */
+
+export const feedbackKindEnum = pgEnum("feedback_kind", ["bug", "idea", "other"]);
+
+/**
+ * What testers send from "Send feedback". The page they were on and their
+ * browser come with it, because a bug report without either is usually a
+ * guessing game. A deleted account leaves its feedback behind, unsigned.
+ * Open until an admin marks it resolved on /admin/feedback.
+ */
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    kind: feedbackKindEnum("kind").notNull(),
+    body: text("body").notNull(),
+    pagePath: text("page_path"),
+    userAgent: text("user_agent"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("feedback_created_idx").on(t.createdAt)],
+);
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -1117,3 +1143,4 @@ export type Market = (typeof marketEnum.enumValues)[number];
 export type PickCategory = (typeof pickCategoryEnum.enumValues)[number];
 export type SpendBand = (typeof spendBandEnum.enumValues)[number];
 export type InviteStatus = (typeof inviteStatusEnum.enumValues)[number];
+export type FeedbackKind = (typeof feedbackKindEnum.enumValues)[number];

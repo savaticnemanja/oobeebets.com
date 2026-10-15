@@ -340,7 +340,7 @@ for (const category of pickCategories) {
 
 console.log("\nAccess control");
 
-const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/announce"];
+const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/announce", "/admin/feedback"];
 
 {
   for (const route of adminRoutes) {

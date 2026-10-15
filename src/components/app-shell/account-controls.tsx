@@ -13,7 +13,8 @@ import {
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar } from "@/components/social/identity";
 import { Mark } from "@/components/brand/logo";
-import { drawerItems } from "@/components/app-shell/app-nav";
+import { FEEDBACK_LABEL, FeedbackIcon, drawerItems } from "@/components/app-shell/app-nav";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 import { logoutAction } from "@/app/actions/auth";
 import { t } from "@/lib/i18n";
 import { HelpLine } from "@/components/help-line";
@@ -69,6 +70,8 @@ export function SidebarAccount({ user }: { user: ShellUser }) {
  */
 export function MobileTopBar({ user }: { user: ShellUser }) {
   const [open, setOpen] = useState(false);
+  // Outside the drawer, so the drawer can close before it opens.
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { pending, signOut } = useSignOut();
 
   return (
@@ -98,6 +101,17 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
                     </Link>
                   </DialogClose>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setFeedbackOpen(true);
+                  }}
+                  className="flex items-center gap-4 py-3 text-left text-lg font-semibold text-fg transition-colors hover:text-brand"
+                >
+                  <FeedbackIcon className="size-5" aria-hidden="true" />
+                  {FEEDBACK_LABEL}
+                </button>
               </nav>
               <button
                 type="button"
@@ -125,6 +139,8 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
               </div>
             </DialogContent>
           </Dialog>
+
+          <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
 
           <Link href="/home" aria-label="Home" className="absolute left-1/2 -translate-x-1/2">
             <Mark className="text-brand" />

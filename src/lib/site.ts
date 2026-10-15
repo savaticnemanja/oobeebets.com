@@ -73,4 +73,5 @@ export const NAV_ADMIN = [
   { href: "/admin/follows", label: "Follows" },
   { href: "/admin/parlays", label: "Parlays" },
   { href: "/admin/announce", label: "Announce" },
+  { href: "/admin/feedback", label: "Feedback" },
 ] as const;
