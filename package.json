@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "verify": "tsx --env-file-if-exists=.env scripts/verify.mjs",
     "e2e": "tsx --env-file-if-exists=.env scripts/e2e.mjs",
-    "shots": "node --env-file-if-exists=.env scripts/shots.mjs"
+    "shots": "node --env-file-if-exists=.env scripts/shots.mjs",
+    "stripe:setup": "tsx --env-file-if-exists=.env scripts/stripe-setup.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -41,6 +42,7 @@
     "react-dom": "19.2.8",
     "resend": "^6.22.0",
     "sonner": "^2.0.7",
+    "stripe": "^22.6.0",
     "tailwind-merge": "^3.3.1",
     "zod": "^4.1.13"
   },

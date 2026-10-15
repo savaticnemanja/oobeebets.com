@@ -14,6 +14,9 @@ import { ParlayCard } from "@/components/parlay-card";
 import { playable } from "@/components/social/parlay-row";
 import { PickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
+import { viewerAccess } from "@/lib/billing/access";
+import { tierForRank } from "@/lib/tiers";
+import { UnlockRow } from "@/components/billing/unlock-row";
 import { cn } from "@/lib/utils";
 
 /** Days per chunk. Infinite scroll loads the next chunk from the last day shown. */
@@ -54,6 +57,8 @@ export async function loadBoardDays({
 }): Promise<{ node: React.ReactNode; next: string | null; todayPicks: number }> {
   const today = slateDateString();
   const isParlayTab = tab === "parlay";
+  // How deep into each list this viewer's plan reaches (lib/tiers.ts).
+  const { access, rule } = await viewerAccess(auth);
 
   // The sport pill, as SQL on picks — so a day with no MLB props is not
   // listed under MLB at all, as a day with no props isn't listed on Props.
@@ -132,12 +137,16 @@ export async function loadBoardDays({
   const picksOn = new Map(
     visibleDays.map((d) => [
       d,
-      visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin).sort(
+      visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin, rule.picks).sort(
         (a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.rank - b.rank,
       ),
     ]),
   );
   const shownPicks = [...picksOn.values()].flat();
+  // Picks on a day the plan doesn't reach — counted, never sent. Only on a
+  // plan (billing on); admins and the free beta have nothing held back.
+  const lockedOn = (d: string) =>
+    access ? rows.filter((r) => r.slateDate === d).length - (picksOn.get(d)?.length ?? 0) : 0;
 
   // Which of these picks this viewer has already ticked off — see the note on
   // pick_follows in db/schema.ts.
@@ -162,7 +171,7 @@ export async function loadBoardDays({
 
   const oobeeOn = new Map<string, ParlayView[]>(
     // By first leg's kick-off, as picks are, rank breaking ties.
-    isParlayTab
+    isParlayTab && rule.parlays
       ? await Promise.all(
           visibleDays.map(async (d) => {
             const first = (pl: ParlayView) => Math.min(...pl.legs.map((l) => l.startsAt.getTime()));
@@ -184,6 +193,16 @@ export async function loadBoardDays({
     const isToday = d === today;
     const draft = draftOn.has(d) && auth.isAdmin;
     const dayPicks = picksOn.get(d) ?? [];
+
+    if (isParlayTab && !rule.parlays) {
+      // Today only: one prompt, not one under every past day.
+      if (!isToday) return null;
+      return (
+        <DaySection key={d} date={d} today={today} draft={draft}>
+          <UnlockRow tier="pro" what="Oobee's parlays" />
+        </DaySection>
+      );
+    }
 
     if (isParlayTab) {
       const list = (oobeeOn.get(d) ?? []).filter(ticketMatches);
@@ -217,10 +236,11 @@ export async function loadBoardDays({
     // Pick tabs: every day leads with its featured picks (starred, a pinch
     // lighter), then the rest, each group by kick-off. Under a pill an empty
     // today is dropped too.
-    if (sportFilter && dayPicks.length === 0) return null;
+    const locked = lockedOn(d);
+    if (sportFilter && dayPicks.length === 0 && locked === 0) return null;
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
-        {dayPicks.length === 0 ? (
+        {dayPicks.length === 0 && locked === 0 ? (
           <Empty>
             {isToday
               ? `No ${what}${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
@@ -230,6 +250,12 @@ export async function loadBoardDays({
           featuredFirst(dayPicks, (p) => p.featured).map((p) => (
             <PickCard key={p.id} pick={p} follow={followFor(p)} featured={p.featured} variant="row" />
           ))
+        )}
+        {locked > 0 && (
+          <UnlockRow
+            tier={tierForRank(category, rule.picks[category] + 1) ?? "elite"}
+            what={`${locked} more ${CATEGORY_NOUN[category]}${locked === 1 ? "" : "s"}`}
+          />
         )}
       </DaySection>
     );

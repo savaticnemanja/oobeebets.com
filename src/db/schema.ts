@@ -72,6 +72,21 @@ export const inviteStatusEnum = pgEnum("invite_status", [
   "expired",
 ]);
 
+/** The paid plans, lowest first. No row means the free board (see lib/tiers.ts). */
+export const tierEnum = pgEnum("tier", ["base", "pro", "elite"]);
+
+/** Stripe's subscription status vocabulary, verbatim — the rows mirror Stripe. */
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "incomplete",
+  "incomplete_expired",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+  "paused",
+]);
+
 /* ------------------------------------------------------------------ users */
 
 export const users = pgTable(
@@ -116,6 +131,8 @@ export const users = pgTable(
      * before it existed.
      */
     termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
+    /** Their Stripe Customer, made at their first checkout and reused after. */
+    stripeCustomerId: text("stripe_customer_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -123,10 +140,41 @@ export const users = pgTable(
     // Emails are stored lowercased by the app; the unique index enforces it.
     uniqueIndex("users_email_unique").on(t.email),
     uniqueIndex("users_username_unique").on(t.username),
+    uniqueIndex("users_stripe_customer_unique").on(t.stripeCustomerId),
     index("users_role_idx").on(t.role),
     check("users_username_format", sql`${t.username} ~ '^[a-z0-9_]{3,20}$'`),
     check("users_bio_length", sql`${t.bio} is null or char_length(${t.bio}) <= 160`),
   ],
+);
+
+/* ---------------------------------------------------------- subscriptions */
+
+/**
+ * A copy of each Stripe Subscription, written only by the webhook
+ * (lib/billing/sync.ts), which re-reads the subscription from Stripe on every
+ * event and upserts it here. Re-reading rather than trusting the event's copy
+ * is what makes duplicate and out-of-order deliveries harmless.
+ *
+ * Canceled rows are kept for history. What a viewer may see is read off the
+ * live rows (see lib/billing/access.ts).
+ */
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    stripeSubscriptionId: text("stripe_subscription_id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stripeCustomerId: text("stripe_customer_id").notNull(),
+    tier: tierEnum("tier").notNull(),
+    status: subscriptionStatusEnum("status").notNull(),
+    stripePriceId: text("stripe_price_id").notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("subscriptions_user_idx").on(t.userId, t.status)],
 );
 
 /* --------------------------------------------------------------- sessions */
@@ -1271,6 +1319,9 @@ export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
 export type PlayerGameStat = typeof playerGameStats.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type Tier = (typeof tierEnum.enumValues)[number];
+export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];
 export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];

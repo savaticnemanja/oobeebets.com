@@ -10,6 +10,7 @@ import { getAuth } from "@/lib/auth";
 import { followWindowOpen } from "@/lib/follows";
 import { notify, unnotify } from "@/lib/notifications";
 import { BLOCKED, canInteract } from "@/lib/moderation";
+import { viewerAccess } from "@/lib/billing/access";
 import type { ActionState } from "@/lib/validation";
 
 /**
@@ -51,6 +52,8 @@ export async function setPickFollowAction(
       startsAt: picks.startsAt,
       status: picks.status,
       publishedAt: slates.publishedAt,
+      rank: picks.rank,
+      category: picks.category,
     })
     .from(picks)
     .innerJoin(slates, eq(slates.date, picks.slateDate))
@@ -58,6 +61,13 @@ export async function setPickFollowAction(
     .limit(1);
 
   if (!pick) return { ok: false, error: "Pick not found" };
+
+  // The board never sends a pick past the viewer's plan, but a request can
+  // name any id: the plan is checked here too.
+  const { rule } = await viewerAccess(auth);
+  if (!auth.isAdmin && pick.rank > rule.picks[pick.category]) {
+    return { ok: false, error: "That pick isn't on your plan." };
+  }
 
   // Admins preview draft slates, and the cards there render without a control
   // — but the action is reachable directly, and a follow on a pick nobody else

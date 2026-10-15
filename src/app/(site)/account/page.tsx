@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { ProfileForm } from "@/components/social/profile-form";
+import { ManagePlanButton } from "@/components/billing/plan-button";
+import { viewerAccess } from "@/lib/billing/access";
+import { TIERS } from "@/lib/tiers";
+import { formatDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Edit profile",
@@ -23,6 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function AccountPage() {
   const auth = await getAuth();
   if (!auth) redirect("/login?next=/account");
+  const { access, subscription } = await viewerAccess(auth);
 
   return (
     <DocPage title="Edit profile" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
@@ -58,10 +63,43 @@ export default async function AccountPage() {
       </DocSection>
 
       <DocSection title="Access">
-        <p>You have the whole board — all 15 picks, free during our beta. No plan needed.</p>
-        <Button asChild className="rounded-full">
-          <Link href="/picks">See today&apos;s picks</Link>
-        </Button>
+        {access === null ? (
+          <>
+            <p>You have the whole board — all 15 picks, free during our beta. No plan needed.</p>
+            <Button asChild className="rounded-full">
+              <Link href="/picks">See today&apos;s picks</Link>
+            </Button>
+          </>
+        ) : subscription ? (
+          <>
+            <p>
+              You&apos;re on <span className="text-fg">{TIERS[subscription.tier].name}</span>
+              {subscription.status === "past_due"
+                ? " — your last payment didn't go through. Update your card to keep it."
+                : subscription.currentPeriodEnd
+                  ? subscription.cancelAtPeriodEnd
+                    ? `, ending ${formatDate(subscription.currentPeriodEnd)}. It won't renew.`
+                    : `, renewing ${formatDate(subscription.currentPeriodEnd)}.`
+                  : "."}
+            </p>
+            <div className="flex flex-wrap items-start gap-3">
+              <ManagePlanButton />
+              <Button asChild variant="ghost" className="rounded-full">
+                <Link href="/pricing">Compare plans</Link>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>
+              You&apos;re on the free board: the #1 game bet and #1 player prop each day. A plan opens up to all 15
+              of each.
+            </p>
+            <Button asChild className="rounded-full">
+              <Link href="/pricing">See plans</Link>
+            </Button>
+          </>
+        )}
       </DocSection>
 
       <DocSection title="Security">

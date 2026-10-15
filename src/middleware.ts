@@ -41,6 +41,10 @@ const ALWAYS_OPEN = new Set([
   // as a failure, the container never turns healthy, and compose's
   // `depends_on: service_healthy` never releases anything waiting on it.
   "/api/health",
+  // Stripe posts subscription changes here with no cookie. Gated, every
+  // delivery bounces and nobody's plan ever updates; the route checks
+  // Stripe's signature instead.
+  "/api/webhooks/stripe",
 ]);
 
 export async function middleware(request: NextRequest) {
