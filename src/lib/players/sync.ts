@@ -144,8 +144,10 @@ async function storeSeason(league: StatLeague, season: number, type: SeasonType,
 /**
  * One player's games in a season, fetched when someone opens their page.
  * Same claim rules as a season: live while it's being played, final after.
+ * `maxAgeMin` asks for a fresher copy than that — the prop grader's, which
+ * needs a game that finished an hour ago.
  */
-export async function ensureGameLog(playerId: string, season: number): Promise<void> {
+export async function ensureGameLog(playerId: string, season: number, maxAgeMin?: number): Promise<void> {
   if (!statsConfigured()) return;
   const [player] = await db
     .select({ league: statPlayers.league, providerId: statPlayers.providerId })
@@ -155,7 +157,8 @@ export async function ensureGameLog(playerId: string, season: number): Promise<v
   if (!player || !(player.league in LEAGUE_BY_NAME)) return;
   const league = player.league as StatLeague;
 
-  const ttl = seasonTtl(league, season, "regular") ?? FINAL_TTL_MIN;
+  const seasonMin = seasonTtl(league, season, "regular") ?? FINAL_TTL_MIN;
+  const ttl = maxAgeMin === undefined ? seasonMin : Math.min(seasonMin, maxAgeMin);
   const key = `gamelog:${playerId}:${season}`;
   if (!(await claim(key, ttl))) return;
   try {

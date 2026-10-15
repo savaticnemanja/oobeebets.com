@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type Stripe from "stripe";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -20,7 +21,8 @@ const INTEGRATION_ID = "oobee_tiers_kqvbmzta";
  * so a tab closed halfway through leaves nothing behind.
  *
  * Someone already on a plan changes it in the customer portal instead, so
- * nobody ends up paying for two.
+ * nobody ends up paying for two — straight to the portal's confirm screen for
+ * the plan they picked, not its front page.
  */
 export async function startCheckoutAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await getAuth();
@@ -36,13 +38,19 @@ export async function startCheckoutAction(_prev: ActionState, formData: FormData
 
   let url: string;
   try {
-    if ((await liveSubscriptions(auth.user.id)).length > 0) {
-      url = await portalUrl(auth);
+    const prices = await stripe().prices.list({ lookup_keys: [TIERS[tier].lookupKey], active: true, limit: 1 });
+    const price = prices.data[0];
+    if (!price) throw new BillingError("That plan isn't available right now.");
+
+    const [live] = await liveSubscriptions(auth.user.id);
+    if (live) {
+      url = await portalUrl(auth, { subscriptionId: live.stripeSubscriptionId, priceId: price.id });
     } else {
       const customer = await customerFor(auth);
-      const prices = await stripe().prices.list({ lookup_keys: [TIERS[tier].lookupKey], active: true, limit: 1 });
-      const price = prices.data[0];
-      if (!price) throw new BillingError("That plan isn't available right now.");
+      // A checkout left open in another tab could be paid as well as this
+      // one, and that's two subscriptions. Only the newest stays payable.
+      const open = await stripe().checkout.sessions.list({ customer, status: "open", limit: 10 });
+      await Promise.all(open.data.map((s) => stripe().checkout.sessions.expire(s.id)));
 
       const session = await stripe().checkout.sessions.create({
         mode: "subscription",
@@ -81,14 +89,42 @@ export async function openPortalAction(): Promise<ActionState> {
   redirect(url);
 }
 
-async function portalUrl(auth: AuthContext): Promise<string> {
-  const session = await stripe().billingPortal.sessions.create({
+/**
+ * A customer-portal session. With `change`, it opens on the confirm screen for
+ * moving that subscription onto that price; if Stripe won't offer that flow
+ * (a plan already set to cancel, say), the portal's front page instead.
+ */
+async function portalUrl(auth: AuthContext, change?: { subscriptionId: string; priceId: string }): Promise<string> {
+  const params: Stripe.BillingPortal.SessionCreateParams = {
     customer: await customerFor(auth),
-    return_url: appUrl("/account"),
+    return_url: appUrl("/account#plan"),
     // The configuration scripts/stripe-setup.mjs makes, which lets people
     // switch between the three plans; unset, the Dashboard's default.
     configuration: process.env.STRIPE_PORTAL_CONFIGURATION || undefined,
-  });
+  };
+  if (change) {
+    const sub = await stripe().subscriptions.retrieve(change.subscriptionId);
+    const item = sub.items.data[0];
+    if (item && item.price.id !== change.priceId) {
+      try {
+        const session = await stripe().billingPortal.sessions.create({
+          ...params,
+          flow_data: {
+            type: "subscription_update_confirm",
+            subscription_update_confirm: {
+              subscription: sub.id,
+              items: [{ id: item.id, price: change.priceId, quantity: 1 }],
+            },
+            after_completion: { type: "redirect", redirect: { return_url: appUrl("/account#plan") } },
+          },
+        });
+        return session.url;
+      } catch (err) {
+        console.warn(`[billing] ${sub.id}: no plan-change flow, opening the portal instead`, err);
+      }
+    }
+  }
+  const session = await stripe().billingPortal.sessions.create(params);
   return session.url;
 }
 

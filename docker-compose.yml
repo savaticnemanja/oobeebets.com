@@ -44,10 +44,9 @@ services:
       db:
         condition: service_healthy
     # Everything in .env reaches the container. Listing variables one by one is
-    # how BETA_GATE_PASSWORD and RESEND_API_KEY came to be set on the host and
-    # absent in the process that reads them — and the gate fails *open*, so that
-    # mistake is silent. `environment:` below still wins where a value has to be
-    # computed rather than copied.
+    # how RESEND_API_KEY once came to be set on the host and absent in the
+    # process that reads it, silently. `environment:` below still wins where a
+    # value has to be computed rather than copied.
     env_file:
       - .env
     environment:

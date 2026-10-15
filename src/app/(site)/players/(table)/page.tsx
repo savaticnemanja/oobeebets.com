@@ -23,7 +23,7 @@ import { playersHref, resolveView, sortHref, tableRows, type PlayersParams } fro
 
 export const metadata: Metadata = {
   title: "Players",
-  description: "Player stats for the NFL, NBA, MLB and NHL, season by season.",
+  description: "NFL player stats, season by season.",
   robots: { index: false, follow: false },
 };
 

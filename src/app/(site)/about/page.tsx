@@ -41,14 +41,13 @@ export default function AboutPage() {
 
       <DocSection title="How the board works">
         <p>
-          We put out up to fifteen game bets and fifteen player props a day across
-          soccer, basketball, baseball, tennis, hockey and football. Each comes with
-          its price, its stake and the reasoning behind it, and the ones we like most
-          are featured at the top of the day.
+          We put out up to fifteen NFL game bets and fifteen player props on every
+          game day. Each comes with its price, its stake and the reasoning behind it,
+          and the ones we like most are featured at the top of the day.
         </p>
         {billingEnabled() ? (
           <p>
-            The #1 game bet and #1 player prop are free every day. Base, Pro and Elite
+            The #1 game bet and #1 player prop are free every game day. Base, Pro and Elite
             open the top 5, top 10 or all 15 of each, and Pro and Elite add our parlays —
             see <Link href="/account#plan" className="text-brand hover:underline">Plans</Link>.
           </p>

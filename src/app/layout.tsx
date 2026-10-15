@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
 import { getLocale, localeConfig } from "@/lib/i18n/config";
 import { ServiceWorker } from "@/components/pwa/service-worker";
+import { StaleDeploy } from "@/components/pwa/stale-deploy";
 import "./globals.css";
 import { t } from "@/lib/i18n";
 
@@ -111,6 +112,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <ServiceWorker />
+        <StaleDeploy />
       </body>
     </html>
   );

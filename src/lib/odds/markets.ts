@@ -138,8 +138,8 @@ export interface GameResult {
 
 /**
  * Grades a game-market bet from the final score. Null for player props,
- * which the feed cannot grade — it has no player stats — and which an admin
- * settles on /admin/settle instead.
+ * which the odds feed cannot grade: settle-props.ts grades those from the
+ * stats feed's box scores, and an admin settles what it can't on /admin/settle.
  *
  * A tied moneyline is a push: that is how US books grade a two-way moneyline
  * when the game ends level (an NFL tie), and MLB games cannot tie.

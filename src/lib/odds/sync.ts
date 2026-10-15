@@ -396,7 +396,8 @@ export async function ensureScores(): Promise<number> {
   }
 
   const { autoSettle } = await import("./settle");
-  return autoSettle();
+  const { autoSettleProps } = await import("./settle-props");
+  return (await autoSettle()) + (await autoSettleProps());
 }
 
 /**

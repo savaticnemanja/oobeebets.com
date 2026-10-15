@@ -134,17 +134,25 @@ export async function loadBoardDays({
   // Admins preview whole slates; everyone else sees each day's top VISIBLE_PICKS.
   // Which picks a viewer sees is decided by rank; the order they're listed in
   // is by kick-off, so a day reads like the schedule it is. Rank breaks ties.
+  //
+  // A plan only holds back picks that are still open. Once one is settled it
+  // is history, not a tip — and the record being there for anyone to check,
+  // losses included, is the whole pitch — so every viewer sees how it went.
   const picksOn = new Map(
-    visibleDays.map((d) => [
-      d,
-      visiblePicks(rows.filter((r) => r.slateDate === d), auth.isAdmin, rule.picks).sort(
-        (a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.rank - b.rank,
-      ),
-    ]),
+    visibleDays.map((d) => {
+      const day = rows.filter((r) => r.slateDate === d);
+      const open = new Set(visiblePicks(day, auth.isAdmin, rule.picks));
+      return [
+        d,
+        day
+          .filter((p) => open.has(p) || p.status !== "pending")
+          .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.rank - b.rank),
+      ];
+    }),
   );
   const shownPicks = [...picksOn.values()].flat();
-  // Picks on a day the plan doesn't reach — counted, never sent. Only on a
-  // plan (billing on); admins and the free beta have nothing held back.
+  // Open picks on a day the plan doesn't reach — counted, never sent. Only on
+  // a plan (billing on); admins and the free beta have nothing held back.
   const lockedOn = (d: string) =>
     access ? rows.filter((r) => r.slateDate === d).length - (picksOn.get(d)?.length ?? 0) : 0;
 

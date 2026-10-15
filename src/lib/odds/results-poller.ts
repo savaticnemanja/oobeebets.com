@@ -1,3 +1,4 @@
+import { sweepExpired } from "@/lib/housekeeping";
 import { ensureScores } from "./sync";
 
 /**
@@ -32,6 +33,8 @@ async function tick() {
   } catch (err) {
     console.error("[results] poll failed:", err);
   }
+  // Rides on this timer rather than starting another; it runs once a day.
+  await sweepExpired().catch((err) => console.error("[sweep] failed:", err));
 }
 
 export function startResultsPoller(): void {

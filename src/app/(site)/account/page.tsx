@@ -14,7 +14,7 @@ import { TIERS } from "@/lib/tiers";
 import { formatDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
-  title: "Edit profile",
+  title: "Account",
   robots: { index: false, follow: false },
 };
 
@@ -32,7 +32,7 @@ export default async function AccountPage() {
   const { access, subscription } = await viewerAccess(auth);
 
   return (
-    <DocPage title="Edit profile" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
+    <DocPage title="Account" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
       <DocSection title="Public profile">
         <p>
           What other testers see on your profile and next to your posts. Your email and
@@ -47,7 +47,7 @@ export default async function AccountPage() {
         </div>
       </DocSection>
 
-      <DocSection title="Account">
+      <DocSection title="Sign-in">
         <p>
           Signed in as <span className="text-fg">{auth.user.email}</span>.
         </p>
@@ -67,7 +67,11 @@ export default async function AccountPage() {
       <DocSection id="plan" title="Plan">
         {access === null ? (
           <>
-            <p>You have the whole board — all 15 picks, free during our beta. No plan needed.</p>
+            <p>
+              {auth.isAdmin
+                ? "As an admin you see the whole board — every pick, drafts included. No plan needed."
+                : "You have the whole board — all 15 picks, free during our beta. No plan needed."}
+            </p>
             <Button asChild className="rounded-full">
               <Link href="/picks">See today&apos;s picks</Link>
             </Button>

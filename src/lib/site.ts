@@ -13,7 +13,7 @@ export const SITE = {
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://oobeebets.com",
   tagline: "Every pick, settled on the record.",
   description:
-    "Daily sports betting picks with an unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
+    "NFL betting picks with an unedited track record. Every pick we publish is settled against the real final score — wins and losses both.",
   twitter: "@oobeebets",
   // Locale lives in lib/i18n/config.ts — it is one value with several
   // representations (lang, og, Intl), and splitting it across two files is how

@@ -41,7 +41,8 @@ import { combineOdds } from "../src/lib/settlement.ts";
 import { ACCESS, TIERS, TIER_ORDER, tierForLookupKey, tierForRank } from "../src/lib/tiers.ts";
 import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 import Stripe from "stripe";
-import { safeNextPath } from "../src/lib/beta-gate.ts";
+import { safeNextPath } from "../src/lib/safe-next.ts";
+import { NFL_TEAM_ABBR, gradeProp, playerKey } from "../src/lib/odds/props.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
 import {
@@ -479,6 +480,28 @@ console.log("\nRedirect targets (safeNextPath)");
   for (const [v, want] of [["/picks", "/picks"], ["/stats?tab=parlays", "/stats?tab=parlays"], ["/u/rob19#replies", "/u/rob19#replies"], ["/a/../picks", "/picks"]]) {
     check(safeNextPath(v) === want, `keeps ${JSON.stringify(v)}`, `-> ${JSON.stringify(safeNextPath(v))}`);
   }
+}
+
+console.log("\nPlayer props graded from box scores");
+
+{
+  const g = (marketKey, outcome, point, stats) => gradeProp({ marketKey, outcome, point }, stats)?.status ?? null;
+  check(g("player_pass_yds", "Over", 249.5, { pass_yds: 287 }) === "won", "over passing yards, cleared");
+  check(g("player_pass_yds", "Under", 249.5, { pass_yds: 287 }) === "lost", "under passing yards, cleared");
+  check(g("player_receptions", "Over", 5, { rec: 5 }) === "push", "a whole-number line hit exactly pushes");
+  check(g("player_receptions", "Over", 4.5, {}) === "lost", "no catches in the box score counts as zero");
+  check(g("player_anytime_td", "Yes", null, { rec_td: 1 }) === "won", "anytime TD on a receiving score");
+  check(g("player_anytime_td", "Yes", null, { rush_td: 0, rec_td: 0 }) === "lost", "anytime TD, kept out of the end zone");
+  check(g("player_anytime_td", "No", null, { rush_td: 2 }) === "lost", "no-TD side loses on a score");
+  check(g("player_pass_tds", "Over", 1.5, { pass_td: 1, rush_td: 1 }) === "lost", "a rushing TD doesn't count as a passing one");
+  check(g("player_pass_yds", "Over", null, { pass_yds: 300 }) === null, "a prop with no line is left for an admin");
+  check(g("player_tackles", "Over", 5.5, { tkl: 9 }) === null, "a market it doesn't know is left for an admin");
+
+  check(playerKey("A.J. Brown") === playerKey("AJ Brown"), "initials match with or without dots");
+  check(playerKey("Marvin Harrison Jr.") === playerKey("Marvin Harrison"), "suffixes don't stop a match");
+  check(playerKey("Amon-Ra St. Brown") === playerKey("Amon-Ra St Brown"), "hyphens and abbreviations match");
+  check(playerKey("Josh Allen") === playerKey("Josh Allen"), "the same name is the same key (team decides the rest)");
+  check(Object.keys(NFL_TEAM_ABBR).length === 32 && new Set(Object.values(NFL_TEAM_ABBR)).size === 32, "all 32 NFL teams map to a distinct abbreviation");
 }
 
 /* ------------------------------------------------------ 3b. the role model */

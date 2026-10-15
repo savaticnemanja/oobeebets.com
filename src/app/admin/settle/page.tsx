@@ -48,9 +48,10 @@ export default async function AdminSettlePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settle</h1>
           <p className="mt-1.5 text-sm text-fg-muted">
-            Game bets from the odds feed settle themselves from the final score. What
-            is left here is player props, hand-entered picks from before the feed,
-            and corrections. Every result is written to the audit log and appears on
+            Game bets settle themselves from the final score, and NFL player props from
+            the box score a few hours after the game. What is left here is a prop the
+            stats feed couldn&apos;t match to one player, a player who didn&apos;t play,
+            hand-entered picks from before the feed, and corrections. Every result is written to the audit log and appears on
             the public record immediately.
           </p>
         </div>
@@ -72,8 +73,8 @@ export default async function AdminSettlePage() {
             Community parlay legs
           </h2>
           <p className="mt-1 text-xs text-fg-subtle">
-            Player props testers put in their parlays. The feed has no player stats,
-            so these need a result from you.
+            Player props testers put in their parlays. NFL props grade themselves from the
+            box score; anything still here needs a result from you.
           </p>
           <div className="mt-3">
             <CommunityLegList legs={communityLegs} />

@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { clientIp, createSession, destroySession, fakeVerify, rateLimit, verifyPassword } from "@/lib/auth";
 import { loginSchema, fieldErrorsFrom, type ActionState } from "@/lib/validation";
-import { safeNextPath } from "@/lib/beta-gate";
+import { safeNextPath } from "@/lib/safe-next";
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;

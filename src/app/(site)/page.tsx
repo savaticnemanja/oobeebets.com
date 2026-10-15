@@ -44,7 +44,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-2">
             <PulseDot />
             <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
-              {paid ? "Beta — the #1 game bet and prop free every day" : "Beta — the whole board free for testers"}
+              {paid ? "Beta — the #1 game bet and prop free every game day" : "Beta — the whole board free for testers"}
             </span>
           </div>
         </Reveal>
@@ -58,10 +58,10 @@ export default async function HomePage() {
 
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
-            Fifteen game bets and fifteen player props a day, each with the reasoning
-            behind it —{" "}
+            Fifteen NFL game bets and fifteen player props every game day, each with the
+            reasoning behind it —{" "}
             {paid
-              ? "the top pick of each free every day, the rest on a plan."
+              ? "the top pick of each free, the rest on a plan."
               : "the whole board free for every tester during our beta."}{" "}
             Every one is graded against the real final score, and the losses stay on
             the page next to the wins.
@@ -96,7 +96,7 @@ export default async function HomePage() {
             {
               icon: ListChecks,
               title: "We build the board",
-              body: "Fifteen game bets and fifteen player props a day, each with its price, stake and reasoning. The ones we like most are featured at the top.",
+              body: "Fifteen NFL game bets and fifteen player props every game day, each with its price, stake and reasoning. The ones we like most are featured at the top.",
             },
             {
               icon: Eye,

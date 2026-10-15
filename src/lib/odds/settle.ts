@@ -85,7 +85,7 @@ export async function unsettleSelection(
 
 /**
  * Grades every pending game-market selection whose game the feed reports as
- * final. Player props are left alone — see gradeLine.
+ * final. Player props are graded from box scores instead — see settle-props.ts.
  */
 export async function autoSettle(): Promise<number> {
   const due = await db

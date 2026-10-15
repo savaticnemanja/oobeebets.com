@@ -7,8 +7,8 @@ import { subscriptionIdOf, syncSubscription } from "@/lib/billing/sync";
  * someone to /picks unlocks nothing by itself; this does, when Stripe says
  * the subscription exists.
  *
- * Open past the beta gate (see ALWAYS_OPEN in middleware.ts): Stripe has no
- * gate cookie. The signature is what keeps everyone else out.
+ * Open to anyone, with no session: the signature is what keeps everyone but
+ * Stripe out.
  */
 export const dynamic = "force-dynamic";
 

@@ -55,7 +55,7 @@ export default function TermsPage() {
       {billingEnabled() ? (
         <DocSection title="4. Plans and billing">
           <p>
-            {SITE.name} is in a closed beta. The top pick of each list is free every day;
+            {SITE.name} is in a closed beta. The top pick of each list is free every game day;
             the rest of the board comes with a paid plan (Base, Pro or Elite), as listed on
             the Plans page with its price.
           </p>
