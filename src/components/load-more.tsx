@@ -48,8 +48,18 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
       start(async () => {
         try {
           const chunk = await load(cursor);
-          setChunks((c) => [...c, chunk.node]);
-          setCursor(chunk.next);
+          // A second transition: React forgets the first one across an
+          // await, so these updates would land as urgent. The chunk can
+          // suspend while it renders (its client components' code still
+          // loading), and an urgent update that suspends shows the page's
+          // loading.tsx skeleton in place of the whole page — one screen tall,
+          // so the browser dropped the reader back at the top every time a
+          // chunk came in. In a transition, the page stays put until the
+          // chunk is ready.
+          start(() => {
+            setChunks((c) => [...c, chunk.node]);
+            setCursor(chunk.next);
+          });
         } catch {
           setFailed(true);
         } finally {

@@ -682,9 +682,21 @@ await seedStatsFixture(sql);
   await page.goto(`${APP_URL}/players?sport=nba&season=${STATS_SEASON}&all=1`);
   await hydrated(page, '[role="table"]');
   check((await rows.count()) === 50, "first page is fifty rows", `rows=${await rows.count()}`);
+  // Regression guard: a chunk arriving used to swap the page for its loading
+  // skeleton for a moment, and the browser dropped the reader at the top.
+  await page.evaluate(() => {
+    window.__jumpedToTop = false;
+    let last = scrollY;
+    addEventListener("scroll", () => {
+      if (last > 300 && scrollY < 150) window.__jumpedToTop = true;
+      last = scrollY;
+    }, { passive: true });
+  });
   await page.mouse.wheel(0, 20_000);
   await page.waitForFunction((n) => document.querySelectorAll('[role="table"] [role="row"].cursor-pointer').length === n, STATS_PLAYERS, { timeout: 15_000 }).catch(() => {});
   check((await rows.count()) === STATS_PLAYERS, "scrolling loads the rest", `rows=${await rows.count()}`);
+  await page.waitForTimeout(500);
+  check(!(await page.evaluate(() => window.__jumpedToTop)), "loading more keeps the scroll position");
 
   // Points are sorted most-first; a click on the header flips it.
   await page.getByRole("link", { name: "Sort by Points per game" }).click();
