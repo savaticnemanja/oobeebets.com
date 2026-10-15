@@ -33,9 +33,7 @@ export function ParlayCard({
   className,
   variant = "card",
   owner,
-  postHref,
   kicker,
-  footer,
   follow,
   children,
 }: {
@@ -45,16 +43,13 @@ export function ParlayCard({
   /** "row": a full-width timeline row with a hairline under it, as on Home. */
   variant?: "card" | "row";
   /**
-   * A tester's shared ticket: who built it and when it was shared, in the
-   * header — the Community tab and the Home timeline both draw it this way.
+   * A tester's ticket: who built it and when, in the header. Shared ones
+   * are posts and draw as one (social/parlay-ticket.tsx); this is for the
+   * rare shared ticket with no post behind it.
    */
   owner?: { username: string; displayName: string | null; role?: Role };
-  /** The post that carries a shared ticket: its time links there, as a post's does. */
-  postHref?: string;
-  /** A line above the header — "↻ Name reposted". */
+  /** A line above the header — where a ticket on Stats came from. */
   kicker?: React.ReactNode;
-  /** A row under everything — the post's Reply / Repost / Like. */
-  footer?: React.ReactNode;
   /** The viewer can play (tail) this ticket: its circle, as on a pick. */
   follow?: ViewerFollow;
   /** Slot for an action — the owner's delete control, say. */
@@ -126,13 +121,7 @@ export function ParlayCard({
                   · <LocalTime at={parlay.createdAt} format="ago" />
                 </>
               );
-              return postHref ? (
-                <Link href={postHref} className="shrink-0 text-xs text-fg-subtle hover:underline">
-                  {time}
-                </Link>
-              ) : (
-                <span className="shrink-0 text-xs text-fg-subtle">{time}</span>
-              );
+              return <span className="shrink-0 text-xs text-fg-subtle">{time}</span>;
             })()}
           <span aria-hidden="true">{sports.map((sp) => SPORT_EMOJI[sp]).join("")}</span>
           {/* A tester's ticket is titled "N-leg parlay" already, so with the
@@ -278,7 +267,6 @@ export function ParlayCard({
           {children}
         </div>
       )}
-      {footer}
     </article>
   );
 }

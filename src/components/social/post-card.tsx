@@ -17,6 +17,10 @@ import { PostBody } from "@/components/social/post-body";
 import { PostMedia } from "@/components/social/post-media";
 import { PostPoll } from "@/components/social/post-poll";
 import { trackView } from "@/components/social/view-tracker";
+import { ACTION_BTN, ACTION_ICON } from "@/components/social/action-row";
+import { FollowToggle } from "@/components/follow-toggle";
+import type { PickState } from "@/components/pick-state";
+import type { ViewerFollow } from "@/lib/follows";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +41,15 @@ import { cn } from "@/lib/utils";
 import { tryAction } from "@/lib/try-action";
 
 type Variant = "feed" | "detail" | "ancestor";
+
+/** A shared parlay the viewer can play (tail): its Play control, in the action row. */
+export interface PostPlay {
+  parlayId: string;
+  /** Named in the control's label, so a screen reader knows which ticket. */
+  title: string;
+  follow: ViewerFollow;
+  state: PickState | null;
+}
 
 /**
  * One post, in the three places it appears:
@@ -59,6 +72,7 @@ export function PostCard({
   threadAbove = false,
   repostedBy,
   attachment,
+  play,
 }: {
   post: FeedPost;
   viewerId: string | null;
@@ -76,6 +90,8 @@ export function PostCard({
   repostedBy?: { username: string; displayName: string | null } | null;
   /** Drawn where a link card would go — a shared parlay's ticket. */
   attachment?: React.ReactNode;
+  /** A shared parlay's Play control, in the action row. */
+  play?: PostPlay;
 }) {
   const router = useRouter();
   const href = `/p/${post.id}`;
@@ -170,7 +186,7 @@ export function PostCard({
         {post.poll && <PostPoll postId={post.id} poll={post.poll} viewerId={viewerId} authorId={post.author.id} />}
         {/* A link card only when nothing else is showing, as on X. */}
         {post.preview && !post.media?.length && !post.poll && <LinkCard preview={post.preview} className="mt-3" />}
-        {attachment && <div className="mt-2">{attachment}</div>}
+        {attachment && <div className="mt-3">{attachment}</div>}
 
         {detail && (
           <p className="mt-4 border-b border-border pb-3 text-sm text-fg-subtle">
@@ -178,7 +194,7 @@ export function PostCard({
           </p>
         )}
 
-        <PostActions post={post} viewerId={viewerId} detail={detail} />
+        <PostActions post={post} viewerId={viewerId} detail={detail} play={play} />
       </div>
     </article>
   );
@@ -204,19 +220,19 @@ export function RepostedLine({ by }: { by: { username: string; displayName: stri
 /* --------------------------------------------------------------- actions */
 
 /**
- * Reply · Repost · Like · Copy link, as on X. Exported for the ticket of a
- * shared parlay, which is a post too and carries the same row under it.
+ * Reply · Repost · Like — and Play, on a shared parlay — then Views · Share,
+ * as on X.
  */
-export function PostActions({
+function PostActions({
   post,
   viewerId,
   detail = false,
-  className,
+  play,
 }: {
   post: FeedPost;
   viewerId: string | null;
   detail?: boolean;
-  className?: string;
+  play?: PostPlay;
 }) {
   const [like, setLike, keepLike] = useKeptOptimistic({ liked: post.liked, count: post.likeCount });
   const [repost, setRepost, keepRepost] = useKeptOptimistic({ reposted: post.reposted, count: post.repostCount });
@@ -282,11 +298,12 @@ export function PostActions({
     return trackView(rowRef.current, post.id);
   }, [post.id, viewerId]);
 
-  const btn =
-    "group/act relative z-10 inline-flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-sm text-fg-subtle transition-colors";
-  // Reply, repost and like sit in equal cells, so the gaps between them
-  // don't shift with how wide each count is; views and share go right — X's row.
-  const cell = detail ? "w-24" : "w-[4.5rem] sm:w-20";
+  const btn = ACTION_BTN;
+  // From sm, reply, repost and like sit in equal cells, so the gaps between
+  // them don't shift with how wide each count is; views and share go right —
+  // X's row. A phone has no room for fixed cells once Play joins them, so
+  // there the left group spreads across the row instead, as X's does.
+  const cell = detail ? "sm:w-24" : "sm:w-20";
 
   return (
     <div
@@ -294,16 +311,15 @@ export function PostActions({
       className={cn(
         "-ml-2 flex items-center justify-between",
         detail ? "border-b border-border py-1.5" : "mt-1.5",
-        className,
       )}
     >
-      <div className="flex items-center">
+      <div className="flex flex-1 items-center justify-between pr-3 sm:flex-none sm:justify-start sm:pr-0">
         <Link
           href={detail ? "#reply" : `/p/${post.id}#reply`}
           className={cn(btn, cell, "hover:text-brand")}
           aria-label={`Reply${post.replyCount ? `, ${post.replyCount} replies` : ""}`}
         >
-          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
+          <span className={cn(ACTION_ICON, "group-hover/act:bg-brand/10")}>
             <MessageCircle className="size-[1.125rem]" aria-hidden="true" />
           </span>
           {post.replyCount > 0 && <span className="num -ml-1">{compactCount(post.replyCount)}</span>}
@@ -316,7 +332,7 @@ export function PostActions({
           aria-label={`${repost.reposted ? "Undo repost" : "Repost"}${repost.count ? `, ${repost.count} reposts` : ""}`}
           className={cn(btn, cell, repost.reposted ? "text-hit" : "hover:text-hit")}
         >
-          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-hit/10">
+          <span className={cn(ACTION_ICON, "group-hover/act:bg-hit/10")}>
             <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
           </span>
           {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
@@ -329,11 +345,23 @@ export function PostActions({
           aria-label={`${like.liked ? "Unlike" : "Like"}${like.count ? `, ${like.count} likes` : ""}`}
           className={cn(btn, cell, like.liked ? "text-pink-500" : "hover:text-pink-500")}
         >
-          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-pink-500/10">
+          <span className={cn(ACTION_ICON, "group-hover/act:bg-pink-500/10")}>
             <Heart className={cn("size-[1.125rem]", like.liked && "fill-current")} aria-hidden="true" />
           </span>
           {like.count > 0 && <span className="num -ml-1">{compactCount(like.count)}</span>}
         </button>
+
+        {play && (
+          <FollowToggle
+            kind="parlay"
+            variant="action"
+            pickId={play.parlayId}
+            selection={play.title}
+            follow={play.follow}
+            state={play.state}
+            className={cell}
+          />
+        )}
       </div>
 
       <div className="flex items-center">
@@ -342,13 +370,13 @@ export function PostActions({
           title={`${post.viewCount} ${post.viewCount === 1 ? "person has" : "people have"} seen this`}
           aria-label={`${post.viewCount} views`}
         >
-          <span className="grid size-8 place-items-center rounded-full">
+          <span className={ACTION_ICON}>
             <BarChart2 className="size-[1.125rem]" aria-hidden="true" />
           </span>
           {post.viewCount > 0 && <span className="num -ml-1">{compactCount(post.viewCount)}</span>}
         </span>
         <button type="button" onClick={share} aria-label="Share post" className={cn(btn, "pr-0 hover:text-brand")}>
-          <span className="grid size-8 place-items-center rounded-full group-hover/act:bg-brand/10">
+          <span className={cn(ACTION_ICON, "group-hover/act:bg-brand/10")}>
             <Share className="size-[1.125rem]" aria-hidden="true" />
           </span>
         </button>

@@ -8,6 +8,7 @@ import { setParlayFollowAction, setPickFollowAction } from "@/app/actions/follow
 import { FOLLOW_LABELS, type ViewerFollow } from "@/lib/follows";
 import { cn } from "@/lib/utils";
 import { PICK_STATE, type PickState } from "@/components/pick-state";
+import { ACTION_BTN, ACTION_ICON } from "@/components/social/action-row";
 import { tryAction } from "@/lib/try-action";
 
 /**
@@ -37,6 +38,8 @@ export function FollowToggle({
   featured,
   state,
   kind = "pick",
+  variant = "circle",
+  className,
 }: {
   /** The pick's id — or the parlay's, with kind="parlay". */
   pickId: string;
@@ -48,6 +51,13 @@ export function FollowToggle({
   featured?: boolean;
   /** Under way or graded: the circle shows why it's locked (see pick-state.ts). */
   state?: PickState | null;
+  /**
+   * "circle": left of a pick card's headline. "action": in a post's action
+   * row, labelled Play / Played — a shared parlay's (see PostActions).
+   */
+  variant?: "circle" | "action";
+  /** The action row's cell width. */
+  className?: string;
 }) {
   const [taken, setTaken, keepTaken] = useKeptOptimistic(follow.taken);
   const [pending, startTransition] = useTransition();
@@ -75,6 +85,63 @@ export function FollowToggle({
   // headline's first line rather than the middle of a selection long enough
   // to wrap.
   const box = featured ? "size-10 -ml-1" : "size-9 -ml-1 -mt-1";
+
+  function toggle() {
+    const next = !taken;
+    startTransition(async () => {
+      setTaken(next);
+      const result = await tryAction(() =>
+        kind === "parlay" ? setParlayFollowAction(pickId, next) : setPickFollowAction(pickId, next),
+      );
+      if (result && !result.ok) toast.error(result.error);
+      else keepTaken(next);
+    });
+  }
+
+  if (variant === "action") {
+    const icon = "size-[1.125rem]";
+    const word = (text: string) => <span className="-ml-1">{text}</span>;
+    // Locked: what happened, in the ring your tick turns into — or just the
+    // reason, if you never played it.
+    if (!follow.open) {
+      const s = state ? PICK_STATE[state] : null;
+      const reason = !s ? FOLLOW_LABELS.closedUntaken : state === "started" || state === "awaiting" ? FOLLOW_LABELS.started : s.label;
+      const label = taken ? `${kind === "parlay" ? "You played this parlay" : FOLLOW_LABELS.took} — ${reason}` : reason;
+      return (
+        <span className={cn(ACTION_BTN, "cursor-default", taken ? "text-brand" : "text-fg-subtle/60", className)} title={label}>
+          <span className={ACTION_ICON}>
+            {s ? (
+              <span className={cn("grid size-[1.125rem] place-items-center rounded-full", taken && "border-[1.5px] border-brand bg-brand/15", s.color)}>
+                <s.icon className={taken ? "size-2.5" : "size-4"} strokeWidth={taken ? 3 : 2.25} aria-hidden="true" />
+              </span>
+            ) : taken ? (
+              <CircleCheck className={cn(icon, "fill-brand/15")} aria-hidden="true" />
+            ) : (
+              <Circle className={icon} aria-hidden="true" />
+            )}
+          </span>
+          {taken && word("Played")}
+          <span className="sr-only">{label}</span>
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={taken}
+        aria-label={`${kind === "parlay" ? "I played this parlay" : FOLLOW_LABELS.take}: ${selection}`}
+        title={kind === "parlay" ? (taken ? "You played this parlay" : "I played this parlay") : taken ? FOLLOW_LABELS.took : FOLLOW_LABELS.take}
+        onClick={toggle}
+        className={cn(ACTION_BTN, taken ? "text-brand" : "hover:text-brand", pending && "opacity-70", className)}
+      >
+        <span className={cn(ACTION_ICON, "group-hover/act:bg-brand/10")}>
+          {taken ? <CircleCheck className={cn(icon, "fill-brand/15")} aria-hidden="true" /> : <Circle className={icon} aria-hidden="true" />}
+        </span>
+        {word(taken ? "Played" : "Play")}
+      </button>
+    );
+  }
 
   // Past kick-off the fact is fixed, so it renders as a statement rather than a
   // control: still visible, so a tester can see what they logged, but there is
@@ -123,18 +190,6 @@ export function FollowToggle({
         <span className="sr-only">{label}</span>
       </span>
     );
-  }
-
-  function toggle() {
-    const next = !taken;
-    startTransition(async () => {
-      setTaken(next);
-      const result = await tryAction(() =>
-        kind === "parlay" ? setParlayFollowAction(pickId, next) : setPickFollowAction(pickId, next),
-      );
-      if (result && !result.ok) toast.error(result.error);
-      else keepTaken(next);
-    });
   }
 
   return (

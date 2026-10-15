@@ -107,7 +107,7 @@ export async function loadCommunityChunk({
     const post = postFor.get(pl.id);
     out.push(
       post ? (
-        <ParlayPost key={pl.id} post={{ ...post, parlay: pl }} viewerId={auth.user.id} />
+        <ParlayPost key={pl.id} post={{ ...post, parlay: pl }} viewerId={auth.user.id} isAdmin={auth.isAdmin} />
       ) : (
         // The same ticket as Oobee's parlays, with who built it in the
         // header where Oobee's show the sports.

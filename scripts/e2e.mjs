@@ -734,6 +734,52 @@ await seedStatsFixture(sql);
 }
 await dropStatsFixture(sql);
 
+/* ------------------------------------------------- a shared parlay post */
+
+console.log("\nShared parlay in the feed");
+{
+  // Someone else's shared ticket is a post like any other: the ticket where a
+  // photo would go, and Play in the same action row as Reply and Like.
+  const legs = await sql`
+    select id from picks where slate_date = ${latestSlate}
+      and status = 'pending' and starts_at > now() order by rank limit 2
+  `;
+  const [pl] = await sql`
+    insert into parlays (owner_id, slate_date, shared) values (${seedAdmin.id}, ${latestSlate}, true) returning id
+  `;
+  await sql`insert into parlay_legs (parlay_id, pick_id)
+            select ${pl.id}, id from picks where id = any(${legs.map((l) => l.id)})`;
+  const [post] = await sql`insert into posts (author_id, body, parlay_id) values (${seedAdmin.id}, '', ${pl.id}) returning id`;
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/p/${post.id}`);
+  await hydrated(page, "article button");
+  const article = page.locator("article", { has: page.locator('[role="group"][aria-label*="2-leg parlay"]') });
+  check((await article.count()) === 1, "the ticket sits inside the post");
+  const play = article.getByRole("checkbox", { name: /I played this parlay/ });
+  const like = article.getByRole("button", { name: /^Like/ });
+  const [playBox, likeBox] = [await play.boundingBox(), await like.boundingBox()];
+  check(
+    Boolean(playBox && likeBox) && Math.abs(playBox.y - likeBox.y) < 4,
+    "Play is in the action row, beside Like",
+    `play.y=${playBox?.y} like.y=${likeBox?.y}`,
+  );
+  await play.click();
+  await page.waitForFunction(() => document.querySelector('[role="checkbox"]')?.getAttribute("aria-checked") === "true");
+  let row;
+  for (let i = 0; i < 20 && !row; i++) {
+    [row] = await sql`select 1 from parlay_follows where user_id = ${tester.id} and parlay_id = ${pl.id}`;
+    if (!row) await page.waitForTimeout(250);
+  }
+  check(Boolean(row), "pressing Play logs the parlay as played");
+  await ctx.close();
+  await sql`delete from posts where id = ${post.id}`;
+  await sql`delete from parlays where id = ${pl.id}`;
+}
+
 /* -------------------------------------------------------------- feedback */
 
 console.log("\nFeedback");

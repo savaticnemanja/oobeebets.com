@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
-import { getAncestors, getPost, getReplies, withAttachments, type FeedPost } from "@/lib/social";
-import { ParlayCard } from "@/components/parlay-card";
+import { getAncestors, getPost, getReplies, withAttachments } from "@/lib/social";
+import { parlayParts } from "@/components/social/parlay-row";
 import { appUrl } from "@/lib/site";
 import { Composer } from "@/components/social/composer";
 import { EmptyFeed } from "@/components/social/feed";
@@ -71,8 +71,6 @@ export default async function PostPage({ params }: { params: Params }) {
   // A shared parlay's post (or one above it) shows its ticket.
   const [post, ...ancestors] = await withAttachments([found, ...chain], viewerId);
   const replies = await withAttachments(replyList, viewerId);
-  const ticket = (p: FeedPost) =>
-    p.parlay ? <ParlayCard parlay={p.parlay} /> : undefined;
 
   return (
     <SocialShell>
@@ -98,7 +96,7 @@ export default async function PostPage({ params }: { params: Params }) {
           variant="ancestor"
           threadAbove={i > 0}
           showReplyTo={i === 0}
-          attachment={ticket(a)}
+          {...parlayParts(a, viewerId)}
         />
       ))}
 
@@ -109,7 +107,7 @@ export default async function PostPage({ params }: { params: Params }) {
         variant="detail"
         threadAbove={ancestors.length > 0}
         showReplyTo={ancestors.length === 0}
-        attachment={ticket(post)}
+        {...parlayParts(post, viewerId, true)}
       />
 
       {auth ? (
@@ -132,7 +130,7 @@ export default async function PostPage({ params }: { params: Params }) {
       {replies.length === 0 ? (
         <EmptyFeed title="No replies yet">Be the first to weigh in.</EmptyFeed>
       ) : (
-        replies.map((r) => <PostCard key={r.id} post={r} viewerId={viewerId} isAdmin={isAdmin} />)
+        replies.map((r) => <PostCard key={r.id} post={r} viewerId={viewerId} isAdmin={isAdmin} {...parlayParts(r, viewerId)} />)
       )}
     </SocialShell>
   );

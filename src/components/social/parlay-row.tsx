@@ -1,52 +1,55 @@
-import { Repeat2 } from "lucide-react";
-import Link from "next/link";
 import type { FeedPost } from "@/lib/social";
 import type { ParlayView } from "@/lib/parlay-store";
 import type { ViewerFollow } from "@/lib/follows";
-import { ParlayCard } from "@/components/parlay-card";
-import { PostActions } from "@/components/social/post-card";
-import { displayNameOf } from "@/components/social/identity";
+import { PostCard, type PostPlay } from "@/components/social/post-card";
+import { ParlayTicket } from "@/components/social/parlay-ticket";
+import { ticketState } from "@/components/pick-state";
 
 /**
- * A shared Community parlay in a timeline, the Community tab, wherever: the
- * flat ticket with who shared it and when in its header — and, since a shared
- * parlay is a post, the post's Reply · Repost · Like row under it.
+ * What a post carrying a shared parlay adds to PostCard: the ticket where a
+ * photo would go, and the Play control in its action row. Every place a post
+ * is drawn — a timeline row, a repost, the post above a reply, the post's own
+ * page — passes these, so a parlay post looks the same wherever it appears.
  */
+export function parlayParts(
+  post: FeedPost,
+  viewerId: string | null,
+  detail = false,
+): { attachment?: React.ReactNode; play?: PostPlay } {
+  if (!hasParlay(post)) return {};
+  const { parlay } = post;
+  const follow = playable(parlay, post.author.id, viewerId);
+  return {
+    attachment: <ParlayTicket parlay={parlay} detail={detail} />,
+    play: follow && {
+      parlayId: parlay.id,
+      title: parlay.title ?? `${parlay.legs.length}-leg parlay`,
+      follow,
+      state: ticketState(parlay.status, parlay.legs.map((l) => l.startsAt.getTime()), Date.now()),
+    },
+  };
+}
+
+/** A shared Community parlay as a timeline row: a post like any other. */
 export function ParlayPost({
   post,
   viewerId,
+  isAdmin,
   repostedBy,
 }: {
   post: FeedPost & { parlay: NonNullable<FeedPost["parlay"]> };
   viewerId: string | null;
+  isAdmin: boolean;
   repostedBy?: { username: string; displayName: string | null } | null;
 }) {
   return (
-    <ParlayCard
-      parlay={post.parlay}
-      variant="row"
-      owner={{ username: post.author.username, displayName: post.author.displayName, role: post.author.role }}
-      postHref={`/p/${post.id}`}
-      kicker={
-        repostedBy ? (
-          <Link
-            href={`/u/${repostedBy.username}`}
-            className="mb-2 flex items-center gap-2 text-[0.8125rem] font-semibold text-fg-subtle hover:underline"
-          >
-            <Repeat2 className="size-4" aria-hidden="true" />
-            {displayNameOf(repostedBy)} reposted
-          </Link>
-        ) : null
-      }
-      footer={<PostActions post={post} viewerId={viewerId} className="mt-2" />}
-      follow={playable(post.parlay, post.author.id, viewerId)}
-    />
+    <PostCard post={post} viewerId={viewerId} isAdmin={isAdmin} repostedBy={repostedBy} {...parlayParts(post, viewerId)} />
   );
 }
 
 /**
- * The viewer's "I played this" circle on someone else's ticket — while it's
- * open, or once they've played it (then it shows locked, ticked).
+ * The viewer's "I played this" on someone else's ticket — while it's open,
+ * or once they've played it (then it shows locked, ticked).
  */
 export function playable(parlay: ParlayView, ownerId: string | null, viewerId: string | null): ViewerFollow | undefined {
   if (!viewerId || ownerId === viewerId) return undefined;
