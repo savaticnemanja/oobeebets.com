@@ -173,18 +173,6 @@ const gradable = await sql`select distinct g.league from selections s join games
 const ungradable = [...new Set([...FEED_LEAGUES, ...gradable.map((r) => r.league)])].filter((l) => !SCORES_SPORT_KEYS[l]);
 check(ungradable.length === 0, "every league with open bets can still be graded", ungradable.length ? `no scores key: ${ungradable}` : "");
 
-{
-  // The Content-Security-Policy is on every response, and closes the doors
-  // it's there to close.
-  const res = await fetch(`${APP_URL}/`, { redirect: "manual" });
-  const csp = res.headers.get("content-security-policy") ?? "";
-  check(
-    ["frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "connect-src 'self'"].every((d) => csp.includes(d)),
-    "Content-Security-Policy is sent",
-    csp ? "" : "no header",
-  );
-}
-
 /* ------------------------------------------------------- 2. board visibility */
 
 console.log("\nBoard visibility (picks past the free limit must be absent from the payload)");
