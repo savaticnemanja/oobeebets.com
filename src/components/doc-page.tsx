@@ -44,9 +44,9 @@ export async function DocPage({
 }
 
 /** One section of a DocPage: a heading and its paragraphs, in Home's text size. */
-export function DocSection({ title, children }: { title?: string; children: React.ReactNode }) {
+export function DocSection({ id, title, children }: { id?: string; title?: string; children: React.ReactNode }) {
   return (
-    <section className="border-b border-border px-4 py-4">
+    <section id={id} className="scroll-mt-20 border-b border-border px-4 py-4">
       {title && <h2 className="text-base font-bold tracking-tight text-fg">{title}</h2>}
       <div className="mt-1.5 space-y-3 text-[0.9375rem] leading-relaxed text-fg-muted first:mt-0">{children}</div>
     </section>

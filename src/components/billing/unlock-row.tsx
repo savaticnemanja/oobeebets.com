@@ -19,7 +19,7 @@ export function UnlockRow({ tier, what }: { tier: Tier; what: string }) {
         </span>
       </p>
       <Button asChild size="sm" className="shrink-0 rounded-full">
-        <Link href={`/pricing#${tier}`}>Unlock</Link>
+        <Link href={`/account#${tier}`}>Unlock</Link>
       </Button>
     </div>
   );

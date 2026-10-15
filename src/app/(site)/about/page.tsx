@@ -50,7 +50,7 @@ export default function AboutPage() {
           <p>
             The #1 game bet and #1 player prop are free every day. Base, Pro and Elite
             open the top 5, top 10 or all 15 of each, and Pro and Elite add our parlays —
-            see <Link href="/pricing" className="text-brand hover:underline">Plans</Link>.
+            see <Link href="/account#plan" className="text-brand hover:underline">Plans</Link>.
           </p>
         ) : (
           <p>

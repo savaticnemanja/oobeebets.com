@@ -24,7 +24,7 @@ const INTEGRATION_ID = "oobee_tiers_kqvbmzta";
  */
 export async function startCheckoutAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await getAuth();
-  if (!auth) redirect("/login?next=/pricing");
+  if (!auth) redirect("/login?next=/account");
   if (!billingEnabled()) return { ok: false, error: "Plans aren't open yet." };
   if (auth.isAdmin) return { ok: false, error: "Admins already see the whole board." };
 
@@ -54,7 +54,7 @@ export async function startCheckoutAction(_prev: ActionState, formData: FormData
         subscription_data: { metadata: { user_id: auth.user.id } },
         allow_promotion_codes: true,
         success_url: appUrl("/picks?subscribed=1"),
-        cancel_url: appUrl("/pricing"),
+        cancel_url: appUrl("/account#plan"),
         integration_identifier: INTEGRATION_ID,
       });
       if (!session.url) throw new BillingError("Stripe didn't return a checkout page.");

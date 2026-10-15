@@ -9,8 +9,9 @@ import type { PickCategory, Tier } from "@/db/schema";
  * up add Oobee's parlays. Tiers are strict supersets: Elite sees everything
  * Pro does, Pro everything Base does.
  *
- * `priceCents` is what the pricing page prints. What a subscriber is charged
- * is the Stripe Price behind `lookupKey` (scripts/stripe-setup.mjs makes them),
+ * `priceCents` is what the account page's plan list prints. What a subscriber
+ * is charged is the Stripe Price behind `lookupKey` (scripts/stripe-setup.mjs
+ * makes them),
  * so a price rise is a new Price with the lookup key moved onto it, never an
  * edit to the old one — existing subscribers keep the Price they signed up on.
  */

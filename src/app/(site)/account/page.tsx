@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { ProfileForm } from "@/components/social/profile-form";
 import { ManagePlanButton } from "@/components/billing/plan-button";
+import { PlanList } from "@/components/billing/plan-list";
 import { viewerAccess } from "@/lib/billing/access";
 import { TIERS } from "@/lib/tiers";
 import { formatDate } from "@/lib/i18n/format";
@@ -20,9 +21,10 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * Your profile and account settings — reached from "Edit profile" on your
- * profile, not from the navigation, as on X. Laid out like every other page:
- * the 600px column, and each part a full-width row.
+ * Your profile, account settings and plan — reached from "Edit profile" on
+ * your profile, not from the navigation, as on X, and from the board's Unlock
+ * rows (#base, #pro, #elite). Laid out like every other page: the 600px
+ * column, and each part a full-width row.
  */
 export default async function AccountPage() {
   const auth = await getAuth();
@@ -62,7 +64,7 @@ export default async function AccountPage() {
         )}
       </DocSection>
 
-      <DocSection title="Access">
+      <DocSection id="plan" title="Plan">
         {access === null ? (
           <>
             <p>You have the whole board — all 15 picks, free during our beta. No plan needed.</p>
@@ -82,25 +84,24 @@ export default async function AccountPage() {
                     : `, renewing ${formatDate(subscription.currentPeriodEnd)}.`
                   : "."}
             </p>
-            <div className="flex flex-wrap items-start gap-3">
-              <ManagePlanButton />
-              <Button asChild variant="ghost" className="rounded-full">
-                <Link href="/pricing">Compare plans</Link>
-              </Button>
-            </div>
+            <ManagePlanButton />
           </>
         ) : (
-          <>
-            <p>
-              You&apos;re on the free board: the #1 game bet and #1 player prop each day. A plan opens up to all 15
-              of each.
-            </p>
-            <Button asChild className="rounded-full">
-              <Link href="/pricing">See plans</Link>
-            </Button>
-          </>
+          <p>
+            You&apos;re on the free board: the #1 game bet and #1 player prop each day. A plan opens up to all 15
+            of each. Every plan is monthly and can be cancelled any time.
+          </p>
         )}
       </DocSection>
+
+      {access !== null && (
+        <PlanList
+          access={access}
+          subscription={subscription}
+          // Test keys (sk_test_…, rk_test_…) mean a sandbox.
+          testMode={process.env.STRIPE_SECRET_KEY?.includes("_test_") ?? false}
+        />
+      )}
 
       <DocSection title="Security">
         <p>
