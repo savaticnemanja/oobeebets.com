@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getUserParlays } from "@/lib/parlay-store";
 import { ParlayCard } from "@/components/parlay-card";
 import { DeleteParlayButton } from "@/components/parlay-builder";
 import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
 import { SocialShell } from "@/components/social/social-shell";
+import { BackButton } from "@/components/nav-memory";
 import { UPCOMING_DAYS, getUpcomingGames } from "@/lib/odds/board";
 import { after } from "next/server";
 import { ensureUpcomingOdds } from "@/lib/odds/sync";
@@ -49,13 +49,7 @@ export default async function BuildParlayPage() {
   return (
     <SocialShell>
       <div className="flex items-center gap-3 px-2 py-2">
-        <Link
-          href="/community"
-          aria-label="Back to Community"
-          className="grid size-9 place-items-center rounded-full transition-colors hover:bg-surface-2"
-        >
-          <ArrowLeft className="size-5" aria-hidden="true" />
-        </Link>
+        <BackButton fallback="/community" label="Back to Community" />
         <h1 className="text-xl font-bold tracking-tight">Build a parlay</h1>
       </div>
 

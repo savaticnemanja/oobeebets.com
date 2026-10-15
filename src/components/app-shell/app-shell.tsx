@@ -11,6 +11,8 @@ import { SITE } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { HelpLine } from "@/components/help-line";
 import { UnreadProvider } from "@/components/app-shell/unread";
+import { NavTracker } from "@/components/nav-memory";
+import { ViewerProvider } from "@/components/app-shell/viewer";
 import { unreadCount } from "@/lib/notifications";
 
 /**
@@ -35,6 +37,7 @@ export async function AppShell({
   const [suggestions, unread] = await Promise.all([getWhoToFollow(user.id, 5), unreadCount(user.id)]);
 
   return (
+    <ViewerProvider viewer={{ id: user.id, name: user.name, username: user.username }}>
     <UnreadProvider initial={unread}>
     <div className="mx-auto flex w-full max-w-[1325px] justify-center pl-safe-left pr-safe-right">
       <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[275px] xl:items-stretch xl:px-3">
@@ -98,8 +101,10 @@ export async function AppShell({
       </ComposeDialog>
       <BottomNav username={user.username} isAdmin={user.isAdmin} />
       <ScrollChrome />
+      <NavTracker />
     </div>
     </UnreadProvider>
+    </ViewerProvider>
   );
 }
 

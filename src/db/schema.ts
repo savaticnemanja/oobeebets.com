@@ -537,9 +537,16 @@ export const posts = pgTable(
      * have an empty body: the ticket is the content.
      */
     parlayId: uuid("parlay_id").references(() => parlays.id, { onDelete: "cascade" }),
+    /**
+     * A quote post: this one shows `quote_id` embedded under its own text, as
+     * on X. If the quoted post is deleted the quote stays, without the embed.
+     */
+    quoteId: uuid("quote_id").references((): AnyPgColumn => posts.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // A post's quotes.
+    index("posts_quote_idx").on(t.quoteId),
     // One post per shared parlay.
     uniqueIndex("posts_parlay_unique").on(t.parlayId),
     // A profile's timeline, and the Following feed (author in (...)).
@@ -1027,6 +1034,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "mention",
   "follow",
   "play",
+  "quote",
 ]);
 
 /**
@@ -1039,6 +1047,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
  *   like, repost  post_id = your post
  *   reply         post_id = the reply
  *   mention       post_id = the post that mentions you
+ *   quote         post_id = the post quoting yours
  *   play          parlay_id = your parlay
  *   follow        neither
  *

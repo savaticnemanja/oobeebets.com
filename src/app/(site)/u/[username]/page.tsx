@@ -3,7 +3,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { getAuth } from "@/lib/auth";
-import { getProfile, getProfilePosts, type ProfileTab } from "@/lib/social";
+import { after } from "next/server";
+import { getProfile, getProfilePosts } from "@/lib/social";
+import { refreshResults } from "@/lib/odds/sync";
+import { StatsPanel } from "@/components/profile/stats-panel";
 import { compactCount } from "@/lib/social-rules";
 import { LocalTime } from "@/components/local-time";
 import { appUrl } from "@/lib/site";
@@ -37,23 +40,20 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-const TABS: Array<{ key: ProfileTab; label: string }> = [
-  { key: "posts", label: "Posts" },
-  { key: "replies", label: "Replies" },
-  { key: "likes", label: "Likes" },
-];
+type Tab = "posts" | "stats";
 
 /**
- * A public profile, laid out like X's: who they are, how many follow them and
- * whom they follow, and their posts. Readable signed out — liking, replying
- * and following ask you to sign in first.
+ * A profile, laid out like X's: who they are, how many follow them and whom
+ * they follow, then two tabs — Posts (posts and replies together, newest
+ * first; a reply under the post it answers) and, on your own profile only,
+ * Stats: your record, which used to be its own page (see StatsPanel).
  */
 export default async function ProfilePage({
   params,
   searchParams,
 }: {
   params: Params;
-  searchParams: Promise<{ tab?: string; before?: string }>;
+  searchParams: Promise<{ tab?: string; before?: string; view?: string; show?: string }>;
 }) {
   const [{ username }, query, auth] = await Promise.all([params, searchParams, getAuth()]);
   // Signed out, only the landing page, About and the legal pages are open.
@@ -63,13 +63,21 @@ export default async function ProfilePage({
   const profile = await getProfile(decodeURIComponent(username), viewerId);
   if (!profile) notFound();
 
-  const tab: ProfileTab = TABS.some((t) => t.key === query.tab) ? (query.tab as ProfileTab) : "posts";
-  const before = query.before && /^[0-9a-f-]{36}$/i.test(query.before) ? query.before : undefined;
-  const feed = await getProfilePosts(profile.id, viewerId, tab, before);
-
   const self = viewerId === profile.id;
+  // Stats is yours alone; on anyone else's profile the tab doesn't exist.
+  const tab: Tab = self && query.tab === "stats" ? "stats" : "posts";
+  const before = query.before && /^[0-9a-f-]{36}$/i.test(query.before) ? query.before : undefined;
+  const feed = tab === "posts" ? await getProfilePosts(profile.id, viewerId, before) : null;
+  // Grade anything that has finished — after the response, so nobody waits
+  // on the odds provider to see their record (see refreshResults).
+  if (tab === "stats") after(refreshResults);
+
   const name = displayNameOf(profile);
   const base = `/u/${profile.username}`;
+  const tabs = [
+    { key: "posts", label: "Posts", href: base },
+    ...(self ? [{ key: "stats", label: "Stats", href: `${base}?tab=stats` }] : []),
+  ];
 
   return (
     <SocialShell>
@@ -126,36 +134,34 @@ export default async function ProfilePage({
         </div>
       </div>
 
-      <FeedTabs
-        sticky
-        active={tab}
-        tabs={TABS.map((t) => ({ ...t, href: t.key === "posts" ? base : `${base}?tab=${t.key}` }))}
-      />
+      {/* One tab needs no strip: someone else's profile is just their posts. */}
+      {tabs.length > 1 ? (
+        <FeedTabs sticky active={tab} tabs={tabs} label="Profile" />
+      ) : (
+        <h2 className="border-b border-border px-4 pb-3 text-[0.9375rem] font-bold">Posts</h2>
+      )}
 
+      {tab === "stats" ? (
+        <StatsPanel viewerId={viewerId} view={query.view} show={query.show} base={`${base}?tab=stats`} />
+      ) : (
       <FeedList
-        items={await postItems(feed.posts, viewerId)}
+        items={await postItems(feed!.posts, viewerId)}
         viewerId={viewerId}
         isAdmin={auth?.isAdmin ?? false}
         more={
-          <LoadMore
-            key={`${profile.id}:${tab}`}
-            next={feed.nextCursor}
-            load={loadProfileAction.bind(null, profile.id, tab)}
-          />
+          <LoadMore key={profile.id} next={feed!.nextCursor} load={loadProfileAction.bind(null, profile.id)} />
         }
         empty={
           <EmptyFeed
             title={
               before
                 ? "That's everything"
-                : tab === "posts"
-                  ? self ? "You haven't posted yet" : `@${profile.username} hasn't posted yet`
-                  : tab === "replies"
-                    ? "No replies yet"
-                    : "No likes yet"
+                : self
+                  ? "You haven't posted yet"
+                  : `@${profile.username} hasn't posted yet`
             }
           >
-            {self && tab === "posts" && !before ? (
+            {self && !before ? (
               <ComposeDialog viewerName={displayNameOf(auth.user)}>
                 <button type="button" className="text-brand hover:underline">
                   Write your first post
@@ -165,6 +171,7 @@ export default async function ProfilePage({
           </EmptyFeed>
         }
       />
+      )}
     </SocialShell>
   );
 }

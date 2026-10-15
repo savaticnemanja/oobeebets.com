@@ -2,7 +2,7 @@
 
 import { getAuth } from "@/lib/auth";
 import { forYouCursor, getHomeFollowing, getHomeForYou, parseForYouCursor, postItems } from "@/lib/home-feed";
-import { getProfilePosts, type ProfileTab } from "@/lib/social";
+import { getProfilePosts } from "@/lib/social";
 import { FeedList } from "@/components/social/feed";
 import { loadBoardDays } from "@/app/(site)/picks/board-days";
 import { loadCommunityChunk } from "@/app/(site)/community/community-feed";
@@ -50,12 +50,10 @@ export async function loadHomeAction(tab: "for-you" | "following", cursor: strin
   };
 }
 
-export async function loadProfileAction(profileId: string, tab: ProfileTab, cursor: string): Promise<Chunk> {
+export async function loadProfileAction(profileId: string, cursor: string): Promise<Chunk> {
   const auth = await viewer();
-  if (!UUID.test(profileId) || !UUID.test(cursor) || !["posts", "replies", "likes"].includes(tab)) {
-    throw new Error("Bad cursor");
-  }
-  const feed = await getProfilePosts(profileId, auth.user.id, tab, cursor);
+  if (!UUID.test(profileId) || !UUID.test(cursor)) throw new Error("Bad cursor");
+  const feed = await getProfilePosts(profileId, auth.user.id, cursor);
   return {
     node: <FeedList items={await postItems(feed.posts, auth.user.id)} viewerId={auth.user.id} isAdmin={auth.isAdmin} />,
     next: feed.nextCursor,

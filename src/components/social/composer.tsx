@@ -21,6 +21,8 @@ import { GifPicker } from "@/components/social/gif-picker";
 import { Avatar } from "@/components/social/identity";
 import { LinkCard } from "@/components/social/link-card";
 import { useMentionSuggest } from "@/components/social/mention-suggest";
+import { QuoteCard } from "@/components/social/quote-card";
+import type { QuotedPost } from "@/lib/social";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +53,7 @@ const pollLabel = (h: number) => (h < 24 ? `${h} hour${h === 1 ? "" : "s"}` : `$
 export function Composer({
   viewerName,
   parentId,
+  quote,
   placeholder = "What's your play today?",
   submitLabel = "Post",
   autoFocus,
@@ -61,6 +64,8 @@ export function Composer({
 }: {
   viewerName: string;
   parentId?: string;
+  /** A quote post: the post it quotes, shown under the text. */
+  quote?: QuotedPost;
   placeholder?: string;
   submitLabel?: string;
   autoFocus?: boolean;
@@ -188,7 +193,8 @@ export function Composer({
   const uploading = photos.some((p) => !p.id);
   const hasMedia = photos.length > 0 || gif !== null;
   const pollReady = poll === null || (length > 0 && poll.options.every((o) => o.trim().length > 0));
-  const canPost = (length > 0 || hasMedia) && remaining >= 0 && !pending && !uploading && pollReady;
+  // A quote needs words of its own; with none, it would just be a repost.
+  const canPost = (length > 0 || (hasMedia && !quote)) && remaining >= 0 && !pending && !uploading && pollReady;
   // One kind of attachment per post, as on X.
   const canPhoto = !gif && !poll && photos.length < MAX_PHOTOS && !photos.some((p) => p.kind === "gif");
   const canGif = photos.length === 0 && !poll && !gif;
@@ -209,6 +215,7 @@ export function Composer({
       <Avatar name={viewerName} />
       <div className="min-w-0 flex-1">
         {parentId && <input type="hidden" name="parentId" value={parentId} />}
+        {quote && <input type="hidden" name="quoteId" value={quote.id} />}
         {photos.length > 0 && <input type="hidden" name="mediaIds" value={JSON.stringify(photos.map((p) => p.id))} />}
         {gif && <input type="hidden" name="gif" value={JSON.stringify({ url: gif.url, width: gif.width, height: gif.height })} />}
         {poll && <input type="hidden" name="poll" value={JSON.stringify({ options: poll.options.map((o) => o.trim()), hours: poll.hours })} />}
@@ -249,7 +256,8 @@ export function Composer({
             <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Fetching link preview…
           </p>
         )}
-        {preview && !hasMedia && !poll && <LinkCard preview={preview} className="mt-2" />}
+        {preview && !hasMedia && !poll && !quote && <LinkCard preview={preview} className="mt-2" />}
+        {quote && <QuoteCard quote={quote} link={false} className="mt-2" />}
 
         {/* ------------------------------------------------ attachments */}
         {photos.length > 0 && (

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useKeptOptimistic } from "@/components/use-kept-optimistic";
-import { BarChart2, Heart, MessageCircle, MoreHorizontal, Repeat2, Share, Trash2 } from "lucide-react";
+import { BarChart2, Heart, MessageCircle, MoreHorizontal, PenLine, Repeat2, Share, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
 import type { FeedPost } from "@/lib/social";
@@ -19,6 +19,9 @@ import { PostPoll } from "@/components/social/post-poll";
 import { trackView } from "@/components/social/view-tracker";
 import { ACTION_BTN, ACTION_ICON } from "@/components/social/action-row";
 import { FollowToggle } from "@/components/follow-toggle";
+import { ComposeDialog } from "@/components/social/compose-dialog";
+import { useViewer } from "@/components/app-shell/viewer";
+import { QuoteCard, asQuoted } from "@/components/social/quote-card";
 import type { PickState } from "@/components/pick-state";
 import type { ViewerFollow } from "@/lib/follows";
 import {
@@ -112,6 +115,8 @@ export function PostCard({
 
   return (
     <article
+      // Where a list comes back to after "back" (load-more.tsx).
+      data-anchor={variant === "feed" ? post.id : undefined}
       onClick={openPost}
       className={cn(
         // A repost line spans the row above the avatar and the content.
@@ -185,7 +190,8 @@ export function PostCard({
         {post.media && post.media.length > 0 && <PostMedia media={post.media} className="mt-3" />}
         {post.poll && <PostPoll postId={post.id} poll={post.poll} viewerId={viewerId} authorId={post.author.id} />}
         {/* A link card only when nothing else is showing, as on X. */}
-        {post.preview && !post.media?.length && !post.poll && <LinkCard preview={post.preview} className="mt-3" />}
+        {post.preview && !post.media?.length && !post.poll && !post.quote && <LinkCard preview={post.preview} className="mt-3" />}
+        {post.quote && <QuoteCard quote={post.quote} className="mt-3" />}
         {attachment && <div className="mt-3">{attachment}</div>}
 
         {detail && (
@@ -238,6 +244,10 @@ function PostActions({
   const [repost, setRepost, keepRepost] = useKeptOptimistic({ reposted: post.reposted, count: post.repostCount });
   const [, startTransition] = useTransition();
   const router = useRouter();
+  const viewer = useViewer();
+  // Replies made from the popup count straight away; the page catches up on its next render.
+  const [replyCount, setReplyCount] = React.useState(post.replyCount);
+  const [quoting, setQuoting] = React.useState(false);
 
   function toggleLike() {
     if (!viewerId) {
@@ -299,11 +309,12 @@ function PostActions({
   }, [post.id, viewerId]);
 
   const btn = ACTION_BTN;
-  // From sm, reply, repost and like sit in equal cells, so the gaps between
-  // them don't shift with how wide each count is; views and share go right —
-  // X's row. A phone has no room for fixed cells once Play joins them, so
-  // there the left group spreads across the row instead, as X's does.
-  const cell = detail ? "sm:w-24" : "sm:w-20";
+  // Reply, repost and like (and Play) sit in equal cells, so an icon is in
+  // the same place on every post whatever its count; views and share go
+  // right — X's row. Fixed widths from sm; on a phone the cells share the
+  // row equally instead, since there's no room for fixed ones once Play
+  // joins them.
+  const cell = detail ? "flex-1 sm:w-24 sm:flex-none" : "flex-1 sm:w-20 sm:flex-none";
 
   return (
     <div
@@ -313,30 +324,59 @@ function PostActions({
         detail ? "border-b border-border py-1.5" : "mt-1.5",
       )}
     >
-      <div className="flex flex-1 items-center justify-between pr-3 sm:flex-none sm:justify-start sm:pr-0">
-        <Link
-          href={detail ? "#reply" : `/p/${post.id}#reply`}
-          className={cn(btn, cell, "hover:text-brand")}
-          aria-label={`Reply${post.replyCount ? `, ${post.replyCount} replies` : ""}`}
-        >
-          <span className={cn(ACTION_ICON, "group-hover/act:bg-brand/10")}>
-            <MessageCircle className="size-[1.125rem]" aria-hidden="true" />
-          </span>
-          {post.replyCount > 0 && <span className="num -ml-1">{compactCount(post.replyCount)}</span>}
-        </Link>
+      <div className="flex flex-1 items-center pr-3 sm:flex-none sm:pr-0">
+        {/* In a timeline, Reply opens the composer over it, so the timeline
+            stays put; on the post's own page it goes to the box under it. */}
+        {(() => {
+          const label = `Reply${replyCount ? `, ${replyCount} replies` : ""}`;
+          const inner = (
+            <>
+              <span className={cn(ACTION_ICON, "group-hover/act:bg-brand/10")}>
+                <MessageCircle className="size-[1.125rem]" aria-hidden="true" />
+              </span>
+              {replyCount > 0 && <span className="num -ml-1">{compactCount(replyCount)}</span>}
+            </>
+          );
+          return !detail && viewer ? (
+            <ComposeDialog viewerName={viewer.name} parent={post} onPosted={() => setReplyCount((n) => n + 1)}>
+              <button type="button" className={cn(btn, cell, "hover:text-brand")} aria-label={label}>
+                {inner}
+              </button>
+            </ComposeDialog>
+          ) : (
+            <Link href={detail ? "#reply" : `/p/${post.id}#reply`} className={cn(btn, cell, "hover:text-brand")} aria-label={label}>
+              {inner}
+            </Link>
+          );
+        })()}
 
-        <button
-          type="button"
-          onClick={toggleRepost}
-          aria-pressed={repost.reposted}
-          aria-label={`${repost.reposted ? "Undo repost" : "Repost"}${repost.count ? `, ${repost.count} reposts` : ""}`}
-          className={cn(btn, cell, repost.reposted ? "text-hit" : "hover:text-hit")}
-        >
-          <span className={cn(ACTION_ICON, "group-hover/act:bg-hit/10")}>
-            <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
-          </span>
-          {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
-        </button>
+        {/* Repost or Quote, from a little menu, as on X. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`${repost.reposted ? "Reposted" : "Repost or quote"}${repost.count ? `, ${repost.count} reposts` : ""}`}
+            className={cn(btn, cell, "outline-none", repost.reposted ? "text-hit" : "hover:text-hit")}
+          >
+            <span className={cn(ACTION_ICON, "group-hover/act:bg-hit/10")}>
+              <Repeat2 className="size-[1.125rem]" aria-hidden="true" />
+            </span>
+            {repost.count > 0 && <span className="num -ml-1">{compactCount(repost.count)}</span>}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-40">
+            <DropdownMenuItem onSelect={toggleRepost}>
+              <Repeat2 aria-hidden="true" />
+              {repost.reposted ? "Undo repost" : "Repost"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => (viewer ? setQuoting(true) : router.push(`/login?next=/p/${post.id}`))}
+            >
+              <PenLine aria-hidden="true" />
+              Quote
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {viewer && (
+          <ComposeDialog open={quoting} onOpenChange={setQuoting} viewerName={viewer.name} quote={asQuoted(post)} />
+        )}
 
         <button
           type="button"
@@ -365,8 +405,9 @@ function PostActions({
       </div>
 
       <div className="flex items-center">
+        {/* A floor on its width, so a post with no views doesn't widen the cells beside it. */}
         <span
-          className={cn(btn, "cursor-default")}
+          className={cn(btn, "min-w-[3.5rem] cursor-default")}
           title={`${post.viewCount} ${post.viewCount === 1 ? "person has" : "people have"} seen this`}
           aria-label={`${post.viewCount} views`}
         >

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { getAncestors, getPost, getReplies, withAttachments } from "@/lib/social";
 import { parlayParts } from "@/components/social/parlay-row";
@@ -10,6 +9,7 @@ import { Composer } from "@/components/social/composer";
 import { EmptyFeed } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { PostCard } from "@/components/social/post-card";
+import { BackButton } from "@/components/nav-memory";
 import { Button } from "@/components/ui/button";
 import { SocialShell } from "@/components/social/social-shell";
 
@@ -75,13 +75,7 @@ export default async function PostPage({ params }: { params: Params }) {
   return (
     <SocialShell>
       <div className="flex items-center gap-4 px-4 py-2.5">
-        <Link
-          href="/home"
-          aria-label="Back to Home"
-          className="grid size-9 place-items-center rounded-full transition-colors hover:bg-surface-2"
-        >
-          <ArrowLeft className="size-5" aria-hidden="true" />
-        </Link>
+        <BackButton fallback="/home" label="Back" />
         <h1 className="text-lg font-semibold">Post</h1>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { cameBack } from "@/components/nav-memory";
 
 export interface Chunk {
   node: React.ReactNode;
@@ -16,10 +17,65 @@ export interface Chunk {
  *
  * `load` is a server action bound to whatever it needs besides the cursor.
  * Give this a `key` per list (tab, profile) so switching lists starts over.
+ *
+ * Coming back to the list — the back button from a post, say — puts back
+ * every chunk it had loaded and the scroll position it was at, as X does.
+ * Without it the page came back with its first chunk only, and the reader
+ * at the top of it. Opening the page afresh (a nav tap) starts over.
  */
+
+interface Remembered {
+  /** The first page's cursor: chunks only fit back under the same first page. */
+  firstNext: string | null;
+  chunks: React.ReactNode[];
+  cursor: string | null;
+  y: number;
+  /** The row at the top of the screen ([data-anchor]) and how far down it sat. */
+  anchor: { id: string; top: number } | null;
+}
+
+/** The first row on screen, by its data-anchor (PostCard sets one). */
+function topRow(): { id: string; top: number } | null {
+  for (const el of document.querySelectorAll<HTMLElement>("[data-anchor]")) {
+    const r = el.getBoundingClientRect();
+    if (r.bottom > 64) return { id: el.dataset.anchor!, top: r.top };
+  }
+  return null;
+}
+
+/** Puts that row back where it was — or, failing that, the raw offset. */
+function scrollBack(saved: Pick<Remembered, "y" | "anchor">) {
+  const el = saved.anchor ? document.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(saved.anchor.id)}"]`) : null;
+  if (el && saved.anchor) window.scrollBy(0, el.getBoundingClientRect().top - saved.anchor.top);
+  else window.scrollTo(0, saved.y);
+}
+
+/** Per URL, for as long as the tab lives — what a list had loaded, and where you were. */
+const memory = new Map<string, Remembered>();
+
+/**
+ * What to start from: the remembered list when coming back to it, else
+ * nothing. Safe as initial state: a back navigation renders on the client
+ * only, and a full page load (the one time the server's HTML is hydrated)
+ * never counts as coming back — so server and client always agree.
+ */
+function recall(): { key: string | null; saved: Remembered | null } {
+  if (typeof window === "undefined") return { key: null, saved: null };
+  const key = window.location.pathname + window.location.search;
+  const saved = memory.get(key);
+  return { key, saved: saved && cameBack() ? saved : null };
+}
+
 export function LoadMore({ next, load }: { next: string | null; load: (cursor: string) => Promise<Chunk> }) {
-  const [chunks, setChunks] = useState<React.ReactNode[]>([]);
-  const [cursor, setCursor] = useState(next);
+  const [initial] = useState(recall);
+  // Chunks only fit back under the first page they followed.
+  const fits = initial.saved !== null && initial.saved.firstNext === next;
+  const [chunks, setChunks] = useState<React.ReactNode[]>(fits ? initial.saved!.chunks : []);
+  const [cursor, setCursor] = useState(fits ? initial.saved!.cursor : next);
+  const [restoreTo, setRestoreTo] = useState<Pick<Remembered, "y" | "anchor"> | null>(
+    initial.saved ? { y: initial.saved.y, anchor: initial.saved.anchor } : null,
+  );
+  const pageKey = useRef<string | null>(initial.key);
   // The page above can re-render under this — an action revalidated it, say
   // a post went up — and hand down a new `next`. Until a chunk has loaded,
   // that one is right and the old one is not: the first page now ends
@@ -37,6 +93,78 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
   // `pending` check alone let the same chunk load (and render) twice.
   const busy = useRef(false);
   const requested = useRef(new Set<string>());
+
+  // Opened afresh: forget what this page had before.
+  useEffect(() => {
+    if (!initial.saved && initial.key) {
+      memory.set(initial.key, { firstNext: next, chunks: [], cursor: next, y: window.scrollY, anchor: null });
+    }
+    // Once, on the way in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Where you are: the row at the top as you scroll — and, when you tap a
+  // row (to open a post, usually), that row, which is the one you'll look
+  // for when you come back. A tap's anchor isn't overwritten by the scroll
+  // the navigation itself may cause on the way out.
+  useEffect(() => {
+    let frame = 0;
+    let tappedAt = 0;
+    const saved = () => (pageKey.current ? memory.get(pageKey.current) : undefined);
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const s = saved();
+        if (s && performance.now() - tappedAt > 1000) Object.assign(s, { y: window.scrollY, anchor: topRow() });
+      });
+    };
+    const onTap = (e: MouseEvent) => {
+      const row = (e.target as Element | null)?.closest<HTMLElement>("[data-anchor]");
+      const s = saved();
+      if (!row || !s) return;
+      tappedAt = performance.now();
+      Object.assign(s, { y: window.scrollY, anchor: { id: row.dataset.anchor!, top: row.getBoundingClientRect().top } });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("click", onTap, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("click", onTap, true);
+    };
+  }, []);
+
+  // What's loaded, as it loads.
+  useEffect(() => {
+    const saved = pageKey.current ? memory.get(pageKey.current) : undefined;
+    if (saved) Object.assign(saved, { firstNext: next, chunks, cursor });
+  }, [chunks, cursor, next]);
+
+  // Back to the spot, once the chunks are on the page — and held there for
+  // a moment, because the page keeps settling (images, the browser's own
+  // scroll restoration) for a few frames after. Anything the reader does
+  // lets go at once.
+  useLayoutEffect(() => {
+    if (restoreTo === null) return;
+    scrollBack(restoreTo);
+    let frame = 0;
+    let stopped = false;
+    const until = performance.now() + 600;
+    const stop = () => {
+      stopped = true;
+    };
+    const hold = () => {
+      if (stopped || performance.now() > until) return setRestoreTo(null);
+      scrollBack(restoreTo);
+      frame = requestAnimationFrame(hold);
+    };
+    frame = requestAnimationFrame(hold);
+    for (const ev of ["wheel", "touchstart", "keydown", "pointerdown"]) window.addEventListener(ev, stop, { once: true, passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const ev of ["wheel", "touchstart", "keydown", "pointerdown"]) window.removeEventListener(ev, stop);
+    };
+  }, [restoreTo]);
 
   const fetchMore = useCallback(
     (retry = false) => {

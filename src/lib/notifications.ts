@@ -57,23 +57,25 @@ export async function unnotify(t: Omit<Target, "userId"> & { userId?: string }):
 }
 
 /**
- * A new post: its parent's author hears about the reply, and everyone it
- * @mentions about the mention — except the parent's author, who already
- * has the reply.
+ * A new post: its parent's author hears about the reply, a quoted post's
+ * author about the quote, and everyone it @mentions about the mention —
+ * except whoever already heard about the reply or the quote.
  */
-export async function notifyNewPost(post: { id: string; authorId: string; body: string; parentId: string | null }) {
+export async function notifyNewPost(post: { id: string; authorId: string; body: string; parentId: string | null; quoteId?: string | null }) {
   try {
-    const parentAuthor = post.parentId
-      ? (await db.select({ id: posts.authorId }).from(posts).where(eq(posts.id, post.parentId)).limit(1))[0]?.id
-      : null;
+    const authorOf = async (id: string | null | undefined) =>
+      id ? (await db.select({ id: posts.authorId }).from(posts).where(eq(posts.id, id)).limit(1))[0]?.id : null;
+    const [parentAuthor, quotedAuthor] = await Promise.all([authorOf(post.parentId), authorOf(post.quoteId)]);
     const handles = extractMentions(post.body);
     const mentioned = handles.length
       ? await db.select({ id: users.id }).from(users).where(inArray(users.username, handles))
       : [];
     await notify([
       { userId: parentAuthor, actorId: post.authorId, kind: "reply", postId: post.id },
+      // Quoting someone you're also replying to is one notice, the reply.
+      ...(quotedAuthor !== parentAuthor ? [{ userId: quotedAuthor, actorId: post.authorId, kind: "quote" as const, postId: post.id }] : []),
       ...mentioned
-        .filter((u) => u.id !== parentAuthor)
+        .filter((u) => u.id !== parentAuthor && u.id !== quotedAuthor)
         .map((u) => ({ userId: u.id, actorId: post.authorId, kind: "mention" as const, postId: post.id })),
     ]);
   } catch (err) {
@@ -111,7 +113,7 @@ export interface Actor {
 /**
  * One row on the page. Likes, reposts, plays and follows of the same thing
  * on the same day are one row — "Ana and 3 others liked your post" — as on
- * X; a reply or a mention is a post, and is drawn as one.
+ * X; a reply, a mention or a quote is a post, and is drawn as one.
  */
 export type NotificationItem =
   | {
@@ -127,7 +129,11 @@ export type NotificationItem =
       /** play: your parlay, and the post it was shared as. */
       parlay?: { title: string; postId: string | null } | null;
     }
-  | { key: string; kind: "reply" | "mention"; at: Date; unread: boolean; actors: Actor[]; total: 1; feedPost: FeedPost };
+  | { key: string; kind: PostKind; at: Date; unread: boolean; actors: Actor[]; total: 1; feedPost: FeedPost };
+
+/** Kinds that are a post someone wrote — drawn as that post. */
+type PostKind = "reply" | "mention" | "quote";
+const isPostKind = (k: NotificationKind): k is PostKind => k === "reply" || k === "mention" || k === "quote";
 
 export const NOTIFICATIONS_PAGE = 20;
 
@@ -162,7 +168,7 @@ export async function getNotifications(
     from ${notifications}
     where user_id = ${userId} ${onlyMentions}
     group by kind, post_id, parlay_id,
-      case when kind in ('reply', 'mention') then id end,
+      case when kind in ('reply', 'mention', 'quote') then id end,
       date_trunc('day', created_at)
     ${cursor}
     order by max(created_at) desc
@@ -192,7 +198,7 @@ export async function getNotifications(
   const actors = new Map(actorRows.map((a) => [a.id, a]));
   // Replies and mentions are drawn as posts, so they get their attachments.
   const shown = await withAttachments(
-    page.filter((r) => r.kind === "reply" || r.kind === "mention").flatMap((r) => (r.post_id && postMap.get(r.post_id) ? [postMap.get(r.post_id)!] : [])),
+    page.filter((r) => isPostKind(r.kind)).flatMap((r) => (r.post_id && postMap.get(r.post_id) ? [postMap.get(r.post_id)!] : [])),
     userId,
   );
   const full = new Map(shown.map((p) => [p.id, p]));
@@ -204,7 +210,7 @@ export async function getNotifications(
     const who = r.actor_ids.flatMap((id) => (actors.has(id) ? [actors.get(id)!] : []));
     if (who.length === 0) continue;
     const base = { key: `${r.kind}:${r.post_id ?? r.parlay_id ?? ""}:${r.at}`, at: new Date(r.at), unread: r.unread, actors: who };
-    if (r.kind === "reply" || r.kind === "mention") {
+    if (isPostKind(r.kind)) {
       const feedPost = r.post_id ? full.get(r.post_id) : undefined;
       if (feedPost) items.push({ ...base, kind: r.kind, total: 1, feedPost });
       continue;

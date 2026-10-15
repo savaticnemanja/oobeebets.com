@@ -859,6 +859,99 @@ console.log("\nNFL only, and the parlay builder");
   await sql`delete from games where id like 'e2e-nfl-%'`;
 }
 
+/* ------------------------------- back to the same spot, replies, quotes */
+
+console.log("\nBack to the same spot, reply popup, quotes, profile");
+{
+  const [admin] = await sql`select id, username from users where email = ${ADMIN_EMAIL}`;
+  const [tester] = await sql`select id, username from users where email = ${TESTER_EMAIL}`;
+  // Seventy posts from someone the tester follows: three pages of Following.
+  await sql`insert into user_follows (follower_id, followee_id) values (${tester.id}, ${admin.id}) on conflict do nothing`;
+  await sql`insert into posts (author_id, body, created_at)
+            select ${admin.id}, 'e2e filler ' || lpad(n::text, 2, '0'), now() - make_interval(mins => n)
+            from generate_series(1, 70) n`;
+
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/home?tab=following`);
+  await hydrated(page, "article button");
+  // Scroll until the second page is in, then open a post from it.
+  for (let i = 0; i < 20 && (await page.getByText("e2e filler 45", { exact: true }).count()) === 0; i++) {
+    await page.mouse.wheel(0, 1500);
+    await page.waitForTimeout(300);
+  }
+  const target = page.locator("article", { hasText: "e2e filler 45" }).first();
+  await target.scrollIntoViewIfNeeded();
+  await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(300);
+  const yBefore = await page.evaluate(() => scrollY);
+  const topBefore = (await target.boundingBox())?.y;
+  await target.locator("p", { hasText: "e2e filler 45" }).click();
+  await page.waitForURL(/\/p\//);
+  await page.getByRole("link", { name: "Back", exact: true }).click();
+  await page.waitForURL(/\/home\?tab=following/);
+  await page.waitForTimeout(1000);
+  check((await page.getByText("e2e filler 45", { exact: true }).count()) === 1, "back from a post keeps what infinite scroll had loaded");
+  // Where it matters: the post you opened is where it was on screen.
+  const topAfter = (await page.locator("article", { hasText: "e2e filler 45" }).first().boundingBox())?.y;
+  check(
+    yBefore > 1000 && topBefore !== undefined && topAfter !== undefined && Math.abs(topAfter - topBefore) < 24,
+    "and the post you opened is back where it was on screen",
+    `scrollY=${yBefore} top before=${topBefore} after=${topAfter}`,
+  );
+
+  // Reply from the timeline: a popup, and the timeline stays put.
+  const row = page.locator("article", { hasText: "e2e filler 44" }).first();
+  await row.getByRole("button", { name: /^Reply/ }).click();
+  const dialog = page.getByRole("dialog");
+  check(await dialog.getByText(`@${admin.username}`, { exact: true }).last().isVisible(), "Reply opens a popup with the post being answered");
+  await dialog.locator("textarea").fill("e2e popup reply");
+  await dialog.getByRole("button", { name: "Reply", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  const [reply] = await sql`select p.id from posts p join posts parent on parent.id = p.parent_id
+                            where p.author_id = ${tester.id} and p.body = 'e2e popup reply' and parent.body = 'e2e filler 44'`;
+  check(Boolean(reply) && page.url().includes("/home"), "the reply is posted without leaving the timeline");
+
+  // Quote: Repost's menu → Quote → a post with the quoted one under it.
+  const quoted = page.locator("article", { hasText: "e2e filler 43" }).first();
+  await quoted.getByRole("button", { name: /^Repost or quote/ }).click();
+  await page.getByRole("menuitem", { name: "Quote" }).click();
+  const qd = page.getByRole("dialog");
+  check(await qd.getByText("e2e filler 43").isVisible(), "Quote shows the post being quoted");
+  await qd.locator("textarea").fill("e2e quote take");
+  await qd.getByRole("button", { name: "Post", exact: true }).click();
+  await qd.waitFor({ state: "hidden" });
+  const [quote] = await sql`select q.id from posts q join posts o on o.id = q.quote_id
+                            where q.author_id = ${tester.id} and q.body = 'e2e quote take' and o.body = 'e2e filler 43'`;
+  check(Boolean(quote), "the quote post points at the quoted one");
+  const [qn] = await sql`select 1 from notifications where user_id = ${admin.id} and kind = 'quote' and post_id = ${quote?.id ?? null}`;
+  check(Boolean(qn), "the quoted author is notified");
+  await page.goto(`${APP_URL}/p/${quote?.id}`);
+  check(await page.getByRole("link", { name: /^Quoted post by/ }).isVisible(), "the quote shows the quoted post as a card");
+
+  // Profile: posts and replies together, and Stats is a tab of your own profile only.
+  await page.goto(`${APP_URL}/u/${tester.username}`);
+  let html = await page.content();
+  check(html.includes("e2e popup reply") && html.includes("e2e quote take"), "a profile's Posts has replies too");
+  check((await page.getByRole("link", { name: "Likes" }).count()) === 0, "there is no Likes tab");
+  await page.getByRole("link", { name: "Stats", exact: true }).click();
+  await page.waitForURL(/tab=stats/);
+  const views = page.locator('nav[aria-label="Stats"] a');
+  check((await views.count()) === 3, "Stats has Overview, Picks and Parlays inside it");
+  await page.goto(`${APP_URL}/stats?tab=parlays`);
+  check(/\/u\/[^?]+\?tab=stats&view=parlays/.test(page.url()), "/stats leads to the profile's Stats", page.url());
+  await page.goto(`${APP_URL}/u/${admin.username}`);
+  check((await page.getByRole("link", { name: "Stats", exact: true }).count()) === 0, "someone else's profile has no Stats tab");
+  html = await page.content();
+  check(!html.includes("Bets logged"), "and shows none of their record");
+  await ctx.close();
+
+  await sql`delete from posts where author_id = ${tester.id} and body in ('e2e popup reply', 'e2e quote take')`;
+  await sql`delete from posts where author_id = ${admin.id} and body like 'e2e filler %'`;
+  await sql`delete from user_follows where follower_id = ${tester.id} and followee_id = ${admin.id}`;
+}
+
 /* ------------------------------------------- notifications and @mentions */
 
 console.log("\nNotifications and @mentions");
@@ -898,7 +991,10 @@ console.log("\nNotifications and @mentions");
   await page.keyboard.press("Enter");
   check((await page.inputValue("#compose-body")) === `hey @${admin.username} `, "picking one writes the handle");
   await page.keyboard.type("see this e2e");
-  await page.keyboard.press("Control+Enter");
+  await page.locator("form#compose").getByRole("button", { name: "Post", exact: true }).click();
+  // Two checks, so a failure says which half broke.
+  const posted = await waitFor(() => sql`select 1 from posts where author_id = ${tester.id} and body like '%see this e2e'`);
+  check(Boolean(posted), "the post with the mention is published");
   const mention = await waitFor(
     () => sql`select n.post_id from notifications n join posts p on p.id = n.post_id
               where n.user_id = ${admin.id} and n.kind = 'mention' and p.body like '%see this e2e'`,
@@ -954,7 +1050,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   const ctx = await browser.newContext();
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
-  await page.goto(`${APP_URL}/stats`);
+  await page.goto(`${APP_URL}/picks`);
   await hydrated(page, 'nav button[title="Send feedback"]');
   await page.getByRole("button", { name: "Send feedback" }).click();
   const dialog = page.getByRole("dialog");
@@ -969,7 +1065,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
     join users u on u.id = f.user_id where f.body = ${feedbackNote}
   `;
   check(row?.email === TESTER_EMAIL && row.kind === "idea", "feedback is stored against the tester", `${row?.kind}`);
-  check(row?.page_path === "/stats" && Boolean(row.user_agent), "it carries the page and the browser", `${row?.page_path}`);
+  check(row?.page_path === "/picks" && Boolean(row.user_agent), "it carries the page and the browser", `${row?.page_path}`);
   await ctx.close();
 }
 {
@@ -977,7 +1073,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
-  await page.goto(`${APP_URL}/stats`);
+  await page.goto(`${APP_URL}/picks`);
   await hydrated(page, "button");
   await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Send feedback" }).click();

@@ -61,6 +61,21 @@ export interface FeedPost {
   /** Photos or a GIF, in order (see withAttachments). */
   media?: MediaView[];
   poll?: PollView | null;
+  /** A quote post's id for the post it quotes; the post itself in `quote` (see withAttachments). */
+  quoteId: string | null;
+  quote?: QuotedPost | null;
+}
+
+/** The post a quote post embeds — enough to draw its card, not the whole post. */
+export interface QuotedPost {
+  id: string;
+  body: string;
+  createdAt: Date;
+  author: PostAuthor;
+  /** It shares a parlay: the ticket's title, for one line in the card. */
+  parlayTitle: string | null;
+  /** It has photos or a GIF. */
+  hasMedia: boolean;
 }
 
 export interface PollView {
@@ -131,6 +146,7 @@ function selectPosts(viewerId: string | null) {
       liked: likedBy(viewerId),
       reposted: repostedBy(viewerId),
       parlayId: posts.parlayId,
+      quoteId: posts.quoteId,
       previewUrl: linkPreviews.url,
       previewTitle: linkPreviews.title,
       previewDescription: linkPreviews.description,
@@ -171,6 +187,7 @@ function toFeedPost(r: Row): FeedPost {
     liked: Boolean(r.liked),
     reposted: Boolean(r.reposted),
     parlayId: r.parlayId,
+    quoteId: r.quoteId,
     preview: r.previewUrl
       ? {
           url: r.previewUrl,
@@ -280,8 +297,56 @@ export async function withParlays(list: FeedPost[], viewerId: string | null = nu
 export async function withAttachments(list: FeedPost[], viewerId: string | null): Promise<FeedPost[]> {
   if (list.length === 0) return list;
   const ids = list.map((p) => p.id);
-  const [withTickets, media, polls] = await Promise.all([withParlays(list, viewerId), getMediaFor(ids), getPollsFor(ids, viewerId)]);
-  return withTickets.map((p) => ({ ...p, media: media.get(p.id) ?? [], poll: polls.get(p.id) ?? null }));
+  const [withTickets, media, polls, quotes] = await Promise.all([
+    withParlays(list, viewerId),
+    getMediaFor(ids),
+    getPollsFor(ids, viewerId),
+    getQuotedPosts(list.flatMap((p) => (p.quoteId ? [p.quoteId] : []))),
+  ]);
+  return withTickets.map((p) => ({
+    ...p,
+    media: media.get(p.id) ?? [],
+    poll: polls.get(p.id) ?? null,
+    quote: p.quoteId ? (quotes.get(p.quoteId) ?? null) : null,
+  }));
+}
+
+/** The posts some quote posts embed, as cards: one query, plus their tickets and media. */
+async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: posts.id,
+      body: posts.body,
+      createdAt: posts.createdAt,
+      parlayId: posts.parlayId,
+      authorId: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      role: users.role,
+    })
+    .from(posts)
+    .innerJoin(users, eq(users.id, posts.authorId))
+    .where(inArray(posts.id, [...new Set(ids)]));
+  const parlayIds = rows.flatMap((r) => (r.parlayId ? [r.parlayId] : []));
+  const [tickets, media] = await Promise.all([
+    parlayIds.length ? getParlaysByIds(parlayIds) : Promise.resolve([]),
+    getMediaFor(rows.map((r) => r.id)),
+  ]);
+  const title = new Map(tickets.map((t) => [t.id, t.title ?? `${t.legs.length}-leg parlay`]));
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        id: r.id,
+        body: r.body,
+        createdAt: r.createdAt,
+        author: { id: r.authorId, username: r.username, displayName: r.displayName, role: r.role },
+        parlayTitle: r.parlayId ? (title.get(r.parlayId) ?? null) : null,
+        hasMedia: (media.get(r.id)?.length ?? 0) > 0,
+      },
+    ]),
+  );
 }
 
 async function getPollsFor(postIds: string[], viewerId: string | null): Promise<Map<string, PollView>> {
@@ -395,36 +460,13 @@ export async function getParlayPosts(parlayIds: string[], viewerId: string | nul
   return new Map(rows.map(toFeedPost).map((p) => [p.parlayId!, p]));
 }
 
-export type ProfileTab = "posts" | "replies" | "likes";
-
-export async function getProfilePosts(
-  userId: string,
-  viewerId: string | null,
-  tab: ProfileTab,
-  before?: string,
-): Promise<FeedPage> {
-  if (tab === "likes") {
-    // Ordered by when the like happened would be truer, but it needs a
-    // second cursor shape; newest-post-first is what a reader expects anyway.
-    const rows = await selectPosts(viewerId)
-      .where(
-        and(
-          sql`exists(select 1 from ${postLikes} where ${postLikes.postId} = ${posts.id} and ${postLikes.userId} = ${userId})`,
-          olderThan(before),
-        ),
-      )
-      .orderBy(desc(posts.createdAt), desc(posts.id))
-      .limit(FEED_PAGE_SIZE + 1);
-    return page(rows, FEED_PAGE_SIZE);
-  }
+/**
+ * A profile's timeline: everything they wrote, posts and replies together,
+ * newest first — a reply is drawn under the post it answers (see postItems).
+ */
+export async function getProfilePosts(userId: string, viewerId: string | null, before?: string): Promise<FeedPage> {
   const rows = await selectPosts(viewerId)
-    .where(
-      and(
-        eq(posts.authorId, userId),
-        tab === "posts" ? isNull(posts.parentId) : isNotNull(posts.parentId),
-        olderThan(before),
-      ),
-    )
+    .where(and(eq(posts.authorId, userId), olderThan(before)))
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(FEED_PAGE_SIZE + 1);
   return page(rows, FEED_PAGE_SIZE);

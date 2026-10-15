@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
-import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import {
   SEASON_TYPE_LABELS,
@@ -23,6 +21,7 @@ import { StatCell } from "@/components/stat-cell";
 import { FilterPill } from "@/components/players/filter-pill";
 import { SeasonPicker } from "@/components/players/season-picker";
 import { StatsGrid, type GridRow } from "@/components/players/stats-grid";
+import { BackButton } from "@/components/nav-memory";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -91,13 +90,7 @@ export default async function PlayerPage({
   return (
     <SocialShell>
       <div className="flex items-center gap-4 px-4 py-2.5">
-        <Link
-          href={backHref}
-          aria-label={`Back to ${league.label} players`}
-          className="grid size-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-surface-2"
-        >
-          <ArrowLeft className="size-5" aria-hidden="true" />
-        </Link>
+        <BackButton fallback={backHref} label={`Back to ${league.label} players`} />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold">{player.name}</h1>
           <p className="truncate text-sm text-fg-subtle">

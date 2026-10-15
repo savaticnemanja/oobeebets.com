@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChartColumn, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { Bell, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { UnreadBadge, useUnread } from "@/components/app-shell/unread";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ interface NavItem {
  * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
- * six places people actually go back and forth between; the rest (Players,
+ * five places people actually go back and forth between; the rest (Players,
  * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
  * aren't a destination of their own: they're "Edit profile", on your profile.
  */
@@ -31,8 +31,6 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
   const picks = { href: "/picks", label: t().nav.picks, icon: Target };
   // Testers' shared parlays — their own page, apart from Oobee's picks.
   const community = { href: "/community", label: "Community", icon: Users };
-  // Your record — the picks and parlays you took, built and played.
-  const stats = { href: "/stats", label: "Stats", icon: ChartColumn };
   // Everyone else's numbers — league tables and player pages.
   const players = { href: "/players", label: "Players", icon: Shirt };
   const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
@@ -42,13 +40,13 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       notifications,
       picks,
       community,
-      stats,
       players,
       profile,
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
-    bottom: [home, picks, community, notifications, stats, profile],
+    // Your record lives on your profile now (its Stats tab).
+    bottom: [home, picks, community, notifications, profile],
   };
 }
 

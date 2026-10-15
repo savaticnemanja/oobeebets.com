@@ -74,6 +74,7 @@ export async function createPostAction(
     .object({
       body: postBodyOptionalSchema,
       parentId: z.string().uuid().optional().or(z.literal("")),
+      quoteId: z.string().uuid().optional().or(z.literal("")),
       mediaIds: z.array(z.string().uuid()).max(MAX_MEDIA_PER_POST, `At most ${MAX_MEDIA_PER_POST} photos`).optional(),
       gif: z
         .object({ url: z.string().url().refine(isGiphyUrl, "That GIF isn't from GIPHY"), width: z.number().int().positive(), height: z.number().int().positive() })
@@ -83,6 +84,7 @@ export async function createPostAction(
     .safeParse({
       body: formData.get("body") ?? "",
       parentId: formData.get("parentId") ?? "",
+      quoteId: formData.get("quoteId") ?? "",
       mediaIds: json("mediaIds"),
       gif: json("gif"),
       poll: json("poll"),
@@ -107,6 +109,13 @@ export async function createPostAction(
     const [parent] = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, parentId)).limit(1);
     if (!parent) return { ok: false, error: "That post was deleted." };
   }
+  // A quote needs something of your own to say; with nothing, it's a repost.
+  const quoteId = parsed.data.quoteId || null;
+  if (quoteId) {
+    if (!parsed.data.body) return { ok: false, error: "Add a comment to quote it — or just repost it." };
+    const [quoted] = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, quoteId)).limit(1);
+    if (!quoted) return { ok: false, error: "That post was deleted." };
+  }
 
   // The card is resolved before the insert so the post never renders twice —
   // once bare, then again with its card. The composer has usually warmed the
@@ -129,7 +138,7 @@ export async function createPostAction(
   const created = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(posts)
-      .values({ authorId: auth.user.id, parentId, body: parsed.data.body, linkUrl })
+      .values({ authorId: auth.user.id, parentId, quoteId, body: parsed.data.body, linkUrl })
       .returning({ id: posts.id });
     for (const [position, id] of mediaIds.entries()) {
       await tx.update(postMedia).set({ postId: row.id, position }).where(eq(postMedia.id, id));
@@ -152,7 +161,7 @@ export async function createPostAction(
     return row;
   });
 
-  await notifyNewPost({ id: created.id, authorId: auth.user.id, body: parsed.data.body, parentId });
+  await notifyNewPost({ id: created.id, authorId: auth.user.id, body: parsed.data.body, parentId, quoteId });
   revalidateSocial(auth.user.username);
   return { ok: true, postId: created.id };
 }

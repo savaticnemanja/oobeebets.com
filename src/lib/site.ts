@@ -60,7 +60,6 @@ export const NAV_PUBLIC = [
 export const NAV_APP = [
   { href: "/home", label: t().nav.home },
   { href: "/picks", label: t().nav.picks },
-  { href: "/stats", label: "Stats" },
   { href: "/account", label: t().nav.account },
 ] as const;
 

@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { getAuth } from "@/lib/auth";
+import { BackButton } from "@/components/nav-memory";
 import { SocialShell } from "@/components/social/social-shell";
 
 /**
@@ -29,13 +28,11 @@ export async function DocPage({
       <header className="border-b border-border px-4 pb-3 pt-4">
         <div className="flex items-center gap-3">
           {back && (
-            <Link
-              href={back.href}
-              aria-label={back.label}
+            <BackButton
+              fallback={back.href}
+              label={back.label}
               className="-ml-2 grid size-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-surface-2"
-            >
-              <ArrowLeft className="size-5" aria-hidden="true" />
-            </Link>
+            />
           )}
           <h1 className="text-xl font-bold tracking-tight">{title}</h1>
         </div>
