@@ -20,6 +20,7 @@ import { EmojiPicker } from "@/components/social/emoji-picker";
 import { GifPicker } from "@/components/social/gif-picker";
 import { Avatar } from "@/components/social/identity";
 import { LinkCard } from "@/components/social/link-card";
+import { useMentionSuggest } from "@/components/social/mention-suggest";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +34,8 @@ import { cn } from "@/lib/utils";
  *
  * Under the text, as on X: photos (up to four, shrunk and uploaded as soon as
  * they're picked), a GIF, a poll — one kind per post — and, from `sm` up, an
- * emoji picker; a phone keyboard has its own.
+ * emoji picker; a phone keyboard has its own. Typing "@" suggests people to
+ * mention (mention-suggest.tsx); whoever is mentioned is notified.
  */
 
 /** A photo in the composer: uploading, then uploaded (with its id). */
@@ -81,6 +83,12 @@ export function Composer({
   const [gif, setGif] = React.useState<GifResult | null>(null);
   const [poll, setPoll] = React.useState<{ options: string[]; hours: number } | null>(null);
   const [gifOpen, setGifOpen] = React.useState(false);
+  const mentions = useMentionSuggest({
+    areaRef,
+    value: body,
+    setValue: setBody,
+    listId: `${React.useId()}-mentions`,
+  });
 
   function reset() {
     setBody("");
@@ -207,13 +215,21 @@ export function Composer({
         <label className="sr-only" htmlFor={id ? `${id}-body` : undefined}>
           {placeholder}
         </label>
+        <div className="relative">
         <textarea
           id={id ? `${id}-body` : undefined}
           ref={areaRef}
           name="body"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value);
+            mentions.sync();
+          }}
+          onSelect={mentions.sync}
+          onBlur={mentions.close}
+          {...mentions.inputProps}
           onKeyDown={(e) => {
+            if (mentions.onKeyDown(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canPost) {
               e.preventDefault();
               formRef.current?.requestSubmit();
@@ -225,6 +241,8 @@ export function Composer({
           maxLength={POST_MAX_LENGTH * 2}
           className="block w-full resize-none overflow-hidden bg-transparent py-2 text-lg text-fg placeholder:text-fg-subtle focus:outline-none touch:text-lg"
         />
+        {mentions.element}
+        </div>
 
         {previewing && (
           <p className="mt-2 flex items-center gap-2 text-xs text-fg-subtle">

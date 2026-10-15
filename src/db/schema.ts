@@ -1018,6 +1018,56 @@ export const playerGameStats = pgTable(
   ],
 );
 
+/* ---------------------------------------------------------- notifications */
+
+export const notificationKindEnum = pgEnum("notification_kind", [
+  "like",
+  "repost",
+  "reply",
+  "mention",
+  "follow",
+  "play",
+]);
+
+/**
+ * "Someone did something to you": liked or reposted your post, replied to
+ * it, mentioned you, followed you, played your parlay. Written by the action
+ * that did it, and deleted when that's undone (an unlike, an unfollow), so
+ * the list never shows something that is no longer true. Everything it
+ * points at cascades — a deleted post takes its notifications with it.
+ *
+ *   like, repost  post_id = your post
+ *   reply         post_id = the reply
+ *   mention       post_id = the post that mentions you
+ *   play          parlay_id = your parlay
+ *   follow        neither
+ *
+ * Unique per actor and target, so a double tap can't notify twice.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: notificationKindEnum("kind").notNull(),
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
+    parlayId: uuid("parlay_id").references(() => parlays.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notifications_once").on(t.userId, t.actorId, t.kind, t.postId, t.parlayId).nullsNotDistinct(),
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    // The unread badge, counted on every signed-in page.
+    index("notifications_user_unread_idx").on(t.userId).where(sql`${t.readAt} is null`),
+  ],
+);
+
 /* --------------------------------------------------------------- feedback */
 
 export const feedbackKindEnum = pgEnum("feedback_kind", ["bug", "idea", "other"]);
@@ -1144,3 +1194,4 @@ export type PickCategory = (typeof pickCategoryEnum.enumValues)[number];
 export type SpendBand = (typeof spendBandEnum.enumValues)[number];
 export type InviteStatus = (typeof inviteStatusEnum.enumValues)[number];
 export type FeedbackKind = (typeof feedbackKindEnum.enumValues)[number];
+export type NotificationKind = (typeof notificationKindEnum.enumValues)[number];

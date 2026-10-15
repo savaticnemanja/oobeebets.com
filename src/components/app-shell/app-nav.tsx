@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumn, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { Bell, ChartColumn, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
 import { FeedbackDialog } from "@/components/feedback-dialog";
+import { UnreadBadge, useUnread } from "@/components/app-shell/unread";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
@@ -19,12 +20,14 @@ interface NavItem {
  * rest are muted and brighten on hover over a soft pill.
  *
  * The sidebar carries everything. The phone's bottom bar has room for the
- * five places people actually go back and forth between; the rest (Players,
+ * six places people actually go back and forth between; the rest (Players,
  * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
  * aren't a destination of their own: they're "Edit profile", on your profile.
  */
 function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
   const home = { href: "/home", label: t().nav.home, icon: House };
+  // Carries the unread badge (unread.tsx).
+  const notifications = { href: NOTIFICATIONS_HREF, label: "Notifications", icon: Bell };
   const picks = { href: "/picks", label: t().nav.picks, icon: Target };
   // Testers' shared parlays — their own page, apart from Oobee's picks.
   const community = { href: "/community", label: "Community", icon: Users };
@@ -36,6 +39,7 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
   return {
     sidebar: [
       home,
+      notifications,
       picks,
       community,
       stats,
@@ -44,8 +48,15 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
-    bottom: [home, picks, community, stats, profile],
+    bottom: [home, picks, community, notifications, stats, profile],
   };
+}
+
+const NOTIFICATIONS_HREF = "/notifications";
+
+/** ", 3 unread" after a label, for screen readers — the badge itself is hidden from them. */
+function unreadSuffix(href: string, unread: number) {
+  return href === NOTIFICATIONS_HREF && unread > 0 ? `, ${unread} unread` : "";
 }
 
 function isActive(pathname: string, href: string) {
@@ -57,7 +68,17 @@ export const FEEDBACK_LABEL = "Send feedback";
 export const FeedbackIcon = MessageSquareText;
 
 /** One sidebar entry's pill: the icon, and the label from `xl`. */
-function SidebarItem({ label, icon: Icon, active = false }: { label: string; icon: LucideIcon; active?: boolean }) {
+function SidebarItem({
+  label,
+  icon: Icon,
+  active = false,
+  badge = 0,
+}: {
+  label: string;
+  icon: LucideIcon;
+  active?: boolean;
+  badge?: number;
+}) {
   return (
     <span
       className={cn(
@@ -66,14 +87,17 @@ function SidebarItem({ label, icon: Icon, active = false }: { label: string; ico
         active ? "font-semibold text-fg" : "text-fg-muted group-hover:text-fg",
       )}
     >
-      <Icon
-        className={cn(
-          "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
-          active && "text-brand",
-        )}
-        strokeWidth={active ? 2.25 : 1.75}
-        aria-hidden="true"
-      />
+      <span className="relative">
+        <Icon
+          className={cn(
+            "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
+            active && "text-brand",
+          )}
+          strokeWidth={active ? 2.25 : 1.75}
+          aria-hidden="true"
+        />
+        <UnreadBadge count={badge} />
+      </span>
       <span className="hidden xl:inline">{label}</span>
     </span>
   );
@@ -85,6 +109,7 @@ function SidebarItem({ label, icon: Icon, active = false }: { label: string; ico
  */
 export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: boolean }) {
   const pathname = usePathname();
+  const unread = useUnread();
   return (
     <nav aria-label={t().nav.mainNav} className="flex flex-col items-center gap-1 xl:items-stretch">
       {items(username, isAdmin).sidebar.map(({ href, label, icon }) => {
@@ -94,10 +119,11 @@ export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: b
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
+            aria-label={label + unreadSuffix(href, unread)}
             title={label}
             className="group flex rounded-full outline-none"
           >
-            <SidebarItem label={label} icon={icon} active={active} />
+            <SidebarItem label={label} icon={icon} active={active} badge={href === NOTIFICATIONS_HREF ? unread : 0} />
           </Link>
         );
       })}
@@ -113,6 +139,7 @@ export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: b
 /** The phone's tab bar. Labels are kept for screen readers only, as on X. */
 export function BottomNav({ username, isAdmin }: { username: string; isAdmin: boolean }) {
   const pathname = usePathname();
+  const unread = useUnread();
   return (
     <nav
       aria-label={t().nav.mobileNav}
@@ -132,8 +159,11 @@ export function BottomNav({ username, isAdmin }: { username: string; isAdmin: bo
                   active ? "text-brand" : "text-fg-muted",
                 )}
               >
-                <Icon className="size-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-                <span className="sr-only">{label}</span>
+                <span className="relative">
+                  <Icon className="size-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+                  {href === NOTIFICATIONS_HREF && <UnreadBadge count={unread} />}
+                </span>
+                <span className="sr-only">{label + unreadSuffix(href, unread)}</span>
               </Link>
             </li>
           );

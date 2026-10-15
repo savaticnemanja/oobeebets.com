@@ -10,6 +10,8 @@ import { getWhoToFollow } from "@/lib/social";
 import { SITE } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { HelpLine } from "@/components/help-line";
+import { UnreadProvider } from "@/components/app-shell/unread";
+import { unreadCount } from "@/lib/notifications";
 
 /**
  * The signed-in layout, after X: a sticky sidebar on the left with the mark,
@@ -30,9 +32,10 @@ export async function AppShell({
   user: ShellUser & { id: string };
   children: React.ReactNode;
 }) {
-  const suggestions = await getWhoToFollow(user.id, 5);
+  const [suggestions, unread] = await Promise.all([getWhoToFollow(user.id, 5), unreadCount(user.id)]);
 
   return (
+    <UnreadProvider initial={unread}>
     <div className="mx-auto flex w-full max-w-[1325px] justify-center pl-safe-left pr-safe-right">
       <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[275px] xl:items-stretch xl:px-3">
         <div className="flex h-16 items-center xl:px-3">
@@ -96,6 +99,7 @@ export async function AppShell({
       <BottomNav username={user.username} isAdmin={user.isAdmin} />
       <ScrollChrome />
     </div>
+    </UnreadProvider>
   );
 }
 

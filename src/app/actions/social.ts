@@ -13,6 +13,13 @@ import { usernameTaken, type PostPreview } from "@/lib/social";
 import { extractCardUrl, pollSchema, postBodyOptionalSchema, profileSchema } from "@/lib/social-rules";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 import { violates } from "@/lib/db-errors";
+import { notify, notifyNewPost, unnotify } from "@/lib/notifications";
+
+/** Who wrote a post — who hears about a like or a repost of it. */
+async function authorOf(postId: string): Promise<string | null> {
+  const [row] = await db.select({ id: posts.authorId }).from(posts).where(eq(posts.id, postId)).limit(1);
+  return row?.id ?? null;
+}
 
 /**
  * Writes for the social layer. Every one of them uses getAuth rather than
@@ -145,6 +152,7 @@ export async function createPostAction(
     return row;
   });
 
+  await notifyNewPost({ id: created.id, authorId: auth.user.id, body: parsed.data.body, parentId });
   revalidateSocial(auth.user.username);
   return { ok: true, postId: created.id };
 }
@@ -217,10 +225,12 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
       }
       throw err;
     }
+    await notify([{ userId: await authorOf(parsed.data.postId), actorId: auth.user.id, kind: "like", postId: parsed.data.postId }]);
   } else {
     await db
       .delete(postLikes)
       .where(and(eq(postLikes.userId, auth.user.id), eq(postLikes.postId, parsed.data.postId)));
+    await unnotify({ actorId: auth.user.id, kind: "like", postId: parsed.data.postId });
   }
 
   // Nothing is revalidated, here or on reposts and votes. Any revalidation
@@ -325,10 +335,12 @@ export async function setPostRepostAction(postId: string, reposted: boolean): Pr
       }
       throw err;
     }
+    await notify([{ userId: await authorOf(parsed.data.postId), actorId: auth.user.id, kind: "repost", postId: parsed.data.postId }]);
   } else {
     await db
       .delete(postReposts)
       .where(and(eq(postReposts.userId, auth.user.id), eq(postReposts.postId, parsed.data.postId)));
+    await unnotify({ actorId: auth.user.id, kind: "repost", postId: parsed.data.postId });
   }
 
   // Not revalidated — see setPostLikeAction.
@@ -356,12 +368,14 @@ export async function setUserFollowAction(userId: string, follow: boolean): Prom
       .insert(userFollows)
       .values({ followerId: auth.user.id, followeeId: parsed.data.userId })
       .onConflictDoNothing();
+    await notify([{ userId: parsed.data.userId, actorId: auth.user.id, kind: "follow" }]);
   } else {
     await db
       .delete(userFollows)
       .where(
         and(eq(userFollows.followerId, auth.user.id), eq(userFollows.followeeId, parsed.data.userId)),
       );
+    await unnotify({ userId: parsed.data.userId, actorId: auth.user.id, kind: "follow" });
   }
 
   revalidatePath("/home");

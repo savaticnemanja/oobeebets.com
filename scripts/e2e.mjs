@@ -780,6 +780,91 @@ console.log("\nShared parlay in the feed");
   await sql`delete from parlays where id = ${pl.id}`;
 }
 
+/* ------------------------------------------- notifications and @mentions */
+
+console.log("\nNotifications and @mentions");
+{
+  const [admin] = await sql`select id, username from users where email = ${ADMIN_EMAIL}`;
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const [target] = await sql`insert into posts (author_id, body) values (${admin.id}, 'e2e notification target') returning id`;
+  const waitFor = async (query) => {
+    for (let i = 0; i < 40; i++) {
+      const rows = await query();
+      if (rows.length) return rows[0];
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return null;
+  };
+
+  // The tester likes the admin's post, then mentions them, picking the
+  // handle from the composer's suggestions.
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/p/${target.id}`);
+  await hydrated(page, "article button");
+  await page.locator("article").first().getByRole("button", { name: /^Like/ }).click();
+  const liked = await waitFor(
+    () => sql`select 1 from notifications where user_id = ${admin.id} and actor_id = ${tester.id} and kind = 'like' and post_id = ${target.id}`,
+  );
+  check(Boolean(liked), "a like notifies the post's author");
+
+  await page.goto(`${APP_URL}/home`);
+  await hydrated(page, "#compose-body");
+  await page.locator("#compose-body").click();
+  await page.keyboard.type(`hey @${admin.username.slice(0, 4)}`);
+  const option = page.getByRole("option", { name: new RegExp(`@${admin.username}`) });
+  await option.waitFor({ timeout: 5000 }).catch(() => {});
+  check(await option.isVisible(), "typing @ suggests people to mention");
+  await page.keyboard.press("Enter");
+  check((await page.inputValue("#compose-body")) === `hey @${admin.username} `, "picking one writes the handle");
+  await page.keyboard.type("see this e2e");
+  await page.keyboard.press("Control+Enter");
+  const mention = await waitFor(
+    () => sql`select n.post_id from notifications n join posts p on p.id = n.post_id
+              where n.user_id = ${admin.id} and n.kind = 'mention' and p.body like '%see this e2e'`,
+  );
+  check(Boolean(mention), "the mention notifies who was mentioned");
+  await ctx.close();
+
+  // The admin sees the badge, then the page, which reads them.
+  const adminCtx = await browser.newContext();
+  await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const adminPage = await adminCtx.newPage();
+  await adminPage.goto(`${APP_URL}/home`);
+  const badged = adminPage.getByRole("link", { name: /^Notifications, \d+ unread$/ });
+  check((await badged.count()) === 1, "the nav shows an unread count");
+  await adminPage.goto(`${APP_URL}/notifications`);
+  let html = await adminPage.content();
+  check(html.includes("liked your post") && html.includes("see this e2e"), "the page lists the like and the mention");
+  await adminPage.goto(`${APP_URL}/notifications?tab=mentions`);
+  html = await adminPage.content();
+  check(html.includes("see this e2e") && !html.includes("liked your post"), "Mentions shows only mentions and replies");
+  const read = await waitFor(
+    () => sql`select 1 where not exists (select 1 from notifications where user_id = ${admin.id} and read_at is null)`,
+  );
+  check(Boolean(read), "opening the page marks them read");
+  await adminPage.goto(`${APP_URL}/home`);
+  check((await adminPage.getByRole("link", { name: "Notifications", exact: true }).count()) === 1, "and the badge clears");
+  await adminCtx.close();
+
+  // Taking the like back takes the notification with it.
+  const again = await browser.newContext();
+  await again.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const p2 = await again.newPage();
+  await p2.goto(`${APP_URL}/p/${target.id}`);
+  await hydrated(p2, "article button");
+  await p2.locator("article").first().getByRole("button", { name: /^Unlike/ }).click();
+  const gone = await waitFor(
+    () => sql`select 1 where not exists (select 1 from notifications where user_id = ${admin.id} and kind = 'like' and post_id = ${target.id})`,
+  );
+  check(Boolean(gone), "unliking removes the notification");
+  await again.close();
+
+  await sql`delete from posts where author_id = ${tester.id} and body like '%see this e2e'`;
+  await sql`delete from posts where id = ${target.id}`;
+}
+
 /* -------------------------------------------------------------- feedback */
 
 console.log("\nFeedback");

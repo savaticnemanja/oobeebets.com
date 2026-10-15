@@ -13,6 +13,8 @@ import { GridRows } from "@/components/players/stats-grid";
 import { getSeasons } from "@/lib/players/queries";
 import { leagueFromParam } from "@/lib/players/catalog";
 import { resolveView, tableRows, type PlayersParams } from "@/app/(site)/players/view";
+import { getNotifications } from "@/lib/notifications";
+import { NotificationList } from "@/components/social/notification-list";
 
 /**
  * The next chunk of a list, for infinite scroll (components/load-more.tsx).
@@ -95,5 +97,18 @@ export async function loadPlayersAction(href: string, offset: string): Promise<C
   return {
     node: <GridRows columns={view.category.columns} rows={rows} rank={!view.q} activeKey={view.sort.key} />,
     next: next === null ? null : String(next),
+  };
+}
+
+export async function loadNotificationsAction(tab: "all" | "mentions", cursor: string): Promise<Chunk> {
+  const auth = await viewer();
+  // A timestamp as Postgres prints it — see getNotifications.
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:?\d{2})?$/.test(cursor) || !["all", "mentions"].includes(tab)) {
+    throw new Error("Bad cursor");
+  }
+  const { items, next } = await getNotifications(auth.user.id, tab, cursor);
+  return {
+    node: <NotificationList items={items} viewer={{ id: auth.user.id, username: auth.user.username, isAdmin: auth.isAdmin }} />,
+    next,
   };
 }

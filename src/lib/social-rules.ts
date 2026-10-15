@@ -121,6 +121,15 @@ export function extractCardUrl(body: string): string | null {
   return last ? withScheme(trimUrl(last[0])) : null;
 }
 
+/** At most this many people notified by one post's @mentions. */
+export const MAX_MENTIONS = 10;
+
+/** The handles a post @mentions, lowercased, once each — not ones inside a link. */
+export function extractMentions(body: string): string[] {
+  const names = tokenizeBody(body).flatMap((t) => (t.kind === "mention" ? [t.username] : []));
+  return [...new Set(names)].slice(0, MAX_MENTIONS);
+}
+
 export type BodyToken =
   | { kind: "text"; text: string }
   | { kind: "url"; text: string; href: string }

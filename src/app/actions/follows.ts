@@ -8,6 +8,7 @@ import { parlayFollows, parlays, pickFollows, picks, slates } from "@/db/schema"
 import { getParlaysByIds } from "@/lib/parlay-store";
 import { getAuth } from "@/lib/auth";
 import { followWindowOpen } from "@/lib/follows";
+import { notify, unnotify } from "@/lib/notifications";
 import type { ActionState } from "@/lib/validation";
 
 /**
@@ -137,10 +138,12 @@ export async function setParlayFollowAction(parlayId: string, played: boolean): 
 
   if (parsed.data.played) {
     await db.insert(parlayFollows).values({ userId: auth.user.id, parlayId: parsed.data.parlayId }).onConflictDoNothing();
+    await notify([{ userId: row.ownerId, actorId: auth.user.id, kind: "play", parlayId: parsed.data.parlayId }]);
   } else {
     await db
       .delete(parlayFollows)
       .where(and(eq(parlayFollows.userId, auth.user.id), eq(parlayFollows.parlayId, parsed.data.parlayId)));
+    await unnotify({ actorId: auth.user.id, kind: "play", parlayId: parsed.data.parlayId });
   }
   revalidatePath("/stats");
   revalidatePath("/community");

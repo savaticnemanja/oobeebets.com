@@ -432,6 +432,13 @@ export async function getProfilePosts(
 
 /* ---------------------------------------------------------------- thread */
 
+/** Posts by id, in no particular order — what notifications point at. */
+export async function getPostsByIds(ids: string[], viewerId: string | null): Promise<Map<string, FeedPost>> {
+  if (ids.length === 0) return new Map();
+  const rows = await selectPosts(viewerId).where(inArray(posts.id, [...new Set(ids)]));
+  return new Map(rows.map(toFeedPost).map((p) => [p.id, p]));
+}
+
 export async function getPost(id: string, viewerId: string | null): Promise<FeedPost | null> {
   const [row] = await selectPosts(viewerId).where(eq(posts.id, id)).limit(1);
   return row ? toFeedPost(row) : null;

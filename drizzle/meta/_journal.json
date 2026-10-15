@@ -141,6 +141,13 @@
       "when": 1792080900699,
       "tag": "0019_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792083383231,
+      "tag": "0020_notifications",
+      "breakpoints": true
     }
   ]
 }
