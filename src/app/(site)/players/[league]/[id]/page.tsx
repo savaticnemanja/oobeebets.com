@@ -18,7 +18,7 @@ import { SPORT_EMOJI } from "@/components/pick-card";
 import { LocalTime } from "@/components/local-time";
 import { SocialShell } from "@/components/social/social-shell";
 import { StatCell } from "@/components/stat-cell";
-import { FilterPill } from "@/components/players/filter-pill";
+import { Segmented } from "@/components/players/segmented";
 import { SeasonPicker } from "@/components/players/season-picker";
 import { StatsGrid, type GridRow } from "@/components/players/stats-grid";
 import { BackButton } from "@/components/nav-memory";
@@ -108,13 +108,15 @@ export default async function PlayerPage({
             options={allSeasons.map((s) => ({ label: label(s), href: href({ season: s }), active: s === season }))}
           />
         )}
-        <nav aria-label="Season type" className="flex gap-2">
-          {(["regular", "postseason"] as SeasonType[]).map((t) => (
-            <FilterPill key={t} href={href({ type: t })} on={type === t}>
-              {SEASON_TYPE_LABELS[t]}
-            </FilterPill>
-          ))}
-        </nav>
+        <Segmented
+          label="Season type"
+          options={(["regular", "postseason"] as SeasonType[]).map((t) => ({
+            key: t,
+            href: href({ type: t }),
+            on: type === t,
+            label: SEASON_TYPE_LABELS[t],
+          }))}
+        />
       </div>
 
       {/* -------------------------------------------------------- headline */}
@@ -143,13 +145,13 @@ export default async function PlayerPage({
 
       {/* --------------------------------------------------- table choice */}
       {choices.length > 1 && (
-        <nav aria-label="Table" className="flex gap-2 overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none]">
-          {choices.map((c) => (
-            <FilterPill key={c.key} href={href({ cat: c.key })} on={c.key === category.key}>
-              {c.label}
-            </FilterPill>
-          ))}
-        </nav>
+        <div className="overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none]">
+          <Segmented
+            label="Table"
+            className="w-max"
+            options={choices.map((c) => ({ key: c.key, href: href({ cat: c.key }), on: c.key === category.key, label: c.label }))}
+          />
+        </div>
       )}
 
       {/* -------------------------------------------------------- by season */}

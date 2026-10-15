@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { formatStat, type StatColumn } from "@/lib/players/catalog";
 import { cn } from "@/lib/utils";
 import { StatRow } from "./stat-row";
+import { SortedIntoView } from "./sorted-into-view";
 
 /**
  * The Players tables — the league table, a player's seasons, their game log.
@@ -67,7 +68,8 @@ export function StatsGrid({
 }) {
   const style = { gridTemplateColumns: template(columns.length, rank) };
   return (
-    <div className="overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+    <div data-grid-scroller className="overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+      {sort && <SortedIntoView />}
       <div role="table" aria-label={label} className="w-max min-w-full [--grid-lead:8.75rem] sm:[--grid-lead:11.5rem]">
         <div role="row" style={style} className="grid border-b border-border">
           {rank && (
@@ -109,7 +111,8 @@ function HeaderCell({ column, sort }: { column: StatColumn; sort?: GridSort }) {
   );
   const cls = cn(
     "flex items-center justify-end gap-0.5 px-2 py-2.5 text-[0.6875rem] font-medium uppercase tracking-wider",
-    active ? "text-fg" : "text-fg-subtle",
+    // The sorted column is tinted top to bottom, header and cells alike.
+    active ? "bg-brand/[0.07] text-fg" : "text-fg-subtle",
   );
   return (
     <span
@@ -170,7 +173,7 @@ export function GridRows({
             key={col.key}
             className={cn(
               "num flex items-center justify-end px-2 py-2.5 text-sm",
-              col.key === activeKey ? "font-semibold text-fg" : "text-fg-muted",
+              col.key === activeKey ? "bg-brand/[0.07] font-semibold text-fg" : "text-fg-muted",
             )}
           >
             {formatStat(row.stats[col.key], col.format)}

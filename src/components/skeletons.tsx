@@ -136,12 +136,14 @@ export function StatsSkeleton() {
 export function PlayersSkeleton() {
   return (
     <Loading>
-      <PillsBone />
       <TabsBone count={2} />
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        {["w-32", "w-20", "w-24", "w-24"].map((w, i) => (
-          <Bone key={i} className={cn("h-8 shrink-0", w)} />
-        ))}
+      <div className="border-b border-border px-4 pb-2.5 pt-3">
+        <Bone className="h-10 w-full rounded-full" />
+        <div className="mt-2.5 flex items-center gap-2">
+          {["w-20", "w-40", "w-32"].map((w, i) => (
+            <Bone key={i} className={cn("h-8 shrink-0 rounded-full", w)} />
+          ))}
+        </div>
       </div>
       {Array.from({ length: 10 }, (_, i) => (
         <div key={i} className="flex items-center gap-4 border-b border-border px-4 py-3">

@@ -15,7 +15,7 @@ import { SportPills } from "@/components/board/sport-pills";
 import { FeedTabs } from "@/components/social/feed";
 import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
-import { FilterPill } from "@/components/players/filter-pill";
+import { Segmented } from "@/components/players/segmented";
 import { SeasonPicker } from "@/components/players/season-picker";
 import { StatsGrid } from "@/components/players/stats-grid";
 import { loadPlayersAction } from "@/app/actions/feeds";
@@ -67,16 +67,28 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       {/* The page is named by the nav; the heading is for screen readers. */}
       <h1 className="sr-only">Players</h1>
 
-      <SportPills
-        active={active}
-        hrefFor={(key) => `/players?sport=${key}`}
-        below="bar-tabs"
-        filters={FILTERS}
-        withAll={false}
+      {/* One sport, no pills: the tables' tabs go straight under the top bar,
+          carrying the info tip. With more sports the pills come back above them. */}
+      {FILTERS.length > 1 && (
+        <SportPills active={active} hrefFor={(key) => `/players?sport=${key}`} below="bar-tabs" filters={FILTERS} withAll={false} />
+      )}
+      <FeedTabs
+        label="Table"
+        sticky={
+          FILTERS.length > 1
+            ? "top-[calc(3.5rem+1px+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] sm:top-14"
+            : true
+        }
+        active={view.category.key}
+        tabs={view.league.categories.map((c) => ({
+          key: c.key,
+          label: c.label,
+          href: playersHref(view, { category: c }),
+        }))}
         actions={
           <InfoTip label="About player stats">
             <p>
-              Every player&apos;s numbers for the season, from our stats feed
+              Every {view.league.label} player&apos;s numbers for the season, from our stats feed
               {synced ? (
                 <>
                   {" "}
@@ -94,63 +106,62 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         }
       />
 
-      {/* The league's tables, stuck under the pills. */}
-      <FeedTabs
-        label="Table"
-        sticky="top-[calc(3.5rem+1px+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] sm:top-14"
-        active={view.category.key}
-        tabs={view.league.categories.map((c) => ({
-          key: c.key,
-          label: c.label,
-          href: playersHref(view, { category: c }),
-        }))}
-      />
-
       {/* ------------------------------------------------------------ filters */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        {seasons.length > 0 && (
-          <SeasonPicker
-            current={label(view.season)}
-            options={seasons.map((s) => ({
-              label: label(s.season),
-              href: playersHref(view, { season: s.season }),
-              active: s.season === view.season,
-            }))}
-          />
-        )}
-        <nav aria-label="Season type" className="flex gap-2">
-          {(["regular", "postseason"] as SeasonType[]).map((t) => (
-            <FilterPill key={t} href={playersHref(view, { type: t })} on={view.type === t}>
-              {SEASON_TYPE_LABELS[t]}
-            </FilterPill>
-          ))}
-        </nav>
-        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
-        <nav aria-label="Who to show" className="flex gap-2">
-          <FilterPill href={playersHref(view, { qualified: true })} on={view.qualified}>
-            Qualified
-          </FilterPill>
-          <FilterPill href={playersHref(view, { qualified: false })} on={!view.qualified}>
-            All players
-          </FilterPill>
-        </nav>
-        <form action="/players" role="search" className="relative basis-full sm:min-w-40 sm:flex-1 sm:basis-auto">
+      {/* Search first, then one row of settings — the season, then two
+          either/or choices — which scrolls sideways on a narrow phone rather
+          than wrapping into three rows above the table. */}
+      <div className="border-b border-border px-4 pb-2.5 pt-3">
+        <form action="/players" role="search" className="relative">
           <input type="hidden" name="sport" value={view.league.key} />
           <input type="hidden" name="season" value={view.season} />
           {view.type !== "regular" && <input type="hidden" name="type" value={view.type} />}
           {view.category.key !== view.league.categories[0].key && <input type="hidden" name="cat" value={view.category.key} />}
           {!view.qualified && <input type="hidden" name="all" value="1" />}
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" aria-hidden="true" />
           <input
             type="search"
             name="q"
             defaultValue={view.q}
-            placeholder="Search players"
+            placeholder={`Search ${view.league.label} players`}
             aria-label="Search players"
             enterKeyHint="search"
-            className="h-9 w-full rounded-full border border-border bg-surface pl-9 pr-3 text-sm text-fg transition-colors placeholder:text-fg-subtle hover:border-border-strong focus:border-brand/60 focus:bg-surface-2 focus:outline-none touch:text-base"
+            className="h-10 w-full rounded-full border border-border bg-surface-2 pl-10 pr-3 text-[0.9375rem] text-fg transition-colors placeholder:text-fg-subtle focus:border-brand focus:outline-none"
           />
         </form>
+        <div className="-mx-4 mt-2.5 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none]">
+          {seasons.length > 0 && (
+            <SeasonPicker
+              current={label(view.season)}
+              options={seasons.map((s) => ({
+                label: label(s.season),
+                href: playersHref(view, { season: s.season }),
+                active: s.season === view.season,
+              }))}
+            />
+          )}
+          <Segmented
+            label="Season type"
+            options={(["regular", "postseason"] as SeasonType[]).map((t) => ({
+              key: t,
+              href: playersHref(view, { type: t }),
+              on: view.type === t,
+              label: t === "regular" ? (
+                <>
+                  Regular<span className="hidden sm:inline"> season</span>
+                </>
+              ) : (
+                SEASON_TYPE_LABELS[t]
+              ),
+            }))}
+          />
+          <Segmented
+            label="Who to show"
+            options={[
+              { key: "q", href: playersHref(view, { qualified: true }), on: view.qualified, label: "Qualified" },
+              { key: "all", href: playersHref(view, { qualified: false }), on: !view.qualified, label: "All" },
+            ]}
+          />
+        </div>
       </div>
 
       {/* -------------------------------------------------------------- table */}

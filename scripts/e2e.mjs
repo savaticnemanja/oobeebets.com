@@ -891,7 +891,8 @@ console.log("\nBack to the same spot, reply popup, quotes, profile");
   await page.waitForURL(/\/p\//);
   await page.getByRole("link", { name: "Back", exact: true }).click();
   await page.waitForURL(/\/home\?tab=following/);
-  await page.waitForTimeout(1000);
+  // The list holds the spot for 1.5s while the page settles (load-more.tsx).
+  await page.waitForTimeout(1800);
   check((await page.getByText("e2e filler 45", { exact: true }).count()) === 1, "back from a post keeps what infinite scroll had loaded");
   // Where it matters: the post you opened is where it was on screen.
   const topAfter = (await page.locator("article", { hasText: "e2e filler 45" }).first().boundingBox())?.y;

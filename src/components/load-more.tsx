@@ -118,7 +118,7 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
         if (s && performance.now() - tappedAt > 1000) Object.assign(s, { y: window.scrollY, anchor: topRow() });
       });
     };
-    const onTap = (e: MouseEvent) => {
+    const onTap = (e: Event) => {
       const row = (e.target as Element | null)?.closest<HTMLElement>("[data-anchor]");
       const s = saved();
       if (!row || !s) return;
@@ -126,10 +126,13 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
       Object.assign(s, { y: window.scrollY, anchor: { id: row.dataset.anchor!, top: row.getBoundingClientRect().top } });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    // pointerdown as well as click: it comes first, before anything the tap starts can move the page.
+    document.addEventListener("pointerdown", onTap, true);
     document.addEventListener("click", onTap, true);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("pointerdown", onTap, true);
       document.removeEventListener("click", onTap, true);
     };
   }, []);
@@ -149,7 +152,8 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
     scrollBack(restoreTo);
     let frame = 0;
     let stopped = false;
-    const until = performance.now() + 600;
+    // Long enough for a slow phone to finish laying the page out.
+    const until = performance.now() + 1500;
     const stop = () => {
       stopped = true;
     };
