@@ -267,6 +267,39 @@ export async function ensureSlateOdds(date: string): Promise<void> {
   );
 }
 
+/**
+ * Every game in the next `days` days, with its game lines — what the parlay
+ * builder offers. One call per league, the same cost as a single day's
+ * (the provider charges per market, not per game), on its own TTL.
+ */
+export async function ensureUpcomingOdds(days: number): Promise<void> {
+  if (!feedConfigured()) return;
+  const from = new Date();
+  const to = new Date(from.getTime() + days * 24 * 3600_000);
+  await Promise.all(
+    FEED_LEAGUES.map(async (league) => {
+      const key = `odds:${league}:next${days}d`;
+      if (!(await claim(key, ODDS_TTL_MIN()))) return;
+      try {
+        const events = await call<ApiEvent[]>(`/sports/${LEAGUE_CONFIG[league].sportKey}/odds`, {
+          markets: GAME_MARKETS.join(","),
+          bookmakers: bookmakers(),
+          oddsFormat: "american",
+          dateFormat: "iso",
+          commenceTimeFrom: isoSeconds(from),
+          commenceTimeTo: isoSeconds(to),
+        });
+        for (const e of events) {
+          await upsertGame(league, e);
+          await writeLines(e, GAME_MARKETS);
+        }
+      } catch (err) {
+        await release(key, ODDS_TTL_MIN(), err);
+      }
+    }),
+  );
+}
+
 /** Player props for one game — fetched only when somebody opens its props. */
 export async function ensureGameProps(gameId: string): Promise<void> {
   if (!feedConfigured()) return;

@@ -8,9 +8,9 @@ import { ParlayCard } from "@/components/parlay-card";
 import { DeleteParlayButton } from "@/components/parlay-builder";
 import { CommunityParlayBuilder, ShareToggle } from "@/components/community-parlay-builder";
 import { SocialShell } from "@/components/social/social-shell";
-import { getSlateGames } from "@/lib/odds/board";
+import { UPCOMING_DAYS, getUpcomingGames } from "@/lib/odds/board";
 import { after } from "next/server";
-import { ensureSlateOdds } from "@/lib/odds/sync";
+import { ensureUpcomingOdds } from "@/lib/odds/sync";
 import { slateDateString } from "@/lib/slate-date";
 
 export const metadata: Metadata = {
@@ -23,8 +23,9 @@ export const dynamic = "force-dynamic";
 /**
  * The parlay builder, on its own page — reached from the + on Community — so
  * Community itself is only the tickets people shared, laid out like Oobee's.
- * Your own tickets from today sit under the builder, with their share and
- * delete controls.
+ * It offers every game in the next week that hasn't kicked off, so a ticket
+ * can span an NFL week. Your own tickets from today on sit under the
+ * builder, with their share and delete controls.
  */
 export default async function BuildParlayPage() {
   const auth = await getAuth();
@@ -32,18 +33,18 @@ export default async function BuildParlayPage() {
 
   const today = slateDateString();
   // The lines on file are shown straight away and refreshed after the
-  // response if they're stale (ensureSlateOdds only fetches past its TTL, so
-  // reloads don't spend credits). Only a day with nothing on file yet waits
-  // for the provider, since there'd be nothing to build from otherwise.
-  const [onFile, mine] = await Promise.all([getSlateGames(today), getUserParlays(auth.user.id)]);
+  // response if they're stale (ensureUpcomingOdds only fetches past its TTL,
+  // so reloads don't spend credits). Only a week with nothing on file yet
+  // waits for the provider, since there'd be nothing to build from otherwise.
+  const [onFile, mine] = await Promise.all([getUpcomingGames(), getUserParlays(auth.user.id)]);
   let games = onFile;
   if (games.length === 0) {
-    await ensureSlateOdds(today);
-    games = await getSlateGames(today);
+    await ensureUpcomingOdds(UPCOMING_DAYS);
+    games = await getUpcomingGames();
   } else {
-    after(() => ensureSlateOdds(today));
+    after(() => ensureUpcomingOdds(UPCOMING_DAYS));
   }
-  const mineToday = mine.filter((p) => p.slateDate === today);
+  const mineUpcoming = mine.filter((p) => p.slateDate >= today);
 
   return (
     <SocialShell>
@@ -62,11 +63,11 @@ export default async function BuildParlayPage() {
         <CommunityParlayBuilder games={games} />
       </section>
 
-      {mineToday.length > 0 && (
+      {mineUpcoming.length > 0 && (
         <section aria-labelledby="my-parlays-heading">
           <div className="border-b border-border px-4 py-3">
             <h2 id="my-parlays-heading" className="text-base font-bold tracking-tight">
-              Your parlays today
+              Your parlays
             </h2>
             <p className="mt-0.5 text-xs text-fg-subtle">
               Graded leg by leg as the games finish. Shared ones are on{" "}
@@ -76,7 +77,7 @@ export default async function BuildParlayPage() {
               ; private ones only here and on your Stats.
             </p>
           </div>
-          {mineToday.map((pl) => (
+          {mineUpcoming.map((pl) => (
             <ParlayCard key={pl.id} parlay={pl} variant="row">
               <div className="flex items-center gap-3">
                 <ShareToggle parlayId={pl.id} shared={pl.shared} open={pl.open} />

@@ -159,11 +159,10 @@ export async function createCommunityParlayAction(
   if (new Set(frozen.map((f) => f.gameId)).size !== frozen.length) {
     return { ok: false, error: "One leg per game — same-game legs are priced differently by the books." };
   }
-  const dates = new Set(frozen.map((f) => f.slateDate));
-  if (dates.size > 1) {
-    return { ok: false, error: "Every leg has to be on the same day's slate." };
-  }
-  const slateDate = [...dates][0];
+  // Legs can be on different days — a Thursday game and Sunday's, as an NFL
+  // week is played. The ticket files under its first leg's day, which is
+  // also when it locks.
+  const slateDate = frozen.map((f) => f.slateDate).sort()[0];
 
   await db.transaction(async (tx) => {
     // The day may have no Oobee slate yet; the row is only the date key the

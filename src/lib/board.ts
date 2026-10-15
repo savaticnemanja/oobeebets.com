@@ -158,25 +158,27 @@ export function tabFromParam(value: string | undefined): BoardTab {
 /* --------------------------------------------------------- sport filter */
 
 /**
- * The pills under the board's tabs. The four big US leagues match on league;
- * soccer and tennis match the whole sport, since their competitions come and
- * go (a Nations League window, a Masters event) and a pill per competition
- * would be a row of names nobody recognises. `?sport=` carries the key.
+ * The sports oobee covers — the pills under the board's tabs, on Community
+ * and on Players. NFL only, for now: with one sport there is no "All", and
+ * every board, Community and Players show just it — older picks and parlays
+ * in other sports stay in the database, out of sight. Adding a sport back is
+ * a line here (a league matches on league; a sport with no single league,
+ * like soccer, sets league: null and matches the whole sport), plus its feed
+ * league in lib/odds/markets.ts and its table in lib/players/catalog.ts.
+ * `?sport=` carries the key.
  */
 export const SPORT_FILTERS = [
   { key: "nfl", label: "NFL", sport: "football", league: "NFL" },
-  { key: "nba", label: "NBA", sport: "basketball", league: "NBA" },
-  { key: "mlb", label: "MLB", sport: "baseball", league: "MLB" },
-  { key: "nhl", label: "NHL", sport: "hockey", league: "NHL" },
-  { key: "soccer", label: "Soccer", sport: "soccer", league: null },
-  { key: "tennis", label: "Tennis", sport: "tennis", league: null },
 ] as const satisfies ReadonlyArray<{ key: string; label: string; sport: Sport; league: string | null }>;
 
 export type SportFilter = (typeof SPORT_FILTERS)[number];
 
-/** `?sport=` as a filter; anything unknown means no filter (All). */
+/** The one sport, while there's only one: every list is filtered to it. */
+export const ONLY_SPORT: SportFilter | null = SPORT_FILTERS.length === 1 ? SPORT_FILTERS[0] : null;
+
+/** `?sport=` as a filter; anything unknown means All — or, with one sport, that sport. */
 export function sportFilterFromParam(value: string | undefined): SportFilter | null {
-  return SPORT_FILTERS.find((f) => f.key === value) ?? null;
+  return SPORT_FILTERS.find((f) => f.key === value) ?? ONLY_SPORT;
 }
 
 /** Whether a pick or a parlay leg falls under a filter. */

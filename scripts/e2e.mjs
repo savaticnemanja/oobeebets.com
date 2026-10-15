@@ -679,7 +679,7 @@ await seedStatsFixture(sql);
   await page.waitForURL(/\/players/);
   check(true, "sidebar links to Players");
 
-  await page.goto(`${APP_URL}/players?sport=nba&season=${STATS_SEASON}&all=1`);
+  await page.goto(`${APP_URL}/players?sport=nfl&season=${STATS_SEASON}&all=1`);
   await hydrated(page, '[role="table"]');
   check((await rows.count()) === 50, "first page is fifty rows", `rows=${await rows.count()}`);
   // Regression guard: a chunk arriving used to swap the page for its loading
@@ -698,21 +698,21 @@ await seedStatsFixture(sql);
   await page.waitForTimeout(500);
   check(!(await page.evaluate(() => window.__jumpedToTop)), "loading more keeps the scroll position");
 
-  // Points are sorted most-first; a click on the header flips it.
-  await page.getByRole("link", { name: "Sort by Points per game" }).click();
+  // Passing yards are sorted most-first; a click on the header flips it.
+  await page.getByRole("link", { name: "Sort by Passing yards", exact: true }).click();
   await page.waitForURL(/dir=asc/);
   await page.waitForFunction(() => document.querySelector('[role="table"] [role="row"].cursor-pointer')?.textContent?.includes("Fixture Player 60"));
-  check(true, "header click sorts ascending, fewest points first");
+  check(true, "header click sorts ascending, fewest yards first");
 
   // The season picker offers the season, marked current.
   await page.getByRole("button", { name: /^Season:/ }).click();
-  const option = page.getByRole("menuitem", { name: /1999–00/ });
+  const option = page.getByRole("menuitem", { name: /\b1999\b/ });
   check((await option.getAttribute("aria-current")) === "true", "season picker marks the season shown");
   await page.keyboard.press("Escape");
 
   // A tap anywhere on a row opens the player.
   await rows.first().locator('[role="cell"]').last().click();
-  await page.waitForURL(/\/players\/nba\/fx-/);
+  await page.waitForURL(/\/players\/nfl\/fx-/);
   await page.getByText("By season").waitFor();
   check(true, "a row opens the player's page");
   await ctx.close();
@@ -722,7 +722,7 @@ await seedStatsFixture(sql);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
-  await page.goto(`${APP_URL}/players?sport=nba&season=${STATS_SEASON}`);
+  await page.goto(`${APP_URL}/players?sport=nfl&season=${STATS_SEASON}`);
   await hydrated(page, "button");
   check((await page.locator('nav.fixed a[href="/players"]').count()) === 0, "Players is not in the bottom bar");
   await page.getByRole("button", { name: "Open menu" }).click();
@@ -778,6 +778,85 @@ console.log("\nShared parlay in the feed");
   await ctx.close();
   await sql`delete from posts where id = ${post.id}`;
   await sql`delete from parlays where id = ${pl.id}`;
+}
+
+/* ------------------------------------- NFL only, and the parlay builder */
+
+console.log("\nNFL only, and the parlay builder");
+{
+  // One sport: a single NFL pill, no "All".
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/picks`);
+  const pills = page.locator('nav[aria-label="Sport"] a');
+  check((await pills.count()) === 1 && (await pills.first().innerText()).includes("NFL"), "the sport pills are just NFL");
+
+  // Three games in the next week, on two days, priced by one book.
+  const at = (h) => new Date(Date.now() + h * 3600_000);
+  const fixtureGames = [
+    { id: "e2e-nfl-1", away: "Buffalo Bills", home: "Kansas City Chiefs", start: at(26) },
+    { id: "e2e-nfl-2", away: "Dallas Cowboys", home: "Philadelphia Eagles", start: at(27) },
+    { id: "e2e-nfl-3", away: "Seattle Seahawks", home: "San Francisco 49ers", start: at(98) },
+  ];
+  for (const g of fixtureGames) {
+    await sql`insert into games (id, league, sport_key, home_team, away_team, commence_time)
+              values (${g.id}, 'NFL', 'americanfootball_nfl', ${g.home}, ${g.away}, ${g.start})`;
+    await sql`insert into lines (game_id, market_key, outcome, price, book, book_title) values
+              (${g.id}, 'h2h', ${g.away}, 140, 'draftkings', 'DraftKings'),
+              (${g.id}, 'h2h', ${g.home}, -160, 'draftkings', 'DraftKings')`;
+  }
+
+  await page.goto(`${APP_URL}/community/new`);
+  await hydrated(page, 'input[type="search"]');
+  const cards = page.locator("article[aria-label$=' at Kansas City Chiefs'], article[aria-label$=' at Philadelphia Eagles'], article[aria-label$=' at San Francisco 49ers']");
+  check((await cards.count()) === 3, "the builder offers games beyond today", `games=${await cards.count()}`);
+  check((await page.locator('section[aria-label] > h3').count()) >= 2, "games are grouped by day");
+
+  const search = page.locator('input[type="search"]');
+  await search.fill("chiefs");
+  check((await cards.count()) === 1, "search narrows to the team typed", `games=${await cards.count()}`);
+  await search.fill("seattle 49ers");
+  check((await cards.count()) === 1, "every word has to match", `games=${await cards.count()}`);
+  await search.fill("zzz");
+  check(await page.getByText("No games match").isVisible(), "no match says so");
+  await page.getByRole("button", { name: "Clear search" }).click();
+  check((await cards.count()) === 3, "clearing brings every game back");
+
+  // A ticket across two days saves, filed under its first leg's day.
+  await page.locator("article[aria-label='Buffalo Bills at Kansas City Chiefs'] button[aria-pressed]").first().click();
+  await page.locator("article[aria-label='Seattle Seahawks at San Francisco 49ers'] button[aria-pressed]").first().click();
+  await page.getByRole("button", { name: "Save parlay" }).click();
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  let saved;
+  for (let i = 0; i < 40 && !saved; i++) {
+    [saved] = await sql`
+      select p.id, p.slate_date::text as slate_date, count(l.*)::int as legs from parlays p
+      join parlay_selection_legs l on l.parlay_id = p.id
+      join selections s on s.id = l.selection_id
+      where p.owner_id = ${tester.id} and s.game_id like 'e2e-nfl-%' group by p.id`;
+    if (!saved) await page.waitForTimeout(250);
+  }
+  check(saved?.legs === 2, "a parlay can span two days", `legs=${saved?.legs}`);
+  check(saved?.slate_date === slateDateString(fixtureGames[0].start), "it files under its first leg's day", `${saved?.slate_date}`);
+  await ctx.close();
+
+  // On a phone, the same search.
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await phone.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const p2 = await phone.newPage();
+  await p2.goto(`${APP_URL}/community/new`);
+  await hydrated(p2, 'input[type="search"]');
+  await p2.locator('input[type="search"]').fill("eagles");
+  const phoneCards = p2.locator("article[aria-label$=' at Philadelphia Eagles']");
+  check((await phoneCards.count()) === 1 && (await p2.locator("article[aria-label$=' at Kansas City Chiefs']").count()) === 0, "search works on a phone");
+  const width = await p2.evaluate(() => document.documentElement.scrollWidth);
+  check(width <= 390, "the builder never scrolls sideways on a phone", `scrollWidth=${width}`);
+  await phone.close();
+
+  if (saved) await sql`delete from parlays where id = ${saved.id}`;
+  await sql`delete from selections where game_id like 'e2e-nfl-%'`;
+  await sql`delete from games where id like 'e2e-nfl-%'`;
 }
 
 /* ------------------------------------------- notifications and @mentions */

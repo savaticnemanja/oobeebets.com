@@ -38,7 +38,7 @@ import {
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
 import { safeNextPath } from "../src/lib/beta-gate.ts";
-import { LEAGUES } from "../src/lib/players/catalog.ts";
+import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
 import {
   NHL_STAT_NAMES,
   mlbGameRow,
@@ -715,7 +715,7 @@ console.log("\nParlays");
 console.log("\nPlayers");
 
 {
-  for (const route of ["/players", "/players/nba/fx-1"]) {
+  for (const route of ["/players", "/players/nfl/fx-1"]) {
     const res = await fetch(`${APP_URL}${route}`, { redirect: "manual" });
     const { ok, location } = redirectsToLogin(res);
     check(ok, `(anonymous) ${route} is gated`, `-> ${res.status} ${location}`);
@@ -744,7 +744,9 @@ console.log("\nPlayers");
     MLB: keysOf(mlbGameRow(any({ game_id: 1, team: { id: 1 } }), new Map([[1, { id: 1, date: game.date, season: 2025 }]]))),
     NHL: keysOf(nhlGameRow(any({ game: { ...game, start_time_utc: game.date }, team: { id: 1 } }))),
   };
-  for (const cfg of LEAGUES) {
+  // Every league the catalog defines, not just the ones switched on, so a
+  // league comes back ready.
+  for (const cfg of Object.values(LEAGUE_BY_NAME)) {
     const wanted = cfg.categories.flatMap((c) => [...c.columns.map((x) => x.key), c.sort, c.has, c.qualify.key, ...c.headline]);
     const missing = [...new Set(wanted.filter((k) => !season[cfg.league].has(k)))];
     check(missing.length === 0, `${cfg.league} table columns come from the feed`, missing.length ? `missing: ${missing}` : "");
@@ -756,7 +758,7 @@ console.log("\nPlayers");
   await seedStatsFixture(sql);
   const { token, cleanup } = await sessionFor(TESTER_EMAIL);
   const get = (path) => fetch(`${APP_URL}${path}`, { headers: { cookie: `oobee_session=${token}` }, redirect: "manual" });
-  const base = `/players?sport=nba&season=${STATS_SEASON}`;
+  const base = `/players?sport=nfl&season=${STATS_SEASON}`;
   const has = (html, n) => html.includes(`Fixture Player ${String(n).padStart(2, "0")}`);
 
   let res = await get(base);
@@ -766,8 +768,8 @@ console.log("\nPlayers");
   html = await (await get(`${base}&all=1`)).text();
   check(has(html, 50) && !has(html, 51), "All players: first 50 rows, the rest left to scroll");
 
-  html = await (await get(`${base}&all=1&sort=pts&dir=asc`)).text();
-  check(html.indexOf("Fixture Player 60") >= 0 && html.indexOf("Fixture Player 60") < html.indexOf("Fixture Player 59"), "sorting ascending puts the fewest points first");
+  html = await (await get(`${base}&all=1&sort=pass_yds&dir=asc`)).text();
+  check(html.indexOf("Fixture Player 60") >= 0 && html.indexOf("Fixture Player 60") < html.indexOf("Fixture Player 59"), "sorting ascending puts the fewest yards first");
 
   html = await (await get(`${base}&q=Player%2007`)).text();
   check(has(html, 7) && !has(html, 8), "search narrows the table");
@@ -775,11 +777,12 @@ console.log("\nPlayers");
   res = await get("/players?sport=zzz&season=abc&cat=nope&sort=x%27%3Bdrop&dir=sideways&type=bad&q=%25_");
   check(res.status === 200, "unknown params fall back to defaults", `-> ${res.status}`);
 
-  res = await get(`/players/nba/fx-1?season=${STATS_SEASON}`);
+  res = await get(`/players/nfl/fx-1?season=${STATS_SEASON}`);
   html = await res.text();
   check(res.status === 200 && has(html, 1) && html.includes("Game log") && html.includes("OPP"), "player page: seasons and game log", `-> ${res.status}`);
 
-  for (const path of ["/players/nba/no-such-player", "/players/zzz/fx-1"]) {
+  // NFL only: the other leagues' pages are gone, not just unlinked.
+  for (const path of ["/players/nfl/no-such-player", "/players/zzz/fx-1", "/players/nba/fx-1"]) {
     res = await get(path);
     check(res.status === 404, `${path} is a 404`, `-> ${res.status}`);
   }

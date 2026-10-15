@@ -53,16 +53,8 @@ export async function dropTester(sql, email = TESTER_EMAIL) {
 /** Odds spread across favourites and dogs so the maths has something to chew. */
 const PRICES = [-110, -125, +105, -150, +140, -200, +175, -105];
 
+/** NFL only, like the site (SPORT_FILTERS in src/lib/board.ts). */
 const GAMES = {
-  baseball: {
-    league: "MLB",
-    events: [
-      "Baltimore Orioles vs Detroit Tigers",
-      "Chicago Cubs vs St. Louis Cardinals",
-      "Texas Rangers vs Tampa Bay Rays",
-    ],
-    selections: ["Over 7.5", "Under 8.5", "Texas Rangers +1.5"],
-  },
   football: {
     league: "NFL",
     events: [
@@ -79,19 +71,6 @@ const GAMES = {
  * stat composed into one selection string.
  */
 const PROPS = {
-  baseball: {
-    league: "MLB",
-    events: [
-      "Colorado Rockies vs Atlanta Braves",
-      "Baltimore Orioles vs Detroit Tigers",
-      "Chicago Cubs vs St. Louis Cardinals",
-    ],
-    selections: [
-      "Martin Perez UNDER 4.5 Strikeouts",
-      "Jordan Beck UNDER 0.5 Hits",
-      "Matt Olson OVER 1.5 Total Bases",
-    ],
-  },
   football: {
     league: "NFL",
     events: [
@@ -124,7 +103,7 @@ const OUTCOMES = ["won", "lost", "won", "push", "lost", "won", "void", "won"];
  * Creates a published slate on `date`: both boards, each filled to its own
  * limit and each ranked from 1.
  *
- * Odd ranks are MLB, even are NFL, so both sports have something in them. Ranks 1..settled started three hours ago and carry a result; the rest
+ * Every pick is NFL, the one sport the site covers. Ranks 1..settled started three hours ago and carry a result; the rest
  * start in the future and stay pending, which is what the settle flow needs to
  * find.
  *
@@ -149,7 +128,7 @@ export async function createSlate(sql, { date, publishedBy, counts = {} }) {
     const market = category === "prop" ? "prop" : "total";
 
     for (let rank = 1; rank <= count; rank++) {
-      const sport = rank % 2 === 1 ? "baseball" : "football";
+      const sport = "football";
       const g = source[sport];
       const i = rank % 3;
       const isSettled = rank <= settled;
@@ -203,10 +182,10 @@ export async function dropSlate(sql, date) {
 /* ---------------------------------------------------------- player stats */
 
 /**
- * An invented NBA season for the Players pages: 1999 (1999–00), far enough
- * back that no real sync ever writes it. Sixty players, so the table has a
- * second page to scroll into; player 1 leads in points and has a game log.
- * Ids are "nba:fx-<n>", so dropping them can't touch a real player.
+ * An invented NFL season for the Players pages: 1999, far enough back that
+ * no real sync ever writes it. Sixty quarterbacks, so the passing table has
+ * a second page to scroll into; player 1 leads in passing yards and has a
+ * game log. Ids are "nfl:fx-<n>", so dropping them can't touch a real player.
  */
 export const STATS_SEASON = 1999;
 export const STATS_PLAYERS = 60;
@@ -215,42 +194,53 @@ export async function seedStatsFixture(sql) {
   await dropStatsFixture(sql);
   const players = Array.from({ length: STATS_PLAYERS }, (_, i) => {
     const n = i + 1;
-    return { id: `nba:fx-${n}`, league: "NBA", provider_id: `fx-${n}`, name: `Fixture Player ${String(n).padStart(2, "0")}`, team_abbr: "FXT", position: "G" };
+    return { id: `nfl:fx-${n}`, league: "NFL", provider_id: `fx-${n}`, name: `Fixture Player ${String(n).padStart(2, "0")}`, team_abbr: "FXT", position: "QB" };
   });
   await sql`insert into stat_players ${sql(players)}`;
   await sql`insert into player_season_stats ${sql(
     players.map((p, i) => ({
-      league: "NBA",
+      league: "NFL",
       season: STATS_SEASON,
       season_type: "regular",
       player_id: p.id,
       team_abbr: "FXT",
-      // Points fall with the number, so player 01 leads and 60 trails; the
-      // last ten played too little to qualify.
-      games_played: i < 50 ? 70 : 10,
-      stats: { gp: i < 50 ? 70 : 10, min: 30, pts: 40 - i * 0.5, reb: 5 + (i % 7), ast: 3 + (i % 5), fga: 15, fgm: 7, fg_pct: 0.467 },
+      // Passing yards fall with the number, so player 01 leads and 60
+      // trails; the last ten threw too little to qualify.
+      games_played: i < 50 ? 17 : 3,
+      stats: {
+        gp: i < 50 ? 17 : 3,
+        pass_cmp: i < 50 ? 350 : 20,
+        pass_att: i < 50 ? 550 : 30,
+        pass_pct: 63.6,
+        pass_yds: 4800 - i * 50,
+        pass_ypa: 7.4,
+        pass_td: 30 - (i % 20),
+        pass_int: 5 + (i % 9),
+        pass_ypg: (4800 - i * 50) / 17,
+        qbr: 60,
+      },
     })),
   )}`;
   await sql`insert into player_game_stats ${sql(
     Array.from({ length: 3 }, (_, g) => ({
-      player_id: "nba:fx-1",
+      player_id: "nfl:fx-1",
       game_id: `fx-game-${g}`,
       season: STATS_SEASON,
       season_type: "regular",
-      played_at: new Date(Date.UTC(2000, 0, 10 + g)),
+      played_at: new Date(Date.UTC(1999, 8, 12 + 7 * g)),
       team_abbr: "FXT",
       opponent_abbr: "OPP",
       home: g % 2 === 0,
-      team_score: 100 + g,
-      opponent_score: 101,
-      stats: { min: 34, pts: 30 + g, reb: 6, ast: 4 },
+      team_score: 24 + g,
+      opponent_score: 21,
+      stats: { pass_cmp: 22, pass_att: 33, pass_yds: 280 + g, pass_td: 2, pass_int: 1, rush_yds: 12 },
     })),
   )}`;
 }
 
 export async function dropStatsFixture(sql) {
   // Season and game rows cascade with the players.
-  await sql`delete from stat_players where id like 'nba:fx-%'`;
+  await sql`delete from stat_players where id like 'nfl:fx-%'`;
 }
 
 /**

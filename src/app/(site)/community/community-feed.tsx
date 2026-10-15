@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { parlays } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
-import type { SportFilter } from "@/lib/board";
+import { ONLY_SPORT, type SportFilter } from "@/lib/board";
 import { LEAGUE_CONFIG } from "@/lib/odds/markets";
 import { getCommunityParlayPage, markPlayed } from "@/lib/parlay-store";
 import { getParlayPosts } from "@/lib/social";
@@ -93,7 +93,9 @@ export async function loadCommunityChunk({
   const out: React.ReactNode[] = [];
   // The day the previous chunk ended on: its heading is still on screen.
   let lastDate: string | null = prev[0]?.date ?? null;
-  const passedToday = (d: string | null) => !sportFilter && (lastDate === null || lastDate > today) && (d === null || d < today);
+  // A pill someone chose — not the one sport there is while there's one.
+  const picked = sportFilter !== null && sportFilter !== ONLY_SPORT;
+  const passedToday = (d: string | null) => !picked && (lastDate === null || lastDate > today) && (d === null || d < today);
 
   page.items.forEach(({ parlay, ownerRole }, i) => {
     const d = parlay.slateDate;
@@ -123,7 +125,7 @@ export async function loadCommunityChunk({
   // The last chunk: if every day so far was upcoming, today still comes last.
   if (!page.next && passedToday(null)) out.push(todayEmpty);
 
-  if (before === null && page.items.length === 0 && sportFilter) {
+  if (before === null && page.items.length === 0 && picked) {
     return { node: <Empty>No {what}parlays shared yet.</Empty>, next: null };
   }
   return { node: out, next: page.next };

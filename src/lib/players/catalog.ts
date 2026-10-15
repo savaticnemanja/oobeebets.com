@@ -460,13 +460,16 @@ const nhl: LeagueConfig = {
   ],
 };
 
-/** In the order the pills show them — the board's order (lib/board.ts). */
-export const LEAGUES: LeagueConfig[] = [nfl, nba, mlb, nhl];
+/**
+ * The leagues with a Players table and a stats sync — NFL only, like the
+ * rest of the site (lib/board.ts). The others stay defined, ready to add
+ * back here, and LEAGUE_BY_NAME keeps reading rows already on file.
+ */
+export const LEAGUES: LeagueConfig[] = [nfl];
 
 export const LEAGUE_BY_NAME: Record<StatLeague, LeagueConfig> = { NFL: nfl, NBA: nba, MLB: mlb, NHL: nhl };
 
-/** The pills open on the NBA, the deepest table in the set. */
-export const DEFAULT_LEAGUE: StatLeague = "NBA";
+export const DEFAULT_LEAGUE: StatLeague = "NFL";
 
 /* ----------------------------------------------------------------- params */
 

@@ -7,6 +7,7 @@ import { Layers, Loader2, Lock, X } from "lucide-react";
 import { toast } from "sonner";
 import { createCommunityParlayAction, setParlaySharedAction } from "@/app/actions/parlays";
 import { LinePicker } from "@/components/odds/line-picker";
+import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -31,7 +32,8 @@ interface Leg {
 
 /**
  * Build a parlay from anything in the odds feed — game lines and player props
- * on every game that has not started.
+ * on every game in the next week that has not started. Legs can be on
+ * different days; the ticket locks when its first game kicks off.
  *
  * The slip prices the ticket as legs are added, with the same combineOdds the
  * server grades with, so what it shows is what the ticket will say. One leg
@@ -89,12 +91,14 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <div>
-        <p className="mb-3 text-xs text-fg-subtle">
-          Every game still to start today. Tap a price to add it; tap another line on
-          the same game to swap. Best price across DraftKings, FanDuel, BetMGM and
-          Caesars, on the line most books are hanging.
+        <p className="mb-1 text-xs text-fg-subtle">
+          Every NFL game in the next week that hasn&apos;t kicked off. Tap a price to add
+          it; tap another line on the same game to swap. Legs can be on different days —
+          the parlay locks when its first game starts. Best price across DraftKings,
+          FanDuel, BetMGM and Caesars, on the line most books are hanging.
         </p>
         <LinePicker
+          stick="page"
           games={games}
           show={{ lines: true, props: true }}
           onPick={toggle}
@@ -121,7 +125,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
       <aside
         id="parlay-slip"
         aria-label="Parlay slip"
-        className="card-hairline h-fit scroll-mt-20 p-4"
+        className="h-fit scroll-mt-20 rounded-2xl border border-border p-4"
       >
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Layers className="size-4 text-brand" aria-hidden="true" />
@@ -133,7 +137,7 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
 
         {legs.length === 0 ? (
           <p className="mt-3 text-sm text-fg-muted">
-            Pick at least {MIN_PARLAY_LEGS} legs from different games.
+            Pick at least {MIN_PARLAY_LEGS} legs from different games — any day this week.
           </p>
         ) : (
           <ol className="mt-3 space-y-2">
@@ -142,7 +146,8 @@ export function CommunityParlayBuilder({ games }: { games: GameOption[] }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-fg">{l.option.label}</p>
                   <p className="truncate text-xs text-fg-subtle">
-                    {l.game.awayTeam} vs {l.game.homeTeam} · {l.option.bookTitle}
+                    {l.game.awayTeam} vs {l.game.homeTeam} ·{" "}
+                    <LocalTime at={l.game.commenceTime} format="kickoff" className="num" /> · {l.option.bookTitle}
                   </p>
                 </div>
                 <span className="num shrink-0 text-xs text-fg-muted">{formatOdds(l.option.price)}</span>

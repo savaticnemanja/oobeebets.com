@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { games, lines, parlaySelectionLegs, picks, selections } from "@/db/schema";
 import type { Game, Line } from "@/db/schema";
 import { slateBounds } from "./sync";
 import {
+  FEED_LEAGUES,
   GAME_MARKETS,
   LEAGUE_CONFIG,
   PROP_LABELS,
@@ -104,7 +105,20 @@ function gameOption(g: Game, ls: Line[]): GameOption {
  */
 export async function getSlateGames(date: string): Promise<GameOption[]> {
   const { from, to } = slateBounds(date);
+  return gamesBetween(new Date(Math.max(from.getTime(), Date.now())), to);
+}
+
+/** How far ahead the parlay builder looks: a full NFL week, Thursday to Monday. */
+export const UPCOMING_DAYS = 7;
+
+/** Every game in the next week that has not started — the parlay builder's list. */
+export async function getUpcomingGames(days = UPCOMING_DAYS): Promise<GameOption[]> {
   const now = new Date();
+  return gamesBetween(now, new Date(now.getTime() + days * 24 * 3600_000));
+}
+
+/** Games kicking off in [from, to), in the leagues the site covers, with their lines. */
+async function gamesBetween(from: Date, to: Date): Promise<GameOption[]> {
   const gs = await db
     .select()
     .from(games)
@@ -112,7 +126,9 @@ export async function getSlateGames(date: string): Promise<GameOption[]> {
       and(
         gte(games.commenceTime, from),
         lt(games.commenceTime, to),
-        gt(games.commenceTime, now),
+        gt(games.commenceTime, new Date()),
+        // Games from leagues no longer covered can still be on file.
+        inArray(games.league, [...FEED_LEAGUES]),
       ),
     )
     .orderBy(asc(games.commenceTime), asc(games.id));

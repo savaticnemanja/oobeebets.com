@@ -1,25 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Search, X } from "lucide-react";
 import { loadGamePropsAction } from "@/app/actions/odds";
-import type { GameOption, LineOption, PropGroup } from "@/lib/odds/markets";
-import { formatOdds } from "@/lib/i18n/format";
+import { LEAGUE_CONFIG, type FeedLeague, type GameOption, type LineOption, type PropGroup } from "@/lib/odds/markets";
+import { SPORT_EMOJI } from "@/components/pick-card";
+import { formatOdds, formatSlateDate } from "@/lib/i18n/format";
+import { addDays, slateDateString } from "@/lib/slate-date";
 import { LocalTime } from "@/components/local-time";
 import { cn } from "@/lib/utils";
 
 /**
  * The odds feed laid out the way a sportsbook does it, for choosing a bet:
  *
- *                     Spread        Moneyline     Total
+ *   [ Search teams                        ]
+ *   Sun, Oct 19 · 11 games
+ *   🏈 NFL                                   Sun 1:00 PM
+ *                     Spread        Money         Total
  *   Dallas Cowboys    +3.5  -110    +145          O 47.5  -108
  *   Kansas City       -3.5  -110    -170          U 47.5  -112
  *   ▸ Player props
  *
- * Every price is a button; nothing here can be typed. Each one is the best
- * price on the consensus line (see lib/odds/board.ts), and its book is in the
- * button's label. Used by the admin pick composer and by the community
- * parlay builder, which differ only in what a click does.
+ * Games are grouped by day and filtered as you type — every word has to match
+ * a team (or the league), so "chiefs" and "kansas bills" both work. Every
+ * price is a button; nothing here can be typed. Each one is the best price on
+ * the consensus line (see lib/odds/board.ts), and its book is in the button's
+ * label. Used by the admin pick composer and by the community parlay builder,
+ * which differ only in what a click does.
  */
 
 export interface PickerProps {
@@ -30,29 +37,113 @@ export interface PickerProps {
   isSelected: (lineId: string) => boolean;
   /** A whole game can be greyed out (the slip already has a leg from it). */
   isGameBlocked?: (gameId: string) => boolean;
+  /**
+   * Where the search box sticks: "page" under the phone's top bar as the
+   * page scrolls (the parlay builder); "box" at the top of a scrolling box
+   * of its own (the admin composer's card).
+   */
+  stick?: "page" | "box";
 }
 
-export function LinePicker({ games, show, onPick, isSelected, isGameBlocked }: PickerProps) {
+/** Every word in the query, against the game's teams and league. */
+function matches(game: GameOption, terms: string[]): boolean {
+  const hay = `${game.awayTeam} ${game.homeTeam} ${game.league}`.toLowerCase();
+  return terms.every((t) => hay.includes(t));
+}
+
+function dayLabel(date: string, today: string): string {
+  if (date === today) return "Today";
+  if (date === addDays(today, 1)) return "Tomorrow";
+  return formatSlateDate(date);
+}
+
+export function LinePicker({ games, show, onPick, isSelected, isGameBlocked, stick = "box" }: PickerProps) {
+  const [query, setQuery] = React.useState("");
+
   if (games.length === 0) {
     return (
-      <p className="card-hairline px-4 py-8 text-center text-sm text-fg-muted">
-        No games left to bet on this day — everything has started, or the books
+      <p className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-fg-muted">
+        No games to bet on right now — everything has started, or the books
         haven&apos;t posted lines yet.
       </p>
     );
   }
+
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = terms.length ? games.filter((g) => matches(g, terms)) : games;
+  // Grouped by betting day (04:00 ET to 04:00 ET), in kick-off order.
+  const days = new Map<string, GameOption[]>();
+  for (const g of shown) {
+    const d = slateDateString(new Date(g.commenceTime));
+    days.set(d, [...(days.get(d) ?? []), g]);
+  }
+  const today = slateDateString();
+
   return (
-    <div className="space-y-3">
-      {games.map((g) => (
-        <GameCard
-          key={g.id}
-          game={g}
-          show={show}
-          onPick={onPick}
-          isSelected={isSelected}
-          blocked={isGameBlocked?.(g.id) ?? false}
-        />
-      ))}
+    <div>
+      <div
+        className={cn(
+          "sticky z-20 -mx-4 bg-black/80 px-4 py-2 backdrop-blur-xl",
+          stick === "page"
+            ? // Under the phone's top bar, riding up with it as it slides away (scroll-chrome.tsx).
+              "top-[calc(3.5rem+1px+var(--spacing-safe-top)-var(--chrome-hide,0px))] sm:top-0"
+            : "top-0 mx-0 bg-surface px-0",
+        )}
+      >
+        <label className="relative block">
+          <span className="sr-only">Search games</span>
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search teams"
+            autoComplete="off"
+            enterKeyHint="search"
+            className="h-11 w-full rounded-full border border-border bg-surface-2 pl-10 pr-10 text-[0.9375rem] text-fg placeholder:text-fg-subtle focus:border-brand focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-fg-subtle hover:bg-surface-3 hover:text-fg"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </label>
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="py-8 text-center text-sm text-fg-muted" role="status">
+          No games match &ldquo;{query.trim()}&rdquo;.
+        </p>
+      ) : (
+        [...days].map(([date, list]) => (
+          <section key={date} aria-label={dayLabel(date, today)} className="pt-3">
+            <h3 className="px-1 pb-2 text-sm font-semibold text-fg">
+              {dayLabel(date, today)}
+              <span className="font-normal text-fg-subtle">
+                {" "}
+                · {list.length} game{list.length === 1 ? "" : "s"}
+              </span>
+            </h3>
+            <div className="space-y-3">
+              {list.map((g) => (
+                <GameCard
+                  key={g.id}
+                  game={g}
+                  show={show}
+                  onPick={onPick}
+                  isSelected={isSelected}
+                  blocked={isGameBlocked?.(g.id) ?? false}
+                />
+              ))}
+            </div>
+          </section>
+        ))
+      )}
     </div>
   );
 }
@@ -74,9 +165,15 @@ function GameCard({
   const pick = (o: LineOption) => onPick(o, game);
 
   return (
-    <section className={cn("card-hairline overflow-hidden", blocked && "opacity-60")} aria-label={`${game.awayTeam} at ${game.homeTeam}`}>
+    <article
+      className={cn("overflow-hidden rounded-2xl border border-border", blocked && "opacity-60")}
+      aria-label={`${game.awayTeam} at ${game.homeTeam}`}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-fg-subtle">
-        <span className="font-medium text-fg-muted">{game.league}</span>
+        <span className="flex items-center gap-1.5 font-medium text-fg-muted">
+          <span aria-hidden="true">{SPORT_EMOJI[LEAGUE_CONFIG[game.league as FeedLeague]?.sport ?? "football"]}</span>
+          {game.league}
+        </span>
         <LocalTime at={game.commenceTime} format="kickoff" className="num" />
       </div>
 
@@ -93,7 +190,7 @@ function GameCard({
               key={side}
               className="mt-1.5 grid grid-cols-[minmax(0,1fr)_repeat(3,3.75rem)] sm:grid-cols-[minmax(0,1fr)_repeat(3,4.5rem)] items-center gap-1.5"
             >
-              <span className="text-sm leading-tight text-fg">
+              <span className="text-sm font-medium leading-tight text-fg">
                 {side === "away" ? game.awayTeam : game.homeTeam}
               </span>
               <PriceButton
@@ -135,7 +232,7 @@ function GameCard({
           )}
         </>
       )}
-    </section>
+    </article>
   );
 }
 
@@ -158,7 +255,7 @@ function PriceButton({
 }) {
   if (!option) {
     return (
-      <span className="grid h-11 place-items-center rounded-lg border border-dashed border-border text-xs text-fg-subtle">
+      <span className="grid h-11 place-items-center rounded-xl border border-dashed border-border text-xs text-fg-subtle">
         —
       </span>
     );
@@ -173,7 +270,7 @@ function PriceButton({
       aria-label={`${option.label} ${formatOdds(option.price)} at ${option.bookTitle}`}
       title={`${formatOdds(option.price)} at ${option.bookTitle}`}
       className={cn(
-        "flex h-11 flex-col items-center justify-center rounded-lg border text-xs leading-tight transition-colors",
+        "flex h-11 flex-col items-center justify-center rounded-xl border text-xs leading-tight transition-colors",
         on
           ? "border-brand bg-brand/15 text-brand"
           : "border-border bg-surface-2 text-fg hover:border-brand/50",

@@ -5,8 +5,8 @@ import { ScrollActiveTab } from "@/components/ui/scroll-active-tab";
 import { cn } from "@/lib/utils";
 
 /**
- * The sport pills — All, NFL, NBA, MLB, NHL, Soccer, Tennis — on Picks, on
- * Community and on Players. They stick: under Picks' tab strip
+ * The sport pills — All, then each sport in SPORT_FILTERS (just NFL for now,
+ * and no All with only one) — on Picks, on Community and on Players. They stick: under Picks' tab strip
  * (`below="tabs"`), straight under the phone's top bar on Community, which
  * has no tabs (`below="bar"`), or under the bar with a tab strip sticking
  * under *them*, on Players (`below="bar-tabs"`).
@@ -21,7 +21,7 @@ export function SportPills({
   below,
   actions,
   filters = SPORT_FILTERS,
-  withAll = true,
+  withAll = SPORT_FILTERS.length > 1,
 }: {
   active: SportFilter | null;
   hrefFor: (key: string | null) => string;

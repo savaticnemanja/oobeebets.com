@@ -6,7 +6,8 @@
  */
 import type { Market, PickCategory, PickStatus, Sport } from "@/db/schema";
 
-export const FEED_LEAGUES = ["NFL", "MLB"] as const;
+/** NFL only, like the rest of the site (SPORT_FILTERS in lib/board.ts). */
+export const FEED_LEAGUES = ["NFL"] as const;
 export type FeedLeague = (typeof FEED_LEAGUES)[number];
 
 export const LEAGUE_CONFIG: Record<
@@ -25,17 +26,6 @@ export const LEAGUE_CONFIG: Record<
       "player_anytime_td",
     ],
   },
-  MLB: {
-    sportKey: "baseball_mlb",
-    sport: "baseball",
-    propMarkets: [
-      "pitcher_strikeouts",
-      "pitcher_hits_allowed",
-      "batter_hits",
-      "batter_home_runs",
-      "batter_rbis",
-    ],
-  },
 };
 
 export const GAME_MARKETS = ["h2h", "spreads", "totals"] as const;
@@ -45,7 +35,10 @@ export function isGameMarket(key: string): key is GameMarketKey {
   return (GAME_MARKETS as readonly string[]).includes(key);
 }
 
-/** What each provider market is called on a card, after the player's name. */
+/**
+ * What each provider market is called on a card, after the player's name.
+ * The MLB ones stay: lines already on file still need their names.
+ */
 export const PROP_LABELS: Record<string, string> = {
   player_pass_yds: "Passing Yards",
   player_pass_tds: "Passing TDs",
