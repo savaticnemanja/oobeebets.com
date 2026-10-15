@@ -38,6 +38,7 @@ import {
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
 import { safeNextPath } from "../src/lib/beta-gate.ts";
+import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
 import {
   NHL_STAT_NAMES,
@@ -165,6 +166,12 @@ check(
   "SQL aggregate matches row-by-row maths",
   `js=${manual.toFixed(4)} sql=${agg.toFixed(4)}`,
 );
+
+// A league can leave the menu with bets still open in it; the results
+// poller must still be able to grade those (SCORES_SPORT_KEYS).
+const gradable = await sql`select distinct g.league from selections s join games g on g.id = s.game_id where s.status = 'pending'`;
+const ungradable = [...new Set([...FEED_LEAGUES, ...gradable.map((r) => r.league)])].filter((l) => !SCORES_SPORT_KEYS[l]);
+check(ungradable.length === 0, "every league with open bets can still be graded", ungradable.length ? `no scores key: ${ungradable}` : "");
 
 /* ------------------------------------------------------- 2. board visibility */
 

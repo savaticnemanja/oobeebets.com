@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { games, lines, oddsSync, picks, selections } from "@/db/schema";
 import { addDays, zonedTimeToUtc } from "@/lib/slate-date";
 import { claim, release } from "@/lib/sync-claim";
-import { FEED_LEAGUES, GAME_MARKETS, LEAGUE_CONFIG, type FeedLeague } from "./markets";
+import { FEED_LEAGUES, GAME_MARKETS, LEAGUE_CONFIG, SCORES_SPORT_KEYS, type FeedLeague } from "./markets";
 
 /**
  * Pulling the feed from The Odds API into games / lines, and final scores
@@ -360,14 +360,15 @@ export async function ensureScores(): Promise<number> {
 
     await Promise.all(
       waiting.map(async ({ league, newest }) => {
-        const config = LEAGUE_CONFIG[league as FeedLeague];
-        if (!config) return;
+        // Not LEAGUE_CONFIG: a league no longer offered still has legs to grade.
+        const sportKey = SCORES_SPORT_KEYS[league];
+        if (!sportKey) return;
         const key = `scores:${league}`;
         const stale = Date.now() - newest.getTime() > 6 * 60 * 60 * 1000;
         const ttl = stale ? SCORES_STALE_TTL_MIN() : SCORES_TTL_MIN();
         if (!(await claim(key, ttl))) return;
         try {
-          const scores = await call<ApiScore[]>(`/sports/${config.sportKey}/scores`, {
+          const scores = await call<ApiScore[]>(`/sports/${sportKey}/scores`, {
             daysFrom: "3",
             dateFormat: "iso",
           });

@@ -50,8 +50,19 @@ function scrollBack(saved: Pick<Remembered, "y" | "anchor">) {
   else window.scrollTo(0, saved.y);
 }
 
-/** Per URL, for as long as the tab lives — what a list had loaded, and where you were. */
+/**
+ * Per URL, for as long as the tab lives — what a list had loaded, and where
+ * you were. The last few lists only: each holds rendered rows, and a long
+ * session through many profiles shouldn't keep them all.
+ */
 const memory = new Map<string, Remembered>();
+const MEMORY_LISTS = 12;
+
+function remember(key: string, value: Remembered) {
+  memory.delete(key);
+  memory.set(key, value);
+  while (memory.size > MEMORY_LISTS) memory.delete(memory.keys().next().value!);
+}
 
 /**
  * What to start from: the remembered list when coming back to it, else
@@ -97,7 +108,7 @@ export function LoadMore({ next, load }: { next: string | null; load: (cursor: s
   // Opened afresh: forget what this page had before.
   useEffect(() => {
     if (!initial.saved && initial.key) {
-      memory.set(initial.key, { firstNext: next, chunks: [], cursor: next, y: window.scrollY, anchor: null });
+      remember(initial.key, { firstNext: next, chunks: [], cursor: next, y: window.scrollY, anchor: null });
     }
     // Once, on the way in.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -57,6 +57,8 @@ function GroupRow({
   viewerUsername: string;
 }) {
   const { icon: Icon, className } = ICON[item.kind];
+  // A play has no names (see getNotifications): just how many.
+  if (item.kind === "play") return <PlayRow item={item} />;
   const [first] = item.actors;
   const others = item.total - 1;
   const names =
@@ -76,7 +78,6 @@ function GroupRow({
   const did = {
     like: `liked ${noun}`,
     repost: `reposted ${noun}`,
-    play: "played your parlay",
     follow: "followed you",
   }[item.kind];
 
@@ -85,20 +86,11 @@ function GroupRow({
       ? item.total === 1
         ? `/u/${first.username}`
         : `/u/${viewerUsername}/followers`
-      : item.kind === "play"
-        ? item.parlay?.postId
-          ? `/p/${item.parlay.postId}`
-          : "/stats?tab=parlays"
-        : item.post
+      : item.post
           ? `/p/${item.post.id}`
           : "/home";
 
-  const excerpt =
-    item.kind === "play"
-      ? item.parlay?.title
-      : item.post
-        ? item.post.body.trim() || (item.post.isParlay ? "Your parlay" : "")
-        : null;
+  const excerpt = item.post ? item.post.body.trim() || (item.post.isParlay ? "Your parlay" : "") : null;
 
   return (
     <article
@@ -127,6 +119,35 @@ function GroupRow({
           <LocalTime at={item.at} format="ago" className="text-sm text-fg-subtle" />
         </p>
         {excerpt && <p className="mt-1 line-clamp-2 text-sm text-fg-subtle">{excerpt}</p>}
+      </div>
+    </article>
+  );
+}
+
+/** "3 people played your parlay" — a count, since who played is private. */
+function PlayRow({ item }: { item: Extract<NotificationItem, { kind: "like" | "repost" | "play" | "follow" }> }) {
+  const { icon: Icon, className } = ICON.play;
+  const who = item.total === 1 ? "Someone" : `${item.total} people`;
+  const href = item.parlay?.postId ? `/p/${item.parlay.postId}` : "/stats?tab=parlays";
+  return (
+    <article
+      data-notification="play"
+      className={cn(
+        "relative flex gap-3 border-b border-border px-4 py-3 transition-colors hover:bg-surface/60",
+        item.unread && "bg-brand/[0.04]",
+      )}
+    >
+      <Link href={href} className="absolute inset-0" aria-label={`${who} played your parlay`} />
+      <div className="flex w-10 shrink-0 justify-end">
+        <Icon className={cn("size-7", className)} strokeWidth={1.75} aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[0.9375rem] leading-snug text-fg">
+          <span className="font-semibold">{who}</span> played your parlay{" "}
+          <span className="text-fg-subtle">·</span>{" "}
+          <LocalTime at={item.at} format="ago" className="text-sm text-fg-subtle" />
+        </p>
+        {item.parlay?.title && <p className="mt-1 line-clamp-2 text-sm text-fg-subtle">{item.parlay.title}</p>}
       </div>
     </article>
   );

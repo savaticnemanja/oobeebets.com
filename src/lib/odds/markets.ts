@@ -28,6 +28,17 @@ export const LEAGUE_CONFIG: Record<
   },
 };
 
+/**
+ * Every league the feed has ever carried, for grading only. A league taken
+ * off the menu (MLB, when the site went NFL only) still has legs on file
+ * waiting for a result, and the results poller keeps fetching its scores
+ * until they're all graded.
+ */
+export const SCORES_SPORT_KEYS: Record<string, string> = {
+  NFL: "americanfootball_nfl",
+  MLB: "baseball_mlb",
+};
+
 export const GAME_MARKETS = ["h2h", "spreads", "totals"] as const;
 export type GameMarketKey = (typeof GAME_MARKETS)[number];
 

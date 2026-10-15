@@ -32,7 +32,8 @@ export function useMentionSuggest({
 }: {
   areaRef: React.RefObject<HTMLTextAreaElement | null>;
   value: string;
-  setValue: (v: string) => void;
+  /** Sets the text and puts the caret at `caret` in the same render (see Composer's writeBody). */
+  setValue: (v: string, caret: number) => void;
   listId: string;
 }) {
   const [query, setQuery] = React.useState<{ q: string; start: number } | null>(null);
@@ -78,13 +79,8 @@ export function useMentionSuggest({
     if (!query || !el) return;
     const end = el.selectionStart;
     const insert = `@${user.username} `;
-    setValue(value.slice(0, query.start) + insert + value.slice(end));
+    setValue(value.slice(0, query.start) + insert + value.slice(end), query.start + insert.length);
     setQuery(null);
-    const caret = query.start + insert.length;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(caret, caret);
-    });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): boolean {

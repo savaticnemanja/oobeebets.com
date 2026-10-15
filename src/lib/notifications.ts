@@ -121,7 +121,7 @@ export type NotificationItem =
       kind: "like" | "repost" | "play" | "follow";
       at: Date;
       unread: boolean;
-      /** Newest first, at most six. */
+      /** Newest first, at most six. Always empty on a play — see getNotifications. */
       actors: Actor[];
       total: number;
       /** like / repost: your post, as a line of its text. */
@@ -207,8 +207,10 @@ export async function getNotifications(
 
   const items: NotificationItem[] = [];
   for (const r of page) {
-    const who = r.actor_ids.flatMap((id) => (actors.has(id) ? [actors.get(id)!] : []));
-    if (who.length === 0) continue;
+    // Who played your parlay is theirs to keep: the privacy policy promises
+    // other testers see totals only. So a play is a count, never names.
+    const who = r.kind === "play" ? [] : r.actor_ids.flatMap((id) => (actors.has(id) ? [actors.get(id)!] : []));
+    if (who.length === 0 && r.kind !== "play") continue;
     const base = { key: `${r.kind}:${r.post_id ?? r.parlay_id ?? ""}:${r.at}`, at: new Date(r.at), unread: r.unread, actors: who };
     if (isPostKind(r.kind)) {
       const feedPost = r.post_id ? full.get(r.post_id) : undefined;

@@ -88,10 +88,30 @@ export function Composer({
   const [gif, setGif] = React.useState<GifResult | null>(null);
   const [poll, setPoll] = React.useState<{ options: string[]; hours: number } | null>(null);
   const [gifOpen, setGifOpen] = React.useState(false);
+  // Text written by the composer itself — an emoji, a picked @mention — and
+  // where the caret goes after it. The caret is placed in the same commit as
+  // the text (the layout effect below), not a frame later: with a frame in
+  // between, whatever was typed in that frame landed after the caret and the
+  // rest before it, scrambling the words (seen in CI, typing right after
+  // picking a mention).
+  const caretAfter = React.useRef<number | null>(null);
+  const writeBody = React.useCallback((text: string, caret: number) => {
+    caretAfter.current = caret;
+    setBody(text);
+  }, []);
+  React.useLayoutEffect(() => {
+    const el = areaRef.current;
+    const caret = caretAfter.current;
+    if (!el || caret === null) return;
+    caretAfter.current = null;
+    el.focus();
+    el.setSelectionRange(caret, caret);
+  }, [body]);
+
   const mentions = useMentionSuggest({
     areaRef,
     value: body,
-    setValue: setBody,
+    setValue: writeBody,
     listId: `${React.useId()}-mentions`,
   });
 
@@ -135,11 +155,7 @@ export function Composer({
     const el = areaRef.current;
     const start = el?.selectionStart ?? body.length;
     const end = el?.selectionEnd ?? body.length;
-    setBody(body.slice(0, start) + emoji + body.slice(end));
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(start + emoji.length, start + emoji.length);
-    });
+    writeBody(body.slice(0, start) + emoji + body.slice(end), start + emoji.length);
   }
 
   const [state, action, pending] = useActionState<CreatePostState, FormData>(

@@ -776,6 +776,21 @@ console.log("\nShared parlay in the feed");
   }
   check(Boolean(row), "pressing Play logs the parlay as played");
   await ctx.close();
+
+  // The owner hears that it was played — never by whom: who played what is
+  // private (the privacy policy promises totals only).
+  const ownerCtx = await browser.newContext();
+  await ownerCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const ownerPage = await ownerCtx.newPage();
+  await ownerPage.goto(`${APP_URL}/notifications`);
+  const [{ username: testerHandle }] = await sql`select username from users where id = ${tester.id}`;
+  const playRow = ownerPage.locator('[data-notification="play"]');
+  check((await playRow.count()) === 1, "the parlay's owner is told it was played");
+  check(
+    !(await playRow.innerHTML()).includes(testerHandle) && (await playRow.innerText()).includes("Someone played your parlay"),
+    "without naming who played it",
+  );
+  await ownerCtx.close();
   await sql`delete from posts where id = ${post.id}`;
   await sql`delete from parlays where id = ${pl.id}`;
 }
@@ -989,13 +1004,21 @@ console.log("\nNotifications and @mentions");
   const option = page.getByRole("option", { name: new RegExp(`@${admin.username}`) });
   await option.waitFor({ timeout: 5000 }).catch(() => {});
   check(await option.isVisible(), "typing @ suggests people to mention");
+  // A slow phone (and CI): frames late by 40ms. Picking used to place the
+  // caret a frame later, so typing in that gap scrambled the words.
+  await page.evaluate(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => setTimeout(() => raf(cb), 40);
+  });
   await page.keyboard.press("Enter");
   check((await page.inputValue("#compose-body")) === `hey @${admin.username} `, "picking one writes the handle");
-  await page.keyboard.type("see this e2e");
+  // Typed at a person's pace, so keys land before and after that late frame.
+  await page.keyboard.type("see this e2e", { delay: 25 });
   await page.locator("form#compose").getByRole("button", { name: "Post", exact: true }).click();
   // Two checks, so a failure says which half broke.
   const posted = await waitFor(() => sql`select 1 from posts where author_id = ${tester.id} and body like '%see this e2e'`);
-  check(Boolean(posted), "the post with the mention is published");
+  const [latest] = await sql`select body from posts where author_id = ${tester.id} order by created_at desc limit 1`;
+  check(Boolean(posted), "the post with the mention is published", posted ? "" : `latest post: ${JSON.stringify(latest?.body ?? null)}`);
   const mention = await waitFor(
     () => sql`select n.post_id from notifications n join posts p on p.id = n.post_id
               where n.user_id = ${admin.id} and n.kind = 'mention' and p.body like '%see this e2e'`,
