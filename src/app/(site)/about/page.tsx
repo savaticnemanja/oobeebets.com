@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { SITE, pageSocial } from "@/lib/site";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 const description = "Who runs oobee bets, how the board is built, and why every loss stays on the record.";
 
@@ -45,10 +46,18 @@ export default function AboutPage() {
           its price, its stake and the reasoning behind it, and the ones we like most
           are featured at the top of the day.
         </p>
-        <p>
-          During our beta the whole board is free for every tester — no plan
-          required.
-        </p>
+        {billingEnabled() ? (
+          <p>
+            The #1 game bet and #1 player prop are free every day. Base, Pro and Elite
+            open the top 5, top 10 or all 15 of each, and Pro and Elite add our parlays —
+            see <Link href="/pricing" className="text-brand hover:underline">Plans</Link>.
+          </p>
+        ) : (
+          <p>
+            During our beta the whole board is free for every tester — no plan
+            required.
+          </p>
+        )}
       </DocSection>
 
       <DocSection title="One unit, nearly every time">

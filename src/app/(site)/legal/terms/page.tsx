@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SITE, pageSocial } from "@/lib/site";
 import { DocPage, DocSection } from "@/components/doc-page";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
   title: "Terms of service",
@@ -51,13 +52,40 @@ export default function TermsPage() {
         </p>
       </DocSection>
 
-      <DocSection title="4. Beta access">
-        <p>
-          {SITE.name} is currently in a closed beta. Access is free — we do not take
-          payment, run subscriptions, or offer paid plans at this time. That may change
-          in the future, and this page will be updated before it does.
-        </p>
-      </DocSection>
+      {billingEnabled() ? (
+        <DocSection title="4. Plans and billing">
+          <p>
+            {SITE.name} is in a closed beta. The top pick of each list is free every day;
+            the rest of the board comes with a paid plan (Base, Pro or Elite), as listed on
+            the Plans page with its price.
+          </p>
+          <p>
+            Plans are billed monthly in advance through Stripe and renew automatically each
+            month until you cancel. You can cancel, change plan or update your card at any
+            time from your account. A cancelled plan stays active until the end of the month
+            already paid for and then does not renew. Changing plan takes effect right away,
+            with the difference prorated on your next invoice. Payments already made are not
+            refunded, except where the law requires it.
+          </p>
+          <p>
+            If a payment fails we retry it for a short time, and the plan ends if it still
+            can&apos;t be collected. We will tell subscribers by email before any price change
+            applies to them; a new price applies from the next renewal after that notice.
+          </p>
+          <p>
+            A plan buys access to our picks and nothing more: no plan guarantees any result
+            (see section 2).
+          </p>
+        </DocSection>
+      ) : (
+        <DocSection title="4. Beta access">
+          <p>
+            {SITE.name} is currently in a closed beta. Access is free — we do not take
+            payment, run subscriptions, or offer paid plans at this time. That may change
+            in the future, and this page will be updated before it does.
+          </p>
+        </DocSection>
+      )}
 
       <DocSection title="5. Your account">
         <p>

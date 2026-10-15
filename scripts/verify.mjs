@@ -31,12 +31,16 @@ import postgres from "postgres";
 // tsx — see package.json.
 import {
   CATEGORY_LABELS,
+  PICKS_PER_SLATE,
   VISIBLE_PICKS,
   pickCategories,
   visiblePicks,
 } from "../src/lib/board.ts";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
+import { ACCESS, TIERS, TIER_ORDER, tierForLookupKey, tierForRank } from "../src/lib/tiers.ts";
+import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
+import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/beta-gate.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
@@ -340,6 +344,93 @@ for (const category of pickCategories) {
       kept.length === pickCategories.reduce((n, c) => n + VISIBLE_PICKS[c], 0),
     "a mixed list is cut per category",
     `kept=${kept.length}` + (wrong.length ? ` OVER:${wrong.length}` : ""),
+  );
+}
+
+/* --------------------------------------------------- 2c. plans (lib/tiers.ts) */
+
+console.log("\nPlans contract (lib/tiers.ts)");
+
+{
+  // Each plan sees at least what the one below it does, list by list.
+  const ladder = ["free", ...TIER_ORDER];
+  for (let i = 1; i < ladder.length; i++) {
+    const [lo, hi] = [ACCESS[ladder[i - 1]], ACCESS[ladder[i]]];
+    check(
+      pickCategories.every((c) => hi.picks[c] >= lo.picks[c]) && (!lo.parlays || hi.parlays),
+      `${ladder[i]} sees everything ${ladder[i - 1]} does`,
+    );
+  }
+  check(
+    pickCategories.every((c) => ACCESS.elite.picks[c] === PICKS_PER_SLATE[c]),
+    "Elite reaches the whole slate",
+    pickCategories.map((c) => `${c} ${ACCESS.elite.picks[c]}/${PICKS_PER_SLATE[c]}`).join(", "),
+  );
+  check(pickCategories.every((c) => ACCESS.free.picks[c] >= 1), "free still sees the #1 of each list");
+
+  // The board, cut per plan: a full slate served at each depth.
+  for (const access of ["free", ...TIER_ORDER]) {
+    const slate = pickCategories.flatMap((category) =>
+      Array.from({ length: PICKS_PER_SLATE[category] }, (_, i) => ({ rank: i + 1, category })),
+    );
+    const kept = visiblePicks(slate, false, ACCESS[access].picks);
+    const over = kept.filter((p) => p.rank > ACCESS[access].picks[p.category]);
+    check(
+      over.length === 0 && kept.length === pickCategories.reduce((n, c) => n + ACCESS[access].picks[c], 0),
+      `${access} is served exactly its depth`.padEnd(30),
+      `kept=${kept.length}`,
+    );
+  }
+
+  // The unlock prompt names the cheapest plan that opens the next pick.
+  for (const category of pickCategories) {
+    for (const access of ["free", "base", "pro"]) {
+      const next = tierForRank(category, ACCESS[access].picks[category] + 1);
+      check(
+        next && ACCESS[next].picks[category] > ACCESS[access].picks[category],
+        `past ${access}'s ${category}s, ${next} unlocks the next`,
+      );
+    }
+  }
+
+  // Lookup keys round-trip: the webhook maps a Price back to its tier.
+  check(TIER_ORDER.every((t) => tierForLookupKey(TIERS[t].lookupKey) === t), "every lookup key maps back to its tier");
+  check(tierForLookupKey("someone_elses_price") === null, "a foreign price maps to no tier");
+}
+
+/* ------------------------------------------------- 2d. the Stripe webhook */
+
+console.log("\nStripe webhook (/api/webhooks/stripe)");
+
+{
+  const hook = (body, headers = {}) =>
+    fetch(`${APP_URL}/api/webhooks/stripe`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+    });
+
+  const payload = JSON.stringify({ id: "evt_verify", object: "event", type: "customer.created", data: { object: {} } });
+  let res = await hook(payload);
+  check(res.status === 400, "unsigned delivery is refused", `-> ${res.status}`);
+  res = await hook(payload, { "stripe-signature": "t=1,v1=forged" });
+  check(res.status === 400, "forged signature is refused", `-> ${res.status}`);
+
+  // With the endpoint's secret in hand, a properly signed event of a type the
+  // app ignores is acknowledged — and touches nothing.
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (secret) {
+    const header = Stripe.webhooks.generateTestHeaderString({ payload, secret });
+    res = await hook(payload, { "stripe-signature": header });
+    check(res.status === 200, "signed delivery is accepted", `-> ${res.status}`);
+  } else {
+    console.log("  SKIP  signed delivery (no STRIPE_WEBHOOK_SECRET)");
+  }
+
+  check(
+    WEBHOOK_EVENTS.includes("customer.subscription.deleted") && WEBHOOK_EVENTS.includes("checkout.session.completed"),
+    "the endpoint listens for checkout and cancellations",
   );
 }
 

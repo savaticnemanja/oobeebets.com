@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { invitations, users } from "@/db/schema";
+import { invitations, subscriptions, users } from "@/db/schema";
+import { LIVE_STATUSES } from "@/lib/billing/access";
+import { TIERS, TIER_ORDER } from "@/lib/tiers";
 import { getAuth } from "@/lib/auth";
 import { UserTable } from "@/components/admin/user-table";
 import { InvitePanel } from "@/components/admin/invite-panel";
@@ -26,6 +28,21 @@ export default async function AdminUsersPage() {
     .from(users)
     .orderBy(desc(users.createdAt))
     .limit(200);
+
+  // Each account's best live plan; free otherwise.
+  const live = await db
+    .select({ userId: subscriptions.userId, tier: subscriptions.tier, status: subscriptions.status })
+    .from(subscriptions)
+    .where(inArray(subscriptions.status, LIVE_STATUSES));
+  const planOf = new Map<string, (typeof live)[number]>();
+  for (const s of live) {
+    const had = planOf.get(s.userId);
+    if (!had || TIER_ORDER.indexOf(s.tier) > TIER_ORDER.indexOf(had.tier)) planOf.set(s.userId, s);
+  }
+  const withPlans = rows.map((u) => {
+    const s = planOf.get(u.id);
+    return { ...u, plan: s ? `${TIERS[s.tier].name}${s.status === "past_due" ? " · past due" : ""}` : null };
+  });
 
   const [{ n: adminCount }] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -65,7 +82,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <div className="mt-10">
-        <UserTable users={rows} currentUserId={auth.user.id} />
+        <UserTable users={withPlans} currentUserId={auth.user.id} />
       </div>
     </div>
   );

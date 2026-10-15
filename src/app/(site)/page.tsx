@@ -6,6 +6,7 @@ import { Reveal, Stagger, StaggerItem, PulseDot } from "@/components/ui/motion";
 import { SITE, appUrl } from "@/lib/site";
 import { getAuth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 // No `title`: the root layout's default is this page's title, and a title
 // here would go through its "%s · oobee bets" template — the brand twice.
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
 export default async function HomePage() {
   // Signed in, the front page is the feed — as on X.
   if (await getAuth()) redirect("/home");
+  const paid = billingEnabled();
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -42,7 +44,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-2">
             <PulseDot />
             <span className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-brand">
-              Beta — the whole board free for testers
+              {paid ? "Beta — the #1 game bet and prop free every day" : "Beta — the whole board free for testers"}
             </span>
           </div>
         </Reveal>
@@ -57,9 +59,12 @@ export default async function HomePage() {
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
             Fifteen game bets and fifteen player props a day, each with the reasoning
-            behind it — the whole board free for every tester during our beta. Every
-            one is graded against the real final score, and the losses stay on the
-            page next to the wins.
+            behind it —{" "}
+            {paid
+              ? "the top pick of each free every day, the rest on a plan."
+              : "the whole board free for every tester during our beta."}{" "}
+            Every one is graded against the real final score, and the losses stay on
+            the page next to the wins.
           </p>
         </Reveal>
 

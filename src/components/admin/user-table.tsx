@@ -40,6 +40,8 @@ interface Row {
   role: Role;
   createdAt: Date;
   lastLoginAt: Date | null;
+  /** "Pro", "Base · past due"; null on the free board. */
+  plan: string | null;
 }
 
 export function UserTable({
@@ -94,6 +96,7 @@ export function UserTable({
             <TableRow>
               <TableHead scope="col">Email</TableHead>
               <TableHead scope="col">Joined</TableHead>
+              <TableHead scope="col">Plan</TableHead>
               <TableHead scope="col">Role</TableHead>
             </TableRow>
           </TableHeader>
@@ -109,6 +112,10 @@ export function UserTable({
 
                   <TableCell className="num text-xs text-fg-subtle">
                     {formatDate(u.createdAt, { year: "2-digit" })}
+                  </TableCell>
+
+                  <TableCell className="text-xs">
+                    {u.plan ? <Badge variant="brand">{u.plan}</Badge> : <span className="text-fg-subtle">Free</span>}
                   </TableCell>
 
                   <TableCell>

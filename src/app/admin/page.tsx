@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { CircleCheck, CirclePlus } from "lucide-react";
 import { db } from "@/db";
-import { auditLog, feedback, picks, reports, slates, users } from "@/db/schema";
+import { auditLog, feedback, picks, reports, slates, subscriptions, users } from "@/db/schema";
+import { LIVE_STATUSES } from "@/lib/billing/access";
+import { billingEnabled } from "@/lib/billing/stripe";
+import { TIERS, TIER_ORDER, formatPrice } from "@/lib/tiers";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,11 +47,19 @@ export default async function AdminOverviewPage() {
     db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(8),
   ]);
 
-  const [[{ n: userCount }], [{ n: openFeedback }], [{ n: openReports }]] = await Promise.all([
+  const [[{ n: userCount }], [{ n: openFeedback }], [{ n: openReports }], planCounts] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(users),
     db.select({ n: sql<number>`count(*)::int` }).from(feedback).where(isNull(feedback.resolvedAt)),
     db.select({ n: sql<number>`count(*)::int` }).from(reports).where(isNull(reports.resolvedAt)),
+    db
+      .select({ tier: subscriptions.tier, n: sql<number>`count(distinct ${subscriptions.userId})::int` })
+      .from(subscriptions)
+      .where(inArray(subscriptions.status, LIVE_STATUSES))
+      .groupBy(subscriptions.tier),
   ]);
+  const subscribers = planCounts.reduce((n, r) => n + r.n, 0);
+  // List prices, so an estimate: grandfathered and discounted plans pay less.
+  const mrrCents = planCounts.reduce((n, r) => n + r.n * TIERS[r.tier].priceCents, 0);
 
   const slate = todaySlate[0];
   const byCategory = Object.fromEntries(
@@ -139,7 +150,15 @@ export default async function AdminOverviewPage() {
 
       {/* ------------------------------------------------------------ stats */}
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <StatTile label="Registered users" value={userCount} />
+        <StatTile
+          label="Registered users"
+          value={userCount}
+          sub={
+            billingEnabled() || subscribers > 0
+              ? `${subscribers} on a plan${subscribers ? ` · ${TIER_ORDER.map((t) => `${planCounts.find((r) => r.tier === t)?.n ?? 0} ${TIERS[t].name}`).join(", ")} · ~${formatPrice(mrrCents)}/mo` : ""}`
+              : undefined
+          }
+        />
         <StatTile
           label="Net units (all time)"
           tone={record.netUnits >= 0 ? "hit" : "miss"}

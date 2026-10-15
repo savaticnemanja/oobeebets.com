@@ -25,10 +25,13 @@ import { slateDateString } from "@/lib/slate-date";
 import { loadBoardAction } from "@/app/actions/feeds";
 import { loadBoardDays } from "./board-days";
 import { cn } from "@/lib/utils";
+import { viewerAccess } from "@/lib/billing/access";
+import { SubscribedBanner } from "@/components/billing/subscribed-banner";
+import { TIERS } from "@/lib/tiers";
 
 export const metadata: Metadata = {
   title: "Picks",
-  description: `All ${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props, day by day — free during our beta.`,
+  description: `${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props, day by day.`,
   robots: { index: false, follow: false },
 };
 
@@ -52,7 +55,7 @@ export const dynamic = "force-dynamic";
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sport?: string }>;
+  searchParams: Promise<{ category?: string; sport?: string; subscribed?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
@@ -76,6 +79,9 @@ export default async function PicksPage({
     db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, today)).limit(1),
   ]);
   const publishedToday = Boolean(todaySlate[0]?.publishedAt);
+  // Back from Stripe Checkout: say so, and wait out the webhook.
+  const justSubscribed = params.subscribed === "1" ? await viewerAccess(auth) : null;
+  const plan = justSubscribed?.access && justSubscribed.access !== "free" ? TIERS[justSubscribed.access].name : null;
 
   // Counts for today's tab labels — the alternative is a tab that claims
   // nothing is there until you click it.
@@ -104,6 +110,7 @@ export default async function PicksPage({
     <SocialShell>
       {/* The page is named by the nav and the tabs; the heading is for screen readers. */}
       <h1 className="sr-only">Picks</h1>
+      {justSubscribed && <SubscribedBanner tierName={plan} />}
 
       {/* -------------------------------------------------------------- tabs */}
       {/* Home's tab strip, scrollable on a narrow phone, with the info tip at

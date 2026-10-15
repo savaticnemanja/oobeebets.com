@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
-import { stripe } from "@/lib/billing/stripe";
+import Stripe from "stripe";
 import { subscriptionIdOf, syncSubscription } from "@/lib/billing/sync";
 
 /**
@@ -16,13 +15,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   const signature = req.headers.get("stripe-signature");
-  if (!secret || !signature) return NextResponse.json({ error: "Not configured" }, { status: 400 });
+  if (!secret) return NextResponse.json({ error: "Webhook not configured" }, { status: 400 });
+  if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
 
   // The raw body: the signature is over the exact bytes Stripe sent.
   const body = await req.text();
   let event: Stripe.Event;
   try {
-    event = stripe().webhooks.constructEvent(body, signature, secret);
+    // Static: checking a signature needs the endpoint secret, not an API key.
+    event = Stripe.webhooks.constructEvent(body, signature, secret);
   } catch {
     return NextResponse.json({ error: "Bad signature" }, { status: 400 });
   }

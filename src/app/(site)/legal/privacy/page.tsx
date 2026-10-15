@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SITE, pageSocial } from "@/lib/site";
 import { DocPage, DocSection } from "@/components/doc-page";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
  * or browser touches. Add to it whenever either grows.
  */
 export default function PrivacyPage() {
+  const paid = billingEnabled();
   return (
     <DocPage
       title="Privacy policy"
@@ -50,7 +52,14 @@ export default function PrivacyPage() {
           to slow down guessing. Password-reset links, stored hashed. A log of admin actions,
           which can include your email address.
         </p>
-        <p>We collect no payment information — the beta is free.</p>
+        {paid ? (
+          <p>
+            If you take a plan: which plan, its status and when it renews, and the ID Stripe
+            gives you as a customer. Your card details go to Stripe and never reach us.
+          </p>
+        ) : (
+          <p>We collect no payment information — the beta is free.</p>
+        )}
       </DocSection>
 
       <DocSection title="Who can see it">
@@ -71,6 +80,13 @@ export default function PrivacyPage() {
 
       <DocSection title="Services we use">
         <ul className="list-disc space-y-2 pl-5">
+          {paid && (
+            <li>
+              <strong className="text-fg">Stripe</strong> takes payment for plans. When you
+              subscribe it receives your email address and name from us, and your card and
+              billing details from you on its own checkout page.
+            </li>
+          )}
           <li>
             <strong className="text-fg">Resend</strong> sends our emails — invites, password
             resets and announcements — so it receives your email address and the message.
