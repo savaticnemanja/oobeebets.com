@@ -50,7 +50,7 @@ export async function loadCommunityChunk({
     : [];
 
   const [page, prev] = await Promise.all([
-    getCommunityParlayPage({ before, sport: sportFilter, leagues, limit: PARLAYS_PER_CHUNK }),
+    getCommunityParlayPage({ before, sport: sportFilter, leagues, limit: PARLAYS_PER_CHUNK, viewerId: auth.user.id }),
     before
       ? db.select({ date: parlays.slateDate }).from(parlays).where(eq(parlays.id, before)).limit(1)
       : Promise.resolve([]),

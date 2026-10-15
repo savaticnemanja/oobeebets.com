@@ -10,6 +10,7 @@ import { EmptyFeed } from "@/components/social/feed";
 import { displayNameOf } from "@/components/social/identity";
 import { PostCard } from "@/components/social/post-card";
 import { BackButton } from "@/components/nav-memory";
+import { canInteract } from "@/lib/moderation";
 import { Button } from "@/components/ui/button";
 import { SocialShell } from "@/components/social/social-shell";
 
@@ -67,6 +68,20 @@ export default async function PostPage({ params }: { params: Params }) {
 
   const found = await getPost(id, viewerId);
   if (!found) notFound();
+  // Across a block, the post isn't shown — not even from a link.
+  if (!(await canInteract(viewerId, found.author.id))) {
+    return (
+      <SocialShell>
+        <div className="flex items-center gap-4 px-4 py-2.5">
+          <BackButton fallback="/home" label="Back" />
+          <h1 className="text-lg font-semibold">Post</h1>
+        </div>
+        <EmptyFeed title="You can't see this post">
+          One of you has blocked the other. Blocks are managed from the ⋯ menu on a profile.
+        </EmptyFeed>
+      </SocialShell>
+    );
+  }
   const [chain, replyList] = await Promise.all([getAncestors(found, viewerId), getReplies(found.id, viewerId)]);
   // A shared parlay's post (or one above it) shows its ticket.
   const [post, ...ancestors] = await withAttachments([found, ...chain], viewerId);

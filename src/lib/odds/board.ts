@@ -134,16 +134,21 @@ async function gamesBetween(from: Date, to: Date): Promise<GameOption[]> {
     .orderBy(asc(games.commenceTime), asc(games.id));
   if (gs.length === 0) return [];
 
-  const all = await Promise.all(
-    gs.map((g) =>
-      db
-        .select()
-        .from(lines)
-        .where(and(eq(lines.gameId, g.id), eq(lines.available, true))),
-    ),
-  );
+  // Every game's game lines in one query, not one per game.
+  const all = await db
+    .select()
+    .from(lines)
+    .where(
+      and(
+        inArray(lines.gameId, gs.map((g) => g.id)),
+        eq(lines.available, true),
+        inArray(lines.marketKey, [...GAME_MARKETS]),
+      ),
+    );
+  const byGame = new Map<string, Line[]>();
+  for (const l of all) byGame.set(l.gameId, [...(byGame.get(l.gameId) ?? []), l]);
   return gs
-    .map((g, i) => gameOption(g, all[i].filter((l) => (GAME_MARKETS as readonly string[]).includes(l.marketKey))))
+    .map((g) => gameOption(g, byGame.get(g.id) ?? []))
     // A game the books have not priced yet has nothing to pick.
     .filter((g) => g.moneyline.home || g.moneyline.away || g.spread.home || g.total.over);
 }

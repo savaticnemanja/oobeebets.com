@@ -6,16 +6,16 @@ import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "@/components/ui/misc";
+import { SettleConfirm, type SettleChoice, type SettleTarget } from "@/components/admin/settle-confirm";
 import { settlePickAction, unsettlePickAction } from "@/app/actions/admin";
 import type { Pick } from "@/db/schema";
 import { cn } from "@/lib/utils";
@@ -37,10 +37,13 @@ export function SettleList({
 }) {
   const [state, action] = useActionState(settlePickAction, null);
   const [unsetState, unsetAction] = useActionState(unsettlePickAction, null);
-  const [voidTarget, setVoidTarget] = React.useState<Pick | null>(null);
+  const [target, setTarget] = React.useState<SettleTarget | null>(null);
+  const [reopen, setReopen] = React.useState<Pick | null>(null);
+  const choose = (p: Pick, status: SettleChoice) =>
+    setTarget({ id: p.id, title: p.selection, sub: p.event, price: p.price, status });
 
   // Toasting is talking to an external system, which is what effects are for.
-  // Closing the dialog is not done here — see the void form's onSubmit.
+  // Closing the dialog is not done here — see SettleConfirm's onSubmit.
   useEffect(() => {
     const s = state ?? unsetState;
     if (s?.ok) toast.success(s.message ?? "Settled");
@@ -67,6 +70,7 @@ export function SettleList({
           return (
             <div
               key={p.id}
+              data-pick-id={p.id}
               className={cn("card-hairline p-3", muted && "bg-transparent border-border/60")}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -100,44 +104,23 @@ export function SettleList({
                 </div>
 
                 {settled ? (
-                  <form action={unsetAction}>
-                    <input type="hidden" name="pickId" value={p.id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="text-fg-subtle"
-                    >
-                      <RotateCcw aria-hidden="true" />
-                      Reopen
-                    </Button>
-                  </form>
+                  <Button type="button" variant="ghost" size="sm" className="text-fg-subtle" onClick={() => setReopen(p)}>
+                    <RotateCcw aria-hidden="true" />
+                    Reopen
+                  </Button>
                 ) : (
+                  // Each names a result and asks before it's recorded (SettleConfirm).
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <form action={action} className="contents">
-                      <input type="hidden" name="pickId" value={p.id} />
-                      <Input
-                        name="finalScore"
-                        placeholder="Final score"
-                        aria-label={`Final score for ${p.event}`}
-                        className="h-8 w-28 text-xs"
-                      />
-                      <Button type="submit" name="status" value="won" variant="hit" size="sm">
-                        Won
-                      </Button>
-                      <Button type="submit" name="status" value="lost" variant="danger" size="sm">
-                        Lost
-                      </Button>
-                      <Button type="submit" name="status" value="push" variant="subtle" size="sm">
-                        Push
-                      </Button>
-                    </form>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setVoidTarget(p)}
-                      className="text-fg-subtle"
-                    >
+                    <Button type="button" variant="hit" size="sm" onClick={() => choose(p, "won")}>
+                      Won
+                    </Button>
+                    <Button type="button" variant="danger" size="sm" onClick={() => choose(p, "lost")}>
+                      Lost
+                    </Button>
+                    <Button type="button" variant="subtle" size="sm" onClick={() => choose(p, "push")}>
+                      Push
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => choose(p, "void")} className="text-fg-subtle">
                       Void
                     </Button>
                   </div>
@@ -148,60 +131,28 @@ export function SettleList({
         })}
       </div>
 
-      {/* A void needs a written reason — it removes a pick from every rate, so
-          it must never be a silent one-click action. */}
-      <Dialog open={Boolean(voidTarget)} onOpenChange={(o) => !o && setVoidTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Void this pick?</DialogTitle>
-            <DialogDescription>
-              It stays visible on the public record marked void, and is excluded from
-              every rate and from net units. The reason is stored in the audit log.
-            </DialogDescription>
-          </DialogHeader>
+      <SettleConfirm target={target} onClose={() => setTarget(null)} action={action} idField="pickId" />
 
-          {voidTarget && (
-            // Close on submit rather than on the action's result: the outcome
-            // arrives as a toast either way, and this keeps the dialog from
-            // sitting open while the server round-trips.
-            <form action={action} onSubmit={() => setVoidTarget(null)}>
-              <input type="hidden" name="pickId" value={voidTarget.id} />
-              <input type="hidden" name="status" value="void" />
-              <div className="rounded-lg border border-border bg-surface p-3 text-sm">
-                <span className="font-medium text-fg">{voidTarget.selection}</span>{" "}
-                <span className="num text-fg-muted">{formatOdds(voidTarget.price)}</span>
-                <p className="mt-0.5 text-xs text-fg-muted">{voidTarget.event}</p>
-              </div>
-
-              <div className="mt-4">
-                <Label htmlFor="voidReason">Reason</Label>
-                <Input
-                  id="voidReason"
-                  name="voidReason"
-                  required
-                  autoFocus
-                  placeholder="Game postponed / line was wrong on publish"
-                  className="mt-1.5"
-                />
-              </div>
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setVoidTarget(null)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" variant="danger" size="sm">
-                  Void pick
-                </Button>
-              </DialogFooter>
+      {/* Reopening takes a result back off the record — asked first, too. */}
+      <AlertDialog open={Boolean(reopen)} onOpenChange={(o) => !o && setReopen(null)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Reopen this pick?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {reopen ? `${reopen.selection} goes back to pending and comes off the record until it's settled again.` : null}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button type="button" variant="outline">Keep it settled</Button>
+            </AlertDialogCancel>
+            <form action={unsetAction} onSubmit={() => setReopen(null)}>
+              <input type="hidden" name="pickId" value={reopen?.id ?? ""} />
+              <AlertDialogAction asChild>
+                <Button type="submit" variant="danger">Reopen</Button>
+              </AlertDialogAction>
             </form>
-          )}
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

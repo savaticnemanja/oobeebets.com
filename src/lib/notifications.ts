@@ -4,6 +4,15 @@ import { db } from "@/db";
 import { notifications, posts, users, type NotificationKind, type Role } from "@/db/schema";
 import { getParlaysByIds } from "@/lib/parlay-store";
 import { extractMentions } from "@/lib/social-rules";
+import { rateLimit } from "@/lib/auth";
+import { canInteract, visibleTo } from "@/lib/moderation";
+
+/**
+ * Posts an hour whose @mentions notify anyone. Ten handles a post, thirty
+ * posts in fifteen minutes, would let one account ping three hundred people
+ * in a quarter of an hour; past this the posts still go up, silently.
+ */
+const MENTION_POSTS_PER_HOUR = 20;
 import { getPostsByIds, withAttachments, type FeedPost } from "@/lib/social";
 
 /**
@@ -67,14 +76,17 @@ export async function notifyNewPost(post: { id: string; authorId: string; body: 
       id ? (await db.select({ id: posts.authorId }).from(posts).where(eq(posts.id, id)).limit(1))[0]?.id : null;
     const [parentAuthor, quotedAuthor] = await Promise.all([authorOf(post.parentId), authorOf(post.quoteId)]);
     const handles = extractMentions(post.body);
-    const mentioned = handles.length
+    const allowed =
+      handles.length > 0 && (await rateLimit("notify:mention", post.authorId, MENTION_POSTS_PER_HOUR, 60 * 60 * 1000));
+    const mentioned = allowed
       ? await db.select({ id: users.id }).from(users).where(inArray(users.username, handles))
       : [];
     await notify([
       { userId: parentAuthor, actorId: post.authorId, kind: "reply", postId: post.id },
       // Quoting someone you're also replying to is one notice, the reply.
       ...(quotedAuthor !== parentAuthor ? [{ userId: quotedAuthor, actorId: post.authorId, kind: "quote" as const, postId: post.id }] : []),
-      ...mentioned
+      ...(await Promise.all(mentioned.map(async (u) => ((await canInteract(post.authorId, u.id)) ? [u] : []))))
+        .flat()
         .filter((u) => u.id !== parentAuthor && u.id !== quotedAuthor)
         .map((u) => ({ userId: u.id, actorId: post.authorId, kind: "mention" as const, postId: post.id })),
     ]);
@@ -89,7 +101,7 @@ export async function unreadCount(userId: string): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt), visibleTo(userId, notifications.actorId)));
   return row?.n ?? 0;
 }
 
@@ -167,6 +179,8 @@ export async function getNotifications(
       bool_or(read_at is null) as unread
     from ${notifications}
     where user_id = ${userId} ${onlyMentions}
+      -- Nothing from anyone you've muted or blocked, or who blocked you.
+      and ${visibleTo(userId, sql`actor_id`)}
     group by kind, post_id, parlay_id,
       case when kind in ('reply', 'mention', 'quote') then id end,
       date_trunc('day', created_at)

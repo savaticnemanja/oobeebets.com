@@ -33,11 +33,23 @@ export interface FeedItem {
 export async function postItems(list: FeedPost[], viewerId: string | null): Promise<FeedItem[]> {
   const [full, parents] = await Promise.all([withAttachments(list, viewerId), getParents(list, viewerId)]);
   const fullParents = new Map((await withAttachments([...parents.values()], viewerId)).map((p) => [p.id, p]));
-  return full.map((post) => ({
-    key: post.id,
-    post,
-    parent: post.parentId ? fullParents.get(post.parentId) : undefined,
-  }));
+  return dropShownParents(
+    full.map((post) => ({
+      key: post.id,
+      post,
+      parent: post.parentId ? fullParents.get(post.parentId) : undefined,
+    })),
+  );
+}
+
+/**
+ * A post and a reply to it on the same page drew the post twice: once on
+ * its own, once above the reply. The reply's copy is the one with the
+ * conversation, so the lone one goes.
+ */
+export function dropShownParents(items: FeedItem[]): FeedItem[] {
+  const shownAbove = new Set(items.flatMap((i) => (i.parent ? [i.parent.id] : [])));
+  return items.filter((i) => i.parent || i.repostedBy || !shownAbove.has(i.post.id));
 }
 
 /**
@@ -77,9 +89,9 @@ export async function getHomeFollowing(
   // A post reposted by several people you follow, or posted and reposted in
   // the same stretch, shows once — its newest appearance.
   const seen = new Set<string>();
-  const items = timed
-    .map((t) => t.item)
-    .filter((item) => (seen.has(item.post.id) ? false : (seen.add(item.post.id), true)));
+  const items = dropShownParents(
+    timed.map((t) => t.item).filter((item) => (seen.has(item.post.id) ? false : (seen.add(item.post.id), true))),
+  );
   return { items, nextCursor: feed.nextCursor };
 }
 
@@ -130,7 +142,9 @@ export async function getHomeForYou(
     if ((i + 1) % POSTS_BETWEEN_PARLAYS === 0 && extra.length > 0) items.push(extra.shift()!);
   });
   items.push(...extra);
+  // The parlays came in separately; one already shown above a reply goes too.
+  const merged = dropShownParents(items);
 
   const moreParlays = parlayPosts.length > PARLAYS_PER_PAGE;
-  return { items, nextPage: feed.nextPage ?? (moreParlays ? pageIndex + 1 : null), asOf };
+  return { items: merged, nextPage: feed.nextPage ?? (moreParlays ? pageIndex + 1 : null), asOf };
 }

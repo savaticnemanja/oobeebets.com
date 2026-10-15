@@ -2,6 +2,7 @@ import { and, asc, desc, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userFollows, users } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
+import { notBlocked } from "@/lib/moderation";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
     .where(
       and(
         ne(users.id, auth.user.id),
+        notBlocked(auth.user.id, users.id),
         q
           ? or(ilike(users.username, `${like}%`), ilike(users.displayName, `${like}%`), ilike(users.displayName, `% ${like}%`))
           : follows,

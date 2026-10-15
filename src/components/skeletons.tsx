@@ -109,30 +109,105 @@ export function BoardSkeleton({ tabs }: { tabs: boolean }) {
   );
 }
 
-export function StatsSkeleton() {
+/** A post's own page: the back row, the post at full size, the reply box, replies. */
+export function PostPageSkeleton() {
   return (
     <Loading>
-      <TabsBone count={3} />
-      <div className="grid grid-cols-2 border-b border-border">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className={cn("space-y-2.5 px-4 py-4", i % 2 === 0 && "border-r border-border", i < 2 && "border-b border-border")}>
-            <Bone className="h-3 w-20" />
-            <Bone className="h-6 w-16" />
-            <Bone className="h-3 w-24" />
+      <div className="flex items-center gap-4 px-4 py-2.5">
+        <Bone className="size-9 rounded-full" />
+        <Bone className="h-4 w-16" />
+      </div>
+      <div className="border-b border-border px-4 pb-3 pt-2">
+        <div className="flex items-center gap-3">
+          <Bone className="size-10 shrink-0 rounded-full" />
+          <div className="space-y-1.5">
+            <Bone className="h-3 w-28" />
+            <Bone className="h-2.5 w-20" />
+          </div>
+        </div>
+        <div className="mt-4 space-y-2.5">
+          <Bone className="h-4 w-full" />
+          <Bone className="h-4 w-4/5" />
+        </div>
+        <Bone className="mt-5 h-3 w-32" />
+      </div>
+      <PostBone lines={1} />
+      {[2, 1, 2].map((lines, i) => (
+        <PostBone key={i} lines={lines} />
+      ))}
+    </Loading>
+  );
+}
+
+/** A profile: banner, avatar, name, counts, the tabs, then posts. */
+export function ProfileSkeleton() {
+  return (
+    <Loading>
+      <div className="h-28 border-b border-border bg-surface/40 sm:h-36" />
+      <div className="px-4 pb-4">
+        <Bone className="-mt-10 size-20 rounded-full border-4 border-black sm:-mt-12" />
+        <Bone className="mt-3 h-5 w-40" />
+        <Bone className="mt-2 h-3 w-24" />
+        <Bone className="mt-4 h-3 w-3/4" />
+        <Bone className="mt-4 h-3 w-48" />
+      </div>
+      <TabsBone count={2} />
+      {[2, 1, 3, 2].map((lines, i) => (
+        <PostBone key={i} lines={lines} />
+      ))}
+    </Loading>
+  );
+}
+
+/** Notifications: the title, the two tabs, rows of faces and a line. */
+export function NotificationsSkeleton() {
+  return (
+    <Loading>
+      <Bone className="mx-4 mb-3 mt-4 h-5 w-32" />
+      <TabsBone count={2} />
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="flex gap-3 border-b border-border px-4 py-3">
+          <div className="flex w-10 shrink-0 justify-end">
+            <Bone className="size-7 rounded-full" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex gap-1">
+              {Array.from({ length: (i % 3) + 1 }, (_, j) => (
+                <Bone key={j} className="size-8 rounded-full" />
+              ))}
+            </div>
+            <Bone className="mt-3 h-3 w-3/4" />
+            <Bone className="mt-2 h-2.5 w-1/2" />
+          </div>
+        </div>
+      ))}
+    </Loading>
+  );
+}
+
+/** The parlay builder: title, search, then day headings and game cards. */
+export function BuilderSkeleton() {
+  return (
+    <Loading>
+      <div className="flex items-center gap-3 px-2 py-2">
+        <Bone className="size-9 rounded-full" />
+        <Bone className="h-5 w-36" />
+      </div>
+      <div className="px-4 pt-2">
+        <Bone className="h-3 w-full" />
+        <Bone className="mt-2 h-3 w-2/3" />
+        <Bone className="mt-4 h-11 w-full rounded-full" />
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="mt-4">
+            <Bone className="h-3.5 w-32" />
+            <Bone className="mt-3 h-40 w-full rounded-2xl" />
           </div>
         ))}
-      </div>
-      <div className="space-y-3 px-4 py-4">
-        <Bone className="h-4 w-44" />
-        <Bone className="h-3 w-full" />
-        <Bone className="h-3 w-5/6" />
-        <Bone className="mt-4 h-24 w-full rounded-lg" />
       </div>
     </Loading>
   );
 }
 
-/** Players: pills, the table tabs, the filter row, then table rows. */
 export function PlayersSkeleton() {
   return (
     <Loading>

@@ -8,7 +8,8 @@ import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts
 import { getMediaFor, type MediaView } from "@/lib/media";
 import { getParlaysByIds, markPlayed, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
-import { isReservedUsername } from "@/lib/social-rules";
+import { extractMentions, isReservedUsername } from "@/lib/social-rules";
+import { visibleTo } from "@/lib/moderation";
 
 /**
  * Reads for the social layer: feeds, profiles, threads and who-to-follow.
@@ -64,6 +65,8 @@ export interface FeedPost {
   /** A quote post's id for the post it quotes; the post itself in `quote` (see withAttachments). */
   quoteId: string | null;
   quote?: QuotedPost | null;
+  /** The @handles in the body that belong to someone — only these are links (see withAttachments). */
+  knownMentions?: string[];
 }
 
 /** The post a quote post embeds — enough to draw its card, not the whole post. */
@@ -235,6 +238,7 @@ export async function getFollowingFeed(viewerId: string, before?: string): Promi
     .where(
       and(
         sql`(${posts.authorId} = ${viewerId} or ${posts.authorId} in (select ${userFollows.followeeId} from ${userFollows} where ${userFollows.followerId} = ${viewerId}))`,
+        visibleTo(viewerId, posts.authorId),
         olderThan(before),
       ),
     )
@@ -259,7 +263,7 @@ export async function getForYouFeed(
   // Shared parlays take turns with these instead of competing on the score —
   // see getRecentParlayPosts and lib/home-feed.ts.
   const rows = await selectPosts(viewerId)
-    .where(and(inWindow(asOf, 30), isNull(posts.parlayId)))
+    .where(and(inWindow(asOf, 30), isNull(posts.parlayId), visibleTo(viewerId, posts.authorId)))
     .orderBy(desc(hotScore(asOf)), desc(posts.createdAt), desc(posts.id))
     .limit(FEED_PAGE_SIZE + 1)
     .offset(pageIndex * FEED_PAGE_SIZE);
@@ -297,18 +301,30 @@ export async function withParlays(list: FeedPost[], viewerId: string | null = nu
 export async function withAttachments(list: FeedPost[], viewerId: string | null): Promise<FeedPost[]> {
   if (list.length === 0) return list;
   const ids = list.map((p) => p.id);
-  const [withTickets, media, polls, quotes] = await Promise.all([
+  const [withTickets, media, polls, quotes, known] = await Promise.all([
     withParlays(list, viewerId),
     getMediaFor(ids),
     getPollsFor(ids, viewerId),
     getQuotedPosts(list.flatMap((p) => (p.quoteId ? [p.quoteId] : []))),
+    knownHandles(list.flatMap((p) => extractMentions(p.body))),
   ]);
   return withTickets.map((p) => ({
     ...p,
     media: media.get(p.id) ?? [],
     poll: polls.get(p.id) ?? null,
     quote: p.quoteId ? (quotes.get(p.quoteId) ?? null) : null,
+    knownMentions: extractMentions(p.body).filter((h) => known.has(h)),
   }));
+}
+
+/** Which of these @handles are real accounts — one query for a whole page. */
+async function knownHandles(handles: string[]): Promise<Set<string>> {
+  if (handles.length === 0) return new Set();
+  const rows = await db
+    .select({ username: users.username })
+    .from(users)
+    .where(inArray(users.username, [...new Set(handles)]));
+  return new Set(rows.map((r) => r.username));
 }
 
 /** The posts some quote posts embed, as cards: one query, plus their tickets and media. */
@@ -418,6 +434,9 @@ export async function getFollowingReposts(opts: {
     .where(
       and(
         sql`(${postReposts.userId} = ${opts.viewerId} or ${postReposts.userId} in (select ${userFollows.followeeId} from ${userFollows} where ${userFollows.followerId} = ${opts.viewerId}))`,
+        // Neither the reposter nor whoever wrote the post may be someone you've hidden.
+        visibleTo(opts.viewerId, postReposts.userId),
+        visibleTo(opts.viewerId, sql`(select ${posts.authorId} from ${posts} where ${posts.id} = ${postReposts.postId})`),
         opts.from ? gte(postReposts.createdAt, opts.from) : undefined,
         opts.to ? lt(postReposts.createdAt, opts.to) : undefined,
       ),
@@ -446,7 +465,7 @@ export async function getRecentParlayPosts(
   asOf: Date = new Date(),
 ): Promise<FeedPost[]> {
   const rows = await selectPosts(viewerId)
-    .where(and(isNotNull(posts.parlayId), inWindow(asOf, 7)))
+    .where(and(isNotNull(posts.parlayId), inWindow(asOf, 7), visibleTo(viewerId, posts.authorId)))
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(limit)
     .offset(offset);
@@ -502,7 +521,7 @@ export async function getAncestors(post: FeedPost, viewerId: string | null, max 
 
 export async function getReplies(postId: string, viewerId: string | null): Promise<FeedPost[]> {
   const rows = await selectPosts(viewerId)
-    .where(eq(posts.parentId, postId))
+    .where(and(eq(posts.parentId, postId), visibleTo(viewerId, posts.authorId)))
     .orderBy(asc(posts.createdAt), asc(posts.id))
     .limit(200);
   return rows.map(toFeedPost);
@@ -634,6 +653,7 @@ export const getWhoToFollow = cache(async function getWhoToFollow(
         ? and(
             ne(users.id, viewerId),
             sql`not exists(select 1 from ${userFollows} where ${userFollows.followerId} = ${viewerId} and ${userFollows.followeeId} = ${users.id})`,
+            visibleTo(viewerId, users.id),
           )
         : undefined,
     )

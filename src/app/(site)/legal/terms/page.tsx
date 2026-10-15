@@ -77,7 +77,8 @@ export default function TermsPage() {
           else&apos;s private information. Don&apos;t impersonate anyone — including{" "}
           {SITE.name} — and don&apos;t advertise paid picks, other services, or spam. We may
           remove posts and suspend or close accounts that break these rules. To tell us about
-          a post, use the contact address on the Privacy page.
+          a post or an account, choose Report from its ⋯ menu — an admin reads every report.
+          You can also mute or block anyone from the same menu.
         </p>
       </DocSection>
 

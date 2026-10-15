@@ -14,6 +14,7 @@ import { extractCardUrl, pollSchema, postBodyOptionalSchema, profileSchema } fro
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 import { violates } from "@/lib/db-errors";
 import { notify, notifyNewPost, unnotify } from "@/lib/notifications";
+import { BLOCKED, canInteract } from "@/lib/moderation";
 
 /** Who wrote a post — who hears about a like or a repost of it. */
 async function authorOf(postId: string): Promise<string | null> {
@@ -106,15 +107,17 @@ export async function createPostAction(
 
   const parentId = parsed.data.parentId || null;
   if (parentId) {
-    const [parent] = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, parentId)).limit(1);
+    const [parent] = await db.select({ id: posts.id, authorId: posts.authorId }).from(posts).where(eq(posts.id, parentId)).limit(1);
     if (!parent) return { ok: false, error: "That post was deleted." };
+    if (!(await canInteract(auth.user.id, parent.authorId))) return { ok: false, error: BLOCKED };
   }
   // A quote needs something of your own to say; with nothing, it's a repost.
   const quoteId = parsed.data.quoteId || null;
   if (quoteId) {
     if (!parsed.data.body) return { ok: false, error: "Add a comment to quote it — or just repost it." };
-    const [quoted] = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, quoteId)).limit(1);
+    const [quoted] = await db.select({ id: posts.id, authorId: posts.authorId }).from(posts).where(eq(posts.id, quoteId)).limit(1);
     if (!quoted) return { ok: false, error: "That post was deleted." };
+    if (!(await canInteract(auth.user.id, quoted.authorId))) return { ok: false, error: BLOCKED };
   }
 
   // The card is resolved before the insert so the post never renders twice —
@@ -220,6 +223,9 @@ export async function setPostLikeAction(postId: string, liked: boolean): Promise
   if (!auth) return { ok: false, error: SIGNED_OUT };
   const parsed = z.object({ postId: z.string().uuid(), liked: z.boolean() }).safeParse({ postId, liked });
   if (!parsed.success) return { ok: false, error: "Bad request" };
+  if (parsed.data.liked && !(await canInteract(auth.user.id, await authorOf(parsed.data.postId)))) {
+    return { ok: false, error: BLOCKED };
+  }
 
   if (parsed.data.liked) {
     try {
@@ -331,6 +337,9 @@ export async function setPostRepostAction(postId: string, reposted: boolean): Pr
   if (!auth) return { ok: false, error: SIGNED_OUT };
   const parsed = z.object({ postId: z.string().uuid(), reposted: z.boolean() }).safeParse({ postId, reposted });
   if (!parsed.success) return { ok: false, error: "Bad request" };
+  if (parsed.data.reposted && !(await canInteract(auth.user.id, await authorOf(parsed.data.postId)))) {
+    return { ok: false, error: BLOCKED };
+  }
 
   if (parsed.data.reposted) {
     try {
@@ -371,6 +380,7 @@ export async function setUserFollowAction(userId: string, follow: boolean): Prom
     .where(eq(users.id, parsed.data.userId))
     .limit(1);
   if (!target) return { ok: false, error: "That account no longer exists." };
+  if (parsed.data.follow && !(await canInteract(auth.user.id, parsed.data.userId))) return { ok: false, error: BLOCKED };
 
   if (parsed.data.follow) {
     await db

@@ -102,6 +102,19 @@ async function hydrated(page, selector = "form") {
   );
 }
 
+/**
+ * Pages with a loading.tsx stream a skeleton first; the page itself arrives
+ * a moment after the load event. Checks that read a page — above all ones
+ * that expect something to be absent — wait for it.
+ */
+async function loaded(page) {
+  await page.waitForFunction(
+    () => ![...document.querySelectorAll('[role="status"] .sr-only')].some((e) => e.textContent === "Loading…"),
+    null,
+    { timeout: 15_000 },
+  );
+}
+
 const browser = await chromium.launch();
 
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
@@ -284,9 +297,13 @@ console.log("\nSettling a pick");
 
     await page.goto(`${APP_URL}/admin/settle`);
     await hydrated(page);
-    const row = page.locator(`form:has(input[value="${target.id}"])`).first();
-    await row.locator('input[name="finalScore"]').fill("4-2");
-    await row.locator('button[value="won"]').click();
+    // Won asks first; nothing is recorded until it's confirmed.
+    await page.locator(`[data-pick-id="${target.id}"]`).getByRole("button", { name: "Won", exact: true }).click();
+    const confirm = page.getByRole("dialog");
+    await confirm.locator("#settle-score").fill("4-2");
+    const [unconfirmed] = await sql`select status from picks where id = ${target.id}`;
+    check(unconfirmed.status === "pending", "a result asks before it's recorded", `status=${unconfirmed.status}`);
+    await confirm.getByRole("button", { name: "Settle as Won" }).click();
     await page.waitForTimeout(2500);
 
     const [after] = await sql`
@@ -804,6 +821,7 @@ console.log("\nNFL only, and the parlay builder");
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
   await page.goto(`${APP_URL}/picks`);
+  await loaded(page);
   const pills = page.locator('nav[aria-label="Sport"] a');
   check((await pills.count()) === 1 && (await pills.first().innerText()).includes("NFL"), "the sport pills are just NFL");
 
@@ -823,6 +841,7 @@ console.log("\nNFL only, and the parlay builder");
   }
 
   await page.goto(`${APP_URL}/community/new`);
+  await loaded(page);
   await hydrated(page, 'input[type="search"]');
   const cards = page.locator("article[aria-label$=' at Kansas City Chiefs'], article[aria-label$=' at Philadelphia Eagles'], article[aria-label$=' at San Francisco 49ers']");
   check((await cards.count()) === 3, "the builder offers games beyond today", `games=${await cards.count()}`);
@@ -861,6 +880,7 @@ console.log("\nNFL only, and the parlay builder");
   await phone.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const p2 = await phone.newPage();
   await p2.goto(`${APP_URL}/community/new`);
+  await loaded(p2);
   await hydrated(p2, 'input[type="search"]');
   await p2.locator('input[type="search"]').fill("eagles");
   const phoneCards = p2.locator("article[aria-label$=' at Philadelphia Eagles']");
@@ -890,6 +910,7 @@ console.log("\nBack to the same spot, reply popup, quotes, profile");
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
   await page.goto(`${APP_URL}/home?tab=following`);
+  await loaded(page);
   await hydrated(page, "article button");
   // Scroll until the second page is in, then open a post from it.
   for (let i = 0; i < 20 && (await page.getByText("e2e filler 45", { exact: true }).count()) === 0; i++) {
@@ -944,10 +965,12 @@ console.log("\nBack to the same spot, reply popup, quotes, profile");
   const [qn] = await sql`select 1 from notifications where user_id = ${admin.id} and kind = 'quote' and post_id = ${quote?.id ?? null}`;
   check(Boolean(qn), "the quoted author is notified");
   await page.goto(`${APP_URL}/p/${quote?.id}`);
+  await loaded(page);
   check(await page.getByRole("link", { name: /^Quoted post by/ }).isVisible(), "the quote shows the quoted post as a card");
 
   // Profile: posts and replies together, and Stats is a tab of your own profile only.
   await page.goto(`${APP_URL}/u/${tester.username}`);
+  await loaded(page);
   let html = await page.content();
   check(html.includes("e2e popup reply") && html.includes("e2e quote take"), "a profile's Posts has replies too");
   check((await page.getByRole("link", { name: "Likes" }).count()) === 0, "there is no Likes tab");
@@ -956,8 +979,10 @@ console.log("\nBack to the same spot, reply popup, quotes, profile");
   const views = page.locator('nav[aria-label="Stats"] a');
   check((await views.count()) === 3, "Stats has Overview, Picks and Parlays inside it");
   await page.goto(`${APP_URL}/stats?tab=parlays`);
+  await loaded(page);
   check(/\/u\/[^?]+\?tab=stats&view=parlays/.test(page.url()), "/stats leads to the profile's Stats", page.url());
   await page.goto(`${APP_URL}/u/${admin.username}`);
+  await loaded(page);
   check((await page.getByRole("link", { name: "Stats", exact: true }).count()) === 0, "someone else's profile has no Stats tab");
   html = await page.content();
   check(!html.includes("Bets logged"), "and shows none of their record");
@@ -990,6 +1015,7 @@ console.log("\nNotifications and @mentions");
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
   await page.goto(`${APP_URL}/p/${target.id}`);
+  await loaded(page);
   await hydrated(page, "article button");
   await page.locator("article").first().getByRole("button", { name: /^Like/ }).click();
   const liked = await waitFor(
@@ -998,6 +1024,7 @@ console.log("\nNotifications and @mentions");
   check(Boolean(liked), "a like notifies the post's author");
 
   await page.goto(`${APP_URL}/home`);
+  await loaded(page);
   await hydrated(page, "#compose-body");
   await page.locator("#compose-body").click();
   await page.keyboard.type(`hey @${admin.username.slice(0, 4)}`);
@@ -1031,12 +1058,15 @@ console.log("\nNotifications and @mentions");
   await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
   const adminPage = await adminCtx.newPage();
   await adminPage.goto(`${APP_URL}/home`);
+  await loaded(adminPage);
   const badged = adminPage.getByRole("link", { name: /^Notifications, \d+ unread$/ });
   check((await badged.count()) === 1, "the nav shows an unread count");
   await adminPage.goto(`${APP_URL}/notifications`);
+  await loaded(adminPage);
   let html = await adminPage.content();
   check(html.includes("liked your post") && html.includes("see this e2e"), "the page lists the like and the mention");
   await adminPage.goto(`${APP_URL}/notifications?tab=mentions`);
+  await loaded(adminPage);
   html = await adminPage.content();
   check(html.includes("see this e2e") && !html.includes("liked your post"), "Mentions shows only mentions and replies");
   const read = await waitFor(
@@ -1044,6 +1074,7 @@ console.log("\nNotifications and @mentions");
   );
   check(Boolean(read), "opening the page marks them read");
   await adminPage.goto(`${APP_URL}/home`);
+  await loaded(adminPage);
   check((await adminPage.getByRole("link", { name: "Notifications", exact: true }).count()) === 1, "and the badge clears");
   await adminCtx.close();
 
@@ -1052,6 +1083,7 @@ console.log("\nNotifications and @mentions");
   await again.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const p2 = await again.newPage();
   await p2.goto(`${APP_URL}/p/${target.id}`);
+  await loaded(p2);
   await hydrated(p2, "article button");
   await p2.locator("article").first().getByRole("button", { name: /^Unlike/ }).click();
   const gone = await waitFor(
@@ -1062,6 +1094,139 @@ console.log("\nNotifications and @mentions");
 
   await sql`delete from posts where author_id = ${tester.id} and body like '%see this e2e'`;
   await sql`delete from posts where id = ${target.id}`;
+}
+
+/* ----------------------------------------- moderation, and audit fixes */
+
+console.log("\nMute, block, report — and the audit's fixes");
+{
+  const [admin] = await sql`select id, username from users where email = ${ADMIN_EMAIL}`;
+  const [tester] = await sql`select id, username from users where email = ${TESTER_EMAIL}`;
+  await sql`insert into user_follows (follower_id, followee_id) values (${tester.id}, ${admin.id}) on conflict do nothing`;
+  const [target] = await sql`insert into posts (author_id, body) values (${admin.id}, 'e2e mod target') returning id`;
+
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  const inFollowing = async () => {
+    await page.goto(`${APP_URL}/home?tab=following`);
+    await loaded(page);
+    return (await page.getByText("e2e mod target", { exact: true }).count()) > 0;
+  };
+  check(await inFollowing(), "a followed account's post is in Following");
+
+  // Mute from their profile: gone from Following; unmute: back.
+  const profileMenu = async (item) => {
+    await page.goto(`${APP_URL}/u/${admin.username}`);
+    await loaded(page);
+    await hydrated(page, "button");
+    await page.getByRole("button", { name: `More about @${admin.username}` }).click();
+    await page.getByRole("menuitem", { name: item }).click();
+  };
+  await profileMenu(`Mute @${admin.username}`);
+  await page.waitForTimeout(800);
+  check(!(await inFollowing()), "muting takes their posts out of your feed");
+  await profileMenu(`Unmute @${admin.username}`);
+  await page.waitForTimeout(800);
+  check(await inFollowing(), "unmuting brings them back");
+
+  // Report the post from its ⋯ menu; the admin removes it from the queue.
+  await page.goto(`${APP_URL}/p/${target.id}`);
+  await loaded(page);
+  await hydrated(page, "article button");
+  await page.locator("article").first().getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Report post" }).click();
+  const rd = page.getByRole("dialog");
+  await rd.getByRole("radio", { name: /^Spam/ }).click();
+  await rd.locator("#report-note").fill("e2e report note");
+  await rd.getByRole("button", { name: "Send report" }).click();
+  await rd.waitFor({ state: "hidden" });
+  const [report] = await sql`select id, reason, post_body from reports where post_id = ${target.id} and reporter_id = ${tester.id}`;
+  check(report?.reason === "spam" && report.post_body === "e2e mod target", "a report reaches the admins' queue", `${report?.reason}`);
+
+  const adminCtx = await browser.newContext();
+  await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const adminPage = await adminCtx.newPage();
+  await adminPage.goto(`${APP_URL}/admin/reports`);
+  await loaded(adminPage);
+  await hydrated(adminPage, "li[data-report-id] button");
+  const item = adminPage.locator("li[data-report-id]", { hasText: "e2e mod target" });
+  await item.getByRole("button", { name: "Remove post" }).click();
+  await adminPage.getByRole("alertdialog").getByRole("button", { name: "Remove post" }).click();
+  let removed;
+  for (let i = 0; i < 20 && !removed; i++) {
+    [removed] = await sql`select 1 where not exists (select 1 from posts where id = ${target.id})`;
+    if (!removed) await adminPage.waitForTimeout(250);
+  }
+  const [after] = await sql`select outcome, post_body from reports where id = ${report?.id ?? null}`;
+  check(Boolean(removed) && after?.outcome === "removed" && after.post_body === "e2e mod target", "removing it deletes the post and keeps the report's copy");
+
+  // Block from their profile: follows end, and the two of you are walled off.
+  const [mine] = await sql`insert into posts (author_id, body) values (${tester.id}, 'e2e blocked post') returning id`;
+  await page.goto(`${APP_URL}/u/${admin.username}`);
+  await loaded(page);
+  await hydrated(page, "button");
+  await page.getByRole("button", { name: `More about @${admin.username}` }).click();
+  await page.getByRole("menuitem", { name: `Block @${admin.username}` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Block", exact: true }).click();
+  await page.waitForTimeout(800);
+  const [blocked] = await sql`select 1 from user_blocks where blocker_id = ${tester.id} and blocked_id = ${admin.id}`;
+  const [stillFollows] = await sql`select 1 from user_follows where follower_id = ${tester.id} and followee_id = ${admin.id}`;
+  check(Boolean(blocked) && !stillFollows, "blocking records it and ends the follow");
+  await adminPage.goto(`${APP_URL}/u/${tester.username}`);
+  await loaded(adminPage);
+  check(await adminPage.getByText(`@${tester.username} blocked you`).isVisible(), "the blocked account sees it on the profile");
+  await adminPage.goto(`${APP_URL}/p/${mine.id}`);
+  await loaded(adminPage);
+  check(await adminPage.getByText("You can't see this post").isVisible(), "and can't open the blocker's posts");
+  await sql`delete from user_blocks where blocker_id = ${tester.id}`;
+  await sql`delete from posts where id = ${mine.id}`;
+
+  // A role change asks first; Cancel leaves it as it was.
+  await adminPage.goto(`${APP_URL}/admin/users`);
+  await loaded(adminPage);
+  await hydrated(adminPage, "button");
+  await adminPage.getByRole("combobox", { name: `Role for ${TESTER_EMAIL}` }).click();
+  await adminPage.getByRole("option", { name: "admin" }).click();
+  const roleDialog = adminPage.getByRole("alertdialog");
+  check(await roleDialog.getByText("Make this an admin?").isVisible(), "changing a role asks first");
+  await roleDialog.getByRole("button", { name: "Cancel" }).click();
+  await adminPage.waitForTimeout(500);
+  const [{ role }] = await sql`select role from users where id = ${tester.id}`;
+  check(role === "user", "and Cancel changes nothing", `role=${role}`);
+
+  // For you: a post and a reply to it on one page show the post once.
+  const [parentPost] = await sql`insert into posts (author_id, body) values (${admin.id}, 'e2e dedupe parent') returning id`;
+  await sql`insert into posts (author_id, parent_id, body) values (${admin.id}, ${parentPost.id}, 'e2e dedupe reply')`;
+  // And a mention of nobody isn't a link.
+  const [mentionPost] = await sql`insert into posts (author_id, body) values (${admin.id}, ${`e2e hi @nosuchuser9 and @${admin.username}`}) returning id`;
+  await page.goto(`${APP_URL}/home`);
+  await loaded(page);
+  check((await page.getByText("e2e dedupe parent", { exact: true }).count()) === 1, "For you shows a post once, above its reply");
+  await page.goto(`${APP_URL}/p/${mentionPost.id}`);
+  await loaded(page);
+  const body = page.locator("article p", { hasText: "e2e hi" }).first();
+  check(
+    (await body.locator('a[href="/u/nosuchuser9"]').count()) === 0 && (await body.locator(`a[href="/u/${admin.username}"]`).count()) === 1,
+    "a mention links only when the account exists",
+  );
+  await sql`delete from posts where id in (${parentPost.id}, ${mentionPost.id})`;
+  await sql`delete from user_follows where follower_id = ${tester.id} and followee_id = ${admin.id}`;
+  await adminCtx.close();
+  await ctx.close();
+
+  // A wrong password keeps the email that was typed.
+  const loginCtx = await browser.newContext();
+  const lp = await loginCtx.newPage();
+  await lp.goto(`${APP_URL}/login`);
+  await loaded(lp);
+  await hydrated(lp);
+  await lp.fill("#email", TESTER_EMAIL);
+  await lp.fill("#password", "definitely-not-the-password");
+  await lp.getByRole("button", { name: /^Sign in/ }).click();
+  await lp.getByRole("alert").first().waitFor({ timeout: 10_000 }).catch(() => {});
+  check((await lp.inputValue("#email")) === TESTER_EMAIL, "a failed sign-in keeps the email");
+  await loginCtx.close();
 }
 
 /* -------------------------------------------------------------- feedback */
@@ -1075,6 +1240,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
   await page.goto(`${APP_URL}/picks`);
+  await loaded(page);
   await hydrated(page, 'nav button[title="Send feedback"]');
   await page.getByRole("button", { name: "Send feedback" }).click();
   const dialog = page.getByRole("dialog");
@@ -1098,6 +1264,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
   const page = await ctx.newPage();
   await page.goto(`${APP_URL}/picks`);
+  await loaded(page);
   await hydrated(page, "button");
   await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Send feedback" }).click();
@@ -1111,6 +1278,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
   const page = await ctx.newPage();
   const res = await page.goto(`${APP_URL}/admin/feedback`);
+  await loaded(page);
   check(res.status() === 200, "admin opens the feedback inbox", `${res.status()}`);
   const item = page.locator("li[data-feedback-id]", { hasText: feedbackNote });
   check((await item.count()) === 1, "the tester's feedback is listed as open");
@@ -1120,6 +1288,7 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
   const [row] = await sql`select resolved_at, resolved_by from feedback where body = ${feedbackNote}`;
   check(row?.resolved_at !== null && row?.resolved_by === seedAdmin.id, "resolving records when and by whom");
   await page.goto(`${APP_URL}/admin/feedback?show=resolved`);
+  await loaded(page);
   check((await page.locator("li[data-feedback-id]", { hasText: feedbackNote }).count()) === 1, "it moves to Resolved");
   await ctx.close();
 }

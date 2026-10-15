@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { CircleCheck, CirclePlus } from "lucide-react";
 import { db } from "@/db";
-import { auditLog, feedback, picks, slates, users } from "@/db/schema";
+import { auditLog, feedback, picks, reports, slates, users } from "@/db/schema";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,9 +44,10 @@ export default async function AdminOverviewPage() {
     db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(8),
   ]);
 
-  const [[{ n: userCount }], [{ n: openFeedback }]] = await Promise.all([
+  const [[{ n: userCount }], [{ n: openFeedback }], [{ n: openReports }]] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(users),
     db.select({ n: sql<number>`count(*)::int` }).from(feedback).where(isNull(feedback.resolvedAt)),
+    db.select({ n: sql<number>`count(*)::int` }).from(reports).where(isNull(reports.resolvedAt)),
   ]);
 
   const slate = todaySlate[0];
@@ -137,7 +138,7 @@ export default async function AdminOverviewPage() {
       </div>
 
       {/* ------------------------------------------------------------ stats */}
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile label="Registered users" value={userCount} />
         <StatTile
           label="Net units (all time)"
@@ -148,6 +149,16 @@ export default async function AdminOverviewPage() {
           label="Record"
           value={`${record.wins}–${record.losses}`}
           sub={record.sampleTooSmall ? "Too few for a rate" : undefined}
+        />
+        <StatTile
+          label="Open reports"
+          tone={openReports > 0 ? "miss" : "neutral"}
+          value={openReports}
+          sub={
+            <Link href="/admin/reports" className="hover:underline">
+              {openReports > 0 ? "Review them" : "None waiting"}
+            </Link>
+          }
         />
         <StatTile
           label="Open feedback"

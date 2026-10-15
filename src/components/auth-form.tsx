@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,9 @@ export function LoginForm({ next }: { next?: string }) {
     loginAction,
     null,
   );
+  // Controlled, so a failed sign-in keeps the address: React resets an
+  // uncontrolled field when a form action finishes, error or not.
+  const [email, setEmail] = useState("");
   const fe = state && !state.ok ? state.fieldErrors : undefined;
 
   return (
@@ -44,6 +47,8 @@ export function LoginForm({ next }: { next?: string }) {
           id="email"
           name="email"
           type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           required
           autoFocus

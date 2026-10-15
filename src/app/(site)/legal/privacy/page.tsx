@@ -39,7 +39,9 @@ export default function PrivacyPage() {
           photos and GIFs you add to them, your poll votes, likes, reposts and follows, and which
           posts you have viewed (that is how view counts work). The picks you mark as taken, and
           the parlays you build, share or play. Feedback you send us, with the page you sent it
-          from and your browser.
+          from and your browser. Reports you file, and who you mute or block — the person you
+          report, mute or block is never told who did it, though a block shows on your profile
+          to them.
         </p>
         <p>
           <strong className="text-fg">Signing in and security.</strong> For each device you sign

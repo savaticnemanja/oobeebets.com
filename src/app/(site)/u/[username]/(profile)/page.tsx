@@ -7,6 +7,8 @@ import { after } from "next/server";
 import { getProfile, getProfilePosts } from "@/lib/social";
 import { refreshResults } from "@/lib/odds/sync";
 import { StatsPanel } from "@/components/profile/stats-panel";
+import { ProfileMenu } from "@/components/social/profile-menu";
+import { relationship } from "@/lib/moderation";
 import { compactCount } from "@/lib/social-rules";
 import { LocalTime } from "@/components/local-time";
 import { appUrl } from "@/lib/site";
@@ -64,10 +66,13 @@ export default async function ProfilePage({
   if (!profile) notFound();
 
   const self = viewerId === profile.id;
+  const rel = self ? { muted: false, blocked: false, blockedBy: false } : await relationship(viewerId, profile.id);
+  // A block either way and the posts are off: yours to them, theirs to you.
+  const walledOff = rel.blocked || rel.blockedBy;
   // Stats is yours alone; on anyone else's profile the tab doesn't exist.
   const tab: Tab = self && query.tab === "stats" ? "stats" : "posts";
   const before = query.before && /^[0-9a-f-]{36}$/i.test(query.before) ? query.before : undefined;
-  const feed = tab === "posts" ? await getProfilePosts(profile.id, viewerId, before) : null;
+  const feed = tab === "posts" && !walledOff ? await getProfilePosts(profile.id, viewerId, before) : null;
   // Grade anything that has finished — after the response, so nobody waits
   // on the odds provider to see their record (see refreshResults).
   if (tab === "stats") after(refreshResults);
@@ -86,18 +91,23 @@ export default async function ProfilePage({
       <div className="px-4 pb-3">
         <div className="flex items-end justify-between">
           <Avatar name={name} size="lg" className="-mt-10 border-black bg-surface-2 sm:-mt-12" />
-          <div className="pt-3">
+          <div className="flex items-center gap-2 pt-3">
             {self ? (
               <Button variant="outline" size="sm" className="rounded-full" asChild>
                 <Link href="/account">Edit profile</Link>
               </Button>
             ) : (
-              <FollowButton
-                userId={profile.id}
-                username={profile.username}
-                following={profile.viewerFollows}
-                signedIn={Boolean(auth)}
-              />
+              <>
+                <ProfileMenu userId={profile.id} username={profile.username} muted={rel.muted} blocked={rel.blocked} />
+                {!walledOff && (
+                  <FollowButton
+                    userId={profile.id}
+                    username={profile.username}
+                    following={profile.viewerFollows}
+                    signedIn={Boolean(auth)}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
@@ -141,7 +151,25 @@ export default async function ProfilePage({
         <h2 className="border-b border-border px-4 pb-3 text-[0.9375rem] font-bold">Posts</h2>
       )}
 
-      {tab === "stats" ? (
+      {/* Where a mute or block stands, said plainly. */}
+      {rel.muted && !walledOff && (
+        <p className="border-b border-border px-4 py-2.5 text-sm text-fg-muted">
+          You muted @{profile.username} — their posts don&apos;t show in your feeds. Unmute from the ⋯ menu.
+        </p>
+      )}
+
+      {walledOff ? (
+        <div className="px-6 py-14 text-center">
+          <h2 className="text-xl font-semibold tracking-tight">
+            {rel.blocked ? `You blocked @${profile.username}` : `@${profile.username} blocked you`}
+          </h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-fg-muted">
+            {rel.blocked
+              ? "You don't see each other's posts, and they can't follow or reply to you. Unblock from the ⋯ menu."
+              : "You can't see their posts or follow them."}
+          </p>
+        </div>
+      ) : tab === "stats" ? (
         <StatsPanel viewerId={viewerId} view={query.view} show={query.show} base={`${base}?tab=stats`} />
       ) : (
       <FeedList

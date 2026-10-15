@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useKeptOptimistic } from "@/components/use-kept-optimistic";
-import { BarChart2, Heart, MessageCircle, MoreHorizontal, PenLine, Repeat2, Share, Trash2 } from "lucide-react";
+import { BarChart2, Ban, Flag, Heart, MessageCircle, MoreHorizontal, PenLine, Repeat2, Share, Trash2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { deletePostAction, setPostLikeAction, setPostRepostAction } from "@/app/actions/social";
 import type { FeedPost } from "@/lib/social";
@@ -22,12 +22,14 @@ import { FollowToggle } from "@/components/follow-toggle";
 import { ComposeDialog } from "@/components/social/compose-dialog";
 import { useViewer } from "@/components/app-shell/viewer";
 import { QuoteCard, asQuoted } from "@/components/social/quote-card";
+import { BlockConfirm, ReportDialog, useModeration } from "@/components/social/moderation-dialogs";
 import type { PickState } from "@/components/pick-state";
 import type { ViewerFollow } from "@/lib/follows";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -184,7 +186,7 @@ export function PostCard({
         )}
 
         {post.body && (
-          <PostBody body={post.body} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
+          <PostBody body={post.body} known={post.knownMentions} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
         )}
 
         {post.media && post.media.length > 0 && <PostMedia media={post.media} className="mt-3" />}
@@ -428,12 +430,20 @@ function PostActions({
 
 /* ------------------------------------------------------------------ menu */
 
+/**
+ * The ⋯ on a post. Yours: Delete. Anyone else's: Report, Mute and Block (see
+ * moderation-dialogs.tsx) — and, for an admin, Remove post.
+ */
 function PostMenu({ post, viewerId, isAdmin }: { post: FeedPost; viewerId: string | null; isAdmin: boolean }) {
   const [confirming, setConfirming] = React.useState(false);
+  const [reporting, setReporting] = React.useState(false);
+  const [blocking, setBlocking] = React.useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const moderation = useModeration();
   const own = viewerId === post.author.id;
-  if (!own && !isAdmin) return null;
+  if (!viewerId) return null;
+  const handle = post.author.username;
 
   function remove() {
     startTransition(async () => {
@@ -458,13 +468,41 @@ function PostMenu({ post, viewerId, isAdmin }: { post: FeedPost; viewerId: strin
         >
           <MoreHorizontal className="size-4" aria-hidden="true" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setConfirming(true)} className="text-miss focus:text-miss">
-            <Trash2 aria-hidden="true" />
-            {own ? "Delete" : "Remove post (admin)"}
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end" className="min-w-48">
+          {!own && (
+            <>
+              <DropdownMenuItem onSelect={() => setReporting(true)}>
+                <Flag aria-hidden="true" />
+                Report post
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={moderation.pending} onSelect={() => moderation.mute(post.author.id, true)}>
+                <VolumeX aria-hidden="true" />
+                Mute @{handle}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setBlocking(true)} className="text-miss focus:text-miss">
+                <Ban aria-hidden="true" />
+                Block @{handle}
+              </DropdownMenuItem>
+            </>
+          )}
+          {(own || isAdmin) && (
+            <>
+              {!own && <DropdownMenuSeparator />}
+              <DropdownMenuItem onSelect={() => setConfirming(true)} className="text-miss focus:text-miss">
+                <Trash2 aria-hidden="true" />
+                {own ? "Delete" : "Remove post (admin)"}
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {!own && (
+        <>
+          <ReportDialog target={{ postId: post.id, label: `@${handle}'s post` }} open={reporting} onOpenChange={setReporting} />
+          <BlockConfirm username={handle} open={blocking} onOpenChange={setBlocking} onConfirm={() => moderation.block(post.author.id, true)} />
+        </>
+      )}
 
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>

@@ -9,6 +9,7 @@ import { getParlaysByIds } from "@/lib/parlay-store";
 import { getAuth } from "@/lib/auth";
 import { followWindowOpen } from "@/lib/follows";
 import { notify, unnotify } from "@/lib/notifications";
+import { BLOCKED, canInteract } from "@/lib/moderation";
 import type { ActionState } from "@/lib/validation";
 
 /**
@@ -129,6 +130,7 @@ export async function setParlayFollowAction(parlayId: string, played: boolean): 
     .limit(1);
   if (!row) return { ok: false, error: "That parlay is gone." };
   if (row.ownerId === auth.user.id) return { ok: false, error: "That's your own ticket — it's already on your stats." };
+  if (parsed.data.played && !(await canInteract(auth.user.id, row.ownerId))) return { ok: false, error: BLOCKED };
   if (row.ownerId === null ? !row.publishedAt : !row.shared) return { ok: false, error: "That parlay isn't public." };
 
   const [view] = await getParlaysByIds([parsed.data.parlayId]);

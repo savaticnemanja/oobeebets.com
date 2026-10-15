@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -21,6 +21,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { setUserRoleAction } from "@/app/actions/admin";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "@/components/ui/misc";
 import type { Role } from "@/db/schema";
 import { formatDate } from "@/lib/i18n/format";
 
@@ -41,6 +51,17 @@ export function UserTable({
 }) {
   const [roleState, roleAction] = useActionState(setUserRoleAction, null);
   const [q, setQ] = useState("");
+  // A role change waits here until it's confirmed; the select shows it meanwhile.
+  const [pendingRole, setPendingRole] = useState<{ id: string; email: string; role: Role } | null>(null);
+  const [, startRole] = useTransition();
+  const confirmRole = () => {
+    if (!pendingRole) return;
+    const fd = new FormData();
+    fd.set("userId", pendingRole.id);
+    fd.set("role", pendingRole.role);
+    startRole(() => roleAction(fd));
+    setPendingRole(null);
+  };
 
   useEffect(() => {
     if (roleState?.ok) toast.success(roleState.message ?? "Updated");
@@ -100,13 +121,8 @@ export function UserTable({
                         <input type="hidden" name="userId" value={u.id} />
                         <Select
                           name="role"
-                          defaultValue={u.role}
-                          onValueChange={(v) => {
-                            const fd = new FormData();
-                            fd.set("userId", u.id);
-                            fd.set("role", v);
-                            roleAction(fd);
-                          }}
+                          value={pendingRole?.id === u.id ? pendingRole.role : u.role}
+                          onValueChange={(v) => setPendingRole({ id: u.id, email: u.email, role: v as Role })}
                         >
                           <SelectTrigger
                             className="h-8 w-28 text-xs"
@@ -132,6 +148,28 @@ export function UserTable({
       {filtered.length === 0 && (
         <p className="mt-6 text-center text-sm text-fg-muted">No users match that.</p>
       )}
+
+      {/* Admin access is the whole panel: granting or removing it asks first. */}
+      <AlertDialog open={Boolean(pendingRole)} onOpenChange={(o) => !o && setPendingRole(null)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>{pendingRole?.role === "admin" ? "Make this an admin?" : "Remove admin access?"}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingRole?.role === "admin"
+              ? `${pendingRole?.email} gets the whole admin panel: publishing, settling, users and announcements.`
+              : `${pendingRole?.email} goes back to being a tester and loses the admin panel.`}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button type="button" variant="outline">Cancel</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button type="button" variant={pendingRole?.role === "admin" ? "default" : "danger"} onClick={confirmRole}>
+                {pendingRole?.role === "admin" ? "Make admin" : "Remove access"}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

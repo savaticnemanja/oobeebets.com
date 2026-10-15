@@ -5,7 +5,9 @@ import { getMySingles, getMyTakenPicks, summariseMyBets, type MyBets } from "@/l
 import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "@/lib/follows";
 import { formatRate, formatSlateDate, formatUnits } from "@/lib/i18n/format";
-import { ParlayCard } from "@/components/parlay-card";
+import { ParlayTicket } from "@/components/social/parlay-ticket";
+import { FollowToggle } from "@/components/follow-toggle";
+import { ticketState } from "@/components/pick-state";
 import { PickCard } from "@/components/pick-card";
 import { DeleteParlayButton } from "@/components/parlay-builder";
 import { ShareToggle } from "@/components/community-parlay-builder";
@@ -206,22 +208,37 @@ export async function StatsPanel({
             byDay(parlaysShown, (x) => x.p.slateDate).map(([day, list]) => (
               <Fragment key={day}>
                 <DayLabel day={day} />
-                {list.map(({ p, mine }) => (
-                  <ParlayCard
-                    key={p.id}
-                    parlay={p}
-                    variant="row"
-                    kicker={<Origin parlay={p} mine={mine} />}
-                    follow={mine ? undefined : playable(p, p.ownerId, viewerId)}
-                  >
-                    {mine && (
-                      <div className="flex items-center gap-3">
-                        <ShareToggle parlayId={p.id} shared={p.shared} open={p.open} />
-                        {p.open && <DeleteParlayButton parlayId={p.id} />}
-                      </div>
-                    )}
-                  </ParlayCard>
-                ))}
+                {list.map(({ p, mine }) => {
+                  // The same compact ticket as the feed's, with where it came
+                  // from above it and what you can still do with it below.
+                  const follow = mine ? undefined : playable(p, p.ownerId, viewerId);
+                  return (
+                    <div key={p.id} className="border-b border-border px-4 py-3">
+                      <Origin parlay={p} mine={mine} />
+                      <ParlayTicket parlay={p} />
+                      {(mine || follow) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          {mine ? (
+                            <>
+                              <ShareToggle parlayId={p.id} shared={p.shared} open={p.open} />
+                              {p.open && <DeleteParlayButton parlayId={p.id} />}
+                            </>
+                          ) : (
+                            <FollowToggle
+                              kind="parlay"
+                              variant="action"
+                              pickId={p.id}
+                              selection={p.title ?? `${p.legs.length}-leg parlay`}
+                              follow={follow!}
+                              state={ticketState(p.status, p.legs.map((l) => l.startsAt.getTime()), Date.now())}
+                              className="-ml-2"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </Fragment>
             ))
           )}

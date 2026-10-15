@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Loader2, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,8 @@ function FormError({ state }: { state: ActionState }) {
 export function ForgotPasswordForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(requestPasswordResetAction, null);
   const fe = state && !state.ok ? state.fieldErrors : undefined;
+  // Kept through an error — see AuthForm.
+  const [email, setEmail] = useState("");
 
   if (state?.ok) {
     return (
@@ -57,6 +59,8 @@ export function ForgotPasswordForm() {
           id="email"
           name="email"
           type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           required
           autoFocus

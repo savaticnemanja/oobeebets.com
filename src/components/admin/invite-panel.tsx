@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Ban, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -39,12 +39,19 @@ export function InvitePanel({ invitations }: { invitations: InviteRow[] }) {
   const [sendState, sendAction, sendPending] = useActionState(sendInviteAction, null);
   const [resendState, resendAction] = useActionState(resendInviteAction, null);
   const [revokeState, revokeAction] = useActionState(revokeInviteAction, null);
-  const formRef = useRef<HTMLFormElement>(null);
+  // Controlled, so an error keeps the address (React resets an uncontrolled
+  // field after every form action); cleared only once the invite is sent —
+  // in render, on the new result, as the announce composer does.
+  const [email, setEmail] = useState("");
+  const [lastSend, setLastSend] = useState(sendState);
+  if (lastSend !== sendState) {
+    setLastSend(sendState);
+    if (sendState?.ok) setEmail("");
+  }
 
   useEffect(() => {
     if (sendState?.ok) {
       toast.success(sendState.message ?? "Invite sent");
-      formRef.current?.reset();
     } else if (sendState && !sendState.ok) {
       toast.error(sendState.error);
     }
@@ -64,13 +71,15 @@ export function InvitePanel({ invitations }: { invitations: InviteRow[] }) {
 
   return (
     <div>
-      <form ref={formRef} action={sendAction} className="flex flex-wrap items-end gap-3">
+      <form action={sendAction} className="flex flex-wrap items-end gap-3">
         <div className="min-w-64 flex-1">
           <Label htmlFor="invite-email">Email</Label>
           <Input
             id="invite-email"
             name="email"
             type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="new-tester@example.com"
             className="mt-1.5"

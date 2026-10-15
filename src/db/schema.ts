@@ -1025,6 +1025,82 @@ export const playerGameStats = pgTable(
   ],
 );
 
+/* ------------------------------------------------- mute, block and report */
+
+/**
+ * Muting someone takes their posts, reposts and parlays out of your feeds and
+ * Community, and their actions out of your notifications. Only you know.
+ */
+export const userMutes = pgTable(
+  "user_mutes",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mutedId: uuid("muted_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.mutedId] }), check("user_mutes_not_self", sql`${t.userId} <> ${t.mutedId}`)],
+);
+
+/**
+ * Blocking is a mute both ways, and more: the follows between you go, and
+ * the blocked account can't follow, reply to, quote, like or repost you
+ * (lib/moderation.ts holds the rule; every action asks it).
+ */
+export const userBlocks = pgTable(
+  "user_blocks",
+  {
+    blockerId: uuid("blocker_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    blockedId: uuid("blocked_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.blockerId, t.blockedId] }),
+    index("user_blocks_blocked_idx").on(t.blockedId),
+    check("user_blocks_not_self", sql`${t.blockerId} <> ${t.blockedId}`),
+  ],
+);
+
+export const reportReasonEnum = pgEnum("report_reason", ["spam", "harassment", "hate", "scam", "other"]);
+
+/**
+ * A post or an account someone reported, for the admins' queue
+ * (/admin/reports). Kept after the post is removed — that's the record of
+ * why — and after the reporter leaves, unsigned. Open until an admin removes
+ * the post or dismisses the report.
+ */
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reporterId: uuid("reporter_id").references(() => users.id, { onDelete: "set null" }),
+    /** The reported post — or null for an account report, or once it's removed. */
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "set null" }),
+    /** Whose post or account it is. */
+    targetUserId: uuid("target_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** The post's text when reported, so the queue still shows it after removal. */
+    postBody: text("post_body"),
+    reason: reportReasonEnum("reason").notNull(),
+    note: text("note"),
+    /** "removed" (the post was taken down) or "dismissed"; null while open. */
+    outcome: text("outcome"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("reports_created_idx").on(t.createdAt),
+    check("reports_outcome", sql`${t.outcome} is null or ${t.outcome} in ('removed', 'dismissed')`),
+  ],
+);
+
 /* ---------------------------------------------------------- notifications */
 
 export const notificationKindEnum = pgEnum("notification_kind", [
@@ -1204,3 +1280,4 @@ export type SpendBand = (typeof spendBandEnum.enumValues)[number];
 export type InviteStatus = (typeof inviteStatusEnum.enumValues)[number];
 export type FeedbackKind = (typeof feedbackKindEnum.enumValues)[number];
 export type NotificationKind = (typeof notificationKindEnum.enumValues)[number];
+export type ReportReason = (typeof reportReasonEnum.enumValues)[number];

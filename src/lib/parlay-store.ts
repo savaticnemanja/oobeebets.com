@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { games, parlayFollows, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
 import { LEAGUE_CONFIG, eventLabel, lineLabel, marketCategory, marketEnum, type FeedLeague } from "./odds/markets";
 import type { Market, PickCategory, PickStatus, Role, Sport } from "@/db/schema";
+import { visibleTo } from "@/lib/moderation";
 import { PARLAY_STAKE_UNITS, parlayPrice, parlayProfit, parlayStatus, parlayWindowOpen } from "./parlays";
 
 /**
@@ -304,7 +305,10 @@ export async function getCommunityParlayPage({
   sport,
   leagues,
   limit,
+  viewerId = null,
 }: {
+  /** Owners this viewer has muted or blocked (or who blocked them) are left out. */
+  viewerId?: string | null;
   before: string | null;
   sport: { sport: Sport; league: string | null } | null;
   /** The feed leagues in that sport (or just the one), for selection legs. */
@@ -337,7 +341,7 @@ export async function getCommunityParlayPage({
     })
     .from(parlays)
     .innerJoin(users, eq(users.id, parlays.ownerId))
-    .where(and(eq(parlays.shared, true), legInSport, after))
+    .where(and(eq(parlays.shared, true), legInSport, after, visibleTo(viewerId, parlays.ownerId)))
     .orderBy(desc(parlays.slateDate), desc(parlays.createdAt), desc(parlays.id))
     .limit(limit + 1);
 
