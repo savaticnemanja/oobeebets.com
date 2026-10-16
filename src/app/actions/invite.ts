@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
@@ -9,13 +10,14 @@ import { db } from "@/db";
 import { auditLog, invitations, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { clientIp, createSession, hashPassword, hashToken, rateLimit, requireAdmin } from "@/lib/auth";
-import { createInviteToken, INVITE_TTL_MS, isInviteUsable, lookupInvite } from "@/lib/invitations";
-import { idempotencyKey, sendEmail } from "@/lib/email/resend-client";
-import { inviteEmail } from "@/lib/email/templates";
-import { appUrl } from "@/lib/site";
+import { isInviteUsable, issueInvite, lookupInvite } from "@/lib/invitations";
 import { emailSchema, fieldErrorsFrom, onboardingSchema, type ActionState } from "@/lib/validation";
 import { mintUsername } from "@/lib/social";
 import { violates } from "@/lib/db-errors";
+import { sendEmail } from "@/lib/email/resend-client";
+import { welcomeEmail } from "@/lib/email/templates";
+import { appUrl } from "@/lib/site";
+import { removeFromWaitlist } from "@/lib/waitlist";
 
 const ACCEPT_LIMIT = 10;
 const ACCEPT_WINDOW_MS = 15 * 60 * 1000;
@@ -34,50 +36,6 @@ async function audit(
     entityId,
     meta: meta ?? null,
   });
-}
-
-/**
- * Mints a fresh token, upserts the invitation row (keyed on email — so a
- * second invite to the same address is a resend, not a duplicate), and sends
- * it. The DB write happens before the send, so a failed send still leaves a
- * usable, up-to-date invite row rather than losing state on retry.
- */
-async function issueInvite(email: string, invitedBy: string): Promise<string> {
-  const { token, tokenHash } = createInviteToken();
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
-
-  const [invite] = await db
-    .insert(invitations)
-    .values({ email, tokenHash, status: "pending", invitedBy, expiresAt })
-    .onConflictDoUpdate({
-      target: invitations.email,
-      set: {
-        tokenHash,
-        status: "pending",
-        invitedBy,
-        expiresAt,
-        acceptedAt: null,
-        acceptedUserId: null,
-        updatedAt: new Date(),
-      },
-    })
-    .returning({ id: invitations.id });
-
-  const { subject, html, text } = inviteEmail({
-    inviteUrl: appUrl(`/invite/${token}`),
-    expiresAt,
-  });
-  // Keyed on the token hash, so a retried send of *this* invite is dropped
-  // while a resend — which mints a new token above — always goes out.
-  await sendEmail({
-    to: email,
-    subject,
-    html,
-    text,
-    idempotencyKey: idempotencyKey("invite", tokenHash.slice(0, 32)),
-  });
-
-  return invite.id;
 }
 
 /* ------------------------------------------------------------------ send */
@@ -238,7 +196,22 @@ export async function acceptInviteAction(
     action: "user.onboarded",
     entity: "user",
     entityId: created.id,
-    meta: { invitationId: invite.id },
+    meta: { invitationId: invite.id, selfServe: invite.invitedBy === null },
+  });
+
+  // They're in: nothing left to wait for. And the welcome goes after the
+  // response, so a slow or failed send never stands between them and the board.
+  await removeFromWaitlist(created.email);
+  const welcomeTo = created.email;
+  after(async () => {
+    try {
+      await sendEmail({
+        to: welcomeTo,
+        ...welcomeEmail({ name, homeUrl: appUrl("/home"), accountUrl: appUrl("/account") }),
+      });
+    } catch (err) {
+      console.error("[welcome] could not send:", err);
+    }
   });
 
   await createSession(created.id);

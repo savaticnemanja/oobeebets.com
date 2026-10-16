@@ -1,0 +1,153 @@
+import "server-only";
+import { randomBytes } from "node:crypto";
+import { asc, eq, inArray, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { users, waitlist } from "@/db/schema";
+import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-client";
+import { accountExistsEmail, signupsOpenEmail, waitlistJoinedEmail } from "@/lib/email/templates";
+import { issueInvite } from "@/lib/invitations";
+import { appUrl } from "@/lib/site";
+
+/**
+ * The waitlist, and the sign-up that replaces it when SIGNUP_ENABLED is on.
+ *
+ * Both answer the form identically whatever the address is — new, already
+ * waiting, or already an account — so the form can't be used to find out who
+ * has an account. The difference shows only in the owner's inbox: an
+ * existing account gets "you already have one" instead.
+ */
+
+/** RFC 8058 one-click unsubscribe, which Gmail and Yahoo want on list mail. */
+function listHeaders(token: string): Record<string, string> {
+  return {
+    "List-Unsubscribe": `<${appUrl(`/api/waitlist/leave?token=${encodeURIComponent(token)}`)}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
+function leaveUrl(token: string): string {
+  return appUrl(`/waitlist/leave?token=${encodeURIComponent(token)}`);
+}
+
+async function hasAccount(email: string): Promise<boolean> {
+  const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  return Boolean(row);
+}
+
+/** "You already have an account" — at most once a day per address, so the form can't flood an inbox. */
+async function sendAccountExists(email: string): Promise<void> {
+  const day = new Date().toISOString().slice(0, 10);
+  await sendEmail({
+    to: email,
+    ...accountExistsEmail({ loginUrl: appUrl("/login"), resetUrl: appUrl("/forgot-password") }),
+    idempotencyKey: idempotencyKey("account-exists", email, day),
+  });
+}
+
+/**
+ * Puts an address on the waitlist and sends the one confirmation. Someone
+ * already waiting gets nothing new — a form anyone can post must not become a
+ * way to mail a stranger again and again.
+ */
+export async function joinWaitlist(email: string, source: "landing" | "signup"): Promise<void> {
+  if (await hasAccount(email)) return sendAccountExists(email);
+
+  const token = randomBytes(24).toString("base64url");
+  // Already waiting: the insert returns nothing, and nothing returned means no email.
+  const [row] = await db
+    .insert(waitlist)
+    .values({ email, leaveToken: token, source })
+    .onConflictDoNothing({ target: waitlist.email })
+    .returning({ leaveToken: waitlist.leaveToken });
+  if (!row) return;
+
+  await sendEmail({
+    to: email,
+    ...waitlistJoinedEmail({ leaveUrl: leaveUrl(row.leaveToken) }),
+    headers: listHeaders(row.leaveToken),
+    idempotencyKey: idempotencyKey("waitlist", row.leaveToken.slice(0, 16)),
+  });
+}
+
+/** Sign-ups open: email a link to the account form — or, for an existing account, say so. */
+export async function startSignup(email: string): Promise<void> {
+  if (await hasAccount(email)) return sendAccountExists(email);
+  await issueInvite(email, null);
+}
+
+/** Off the list, and forgotten, by the token in their link. False if the link matches no one. */
+export async function leaveWaitlist(token: string): Promise<boolean> {
+  const [row] = await db.delete(waitlist).where(eq(waitlist.leaveToken, token)).returning({ id: waitlist.id });
+  return Boolean(row);
+}
+
+/** An account was made for this address: it's no longer waiting for anything. */
+export async function removeFromWaitlist(email: string): Promise<void> {
+  await db.delete(waitlist).where(eq(waitlist.email, email));
+}
+
+export interface WaitlistEntry {
+  id: string;
+  email: string;
+  source: string;
+  createdAt: Date;
+  invitedAt: Date | null;
+  notifiedAt: Date | null;
+}
+
+/** Everyone still waiting, oldest first — the order they'd be let in. */
+export async function getWaitlist(): Promise<WaitlistEntry[]> {
+  return db
+    .select({
+      id: waitlist.id,
+      email: waitlist.email,
+      source: waitlist.source,
+      createdAt: waitlist.createdAt,
+      invitedAt: waitlist.invitedAt,
+      notifiedAt: waitlist.notifiedAt,
+    })
+    .from(waitlist)
+    .orderBy(asc(waitlist.createdAt));
+}
+
+/** An admin let this person in: a normal invite, and the row remembers it. */
+export async function inviteFromWaitlist(id: string, invitedBy: string): Promise<string | null> {
+  const [row] = await db
+    .select({ email: waitlist.email })
+    .from(waitlist)
+    .where(eq(waitlist.id, id))
+    .limit(1);
+  if (!row) return null;
+  await issueInvite(row.email, invitedBy);
+  await db.update(waitlist).set({ invitedAt: new Date() }).where(eq(waitlist.id, id));
+  return row.email;
+}
+
+/**
+ * Tells everyone still waiting, and not yet told, that sign-ups are open.
+ * Each message carries that reader's own leave link; only the ones Resend
+ * accepted are marked, so running it again picks up any that failed.
+ */
+export async function notifyWaitlist(): Promise<{ sent: number; failed: number }> {
+  const rows = await db
+    .select({ email: waitlist.email, leaveToken: waitlist.leaveToken })
+    .from(waitlist)
+    .where(isNull(waitlist.notifiedAt));
+  if (rows.length === 0) return { sent: 0, failed: 0 };
+
+  const signupUrl = appUrl("/signup");
+  const { sent, failed } = await sendEmailBatch(
+    rows.map((r) => ({
+      to: r.email,
+      ...signupsOpenEmail({ signupUrl, leaveUrl: leaveUrl(r.leaveToken) }),
+      headers: listHeaders(r.leaveToken),
+    })),
+  );
+  for (let i = 0; i < sent.length; i += 500) {
+    await db
+      .update(waitlist)
+      .set({ notifiedAt: new Date() })
+      .where(inArray(waitlist.email, sent.slice(i, i + 500)));
+  }
+  return { sent: sent.length, failed: failed.length };
+}

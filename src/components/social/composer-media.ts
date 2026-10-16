@@ -7,36 +7,14 @@
  * (re-encoding would drop the animation), so they carry the limit themselves.
  */
 
-export const UPLOAD_LIMIT = 950 * 1024;
+import { UPLOAD_LIMIT, shrinkImage } from "@/components/image-shrink";
+
 const MAX_SIDE = 1600;
 
 export interface Uploaded {
   id: string;
   kind: "image" | "gif";
   src: string;
-}
-
-async function shrink(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  // Step the quality down until it fits; a photo almost always fits first try.
-  for (const quality of [0.85, 0.75, 0.6, 0.45]) {
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
-    // Safari without WebP encoding hands back PNG; JPEG is the fallback then.
-    const out =
-      blob && blob.type === "image/webp"
-        ? blob
-        : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-    if (out && out.size <= UPLOAD_LIMIT) return { blob: out, width, height };
-  }
-  throw new Error("That photo is too big even after shrinking it.");
 }
 
 async function dimensionsOf(file: File): Promise<{ width: number; height: number }> {
@@ -62,7 +40,7 @@ export async function uploadMedia(file: File): Promise<Uploaded> {
     if (file.size > UPLOAD_LIMIT) throw new Error("That GIF is over 1 MB — try a smaller one.");
     dims = await dimensionsOf(file);
   } else {
-    const shrunk = await shrink(file);
+    const shrunk = await shrinkImage(file, MAX_SIDE);
     blob = shrunk.blob;
     dims = { width: shrunk.width, height: shrunk.height };
   }

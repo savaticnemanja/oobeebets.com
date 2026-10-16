@@ -19,6 +19,7 @@ import { uploadMedia } from "@/components/social/composer-media";
 import { EmojiPicker } from "@/components/social/emoji-picker";
 import { GifPicker } from "@/components/social/gif-picker";
 import { Avatar } from "@/components/social/identity";
+import { useViewer } from "@/components/app-shell/viewer";
 import { LinkCard } from "@/components/social/link-card";
 import { useMentionSuggest } from "@/components/social/mention-suggest";
 import { QuoteCard } from "@/components/social/quote-card";
@@ -77,6 +78,7 @@ export function Composer({
   onDirtyChange?: (dirty: boolean) => void;
   className?: string;
 }) {
+  const viewer = useViewer();
   const [body, setBody] = React.useState("");
   // Keyed by the URL it was fetched for, so editing the link away hides the
   // card on the next render without an effect having to clear it.
@@ -228,7 +230,7 @@ export function Composer({
       id={id}
       className={cn("flex gap-3 border-b border-border px-4 py-3", parentId && "scroll-mt-20", className)}
     >
-      <Avatar name={viewerName} />
+      <Avatar name={viewerName} avatarId={viewer?.avatarId} />
       <div className="min-w-0 flex-1">
         {parentId && <input type="hidden" name="parentId" value={parentId} />}
         {quote && <input type="hidden" name="quoteId" value={quote.id} />}

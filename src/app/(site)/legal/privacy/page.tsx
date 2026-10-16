@@ -31,8 +31,9 @@ export default function PrivacyPage() {
       <DocSection title="What we collect">
         <p>
           <strong className="text-fg">Your account.</strong> Your email address and a hashed
-          version of your password (never the password itself). The display name, @handle and
-          bio you choose. Your phone number and how much you typically spend on betting a month,
+          version of your password (never the password itself). The display name, @handle, bio
+          and profile picture you choose — the picture is cropped and re-saved when you upload
+          it, which strips its location and camera details. Your phone number and how much you typically spend on betting a month,
           if you give them — both are optional. When you accepted the Terms, and when you last
           signed in.
         </p>
@@ -44,6 +45,12 @@ export default function PrivacyPage() {
           from and your browser. Reports you file, and who you mute or block — the person you
           report, mute or block is never told who did it, though a block shows on your profile
           to them.
+        </p>
+        <p>
+          <strong className="text-fg">The waitlist.</strong> If you join it, your email address,
+          which form you used and when. We use it only to tell you when sign-ups open. Every
+          waitlist email has a link to leave, and leaving deletes the address; so does making an
+          account.
         </p>
         <p>
           <strong className="text-fg">Signing in and security.</strong> For each device you sign
@@ -64,7 +71,7 @@ export default function PrivacyPage() {
 
       <DocSection title="Who can see it">
         <p>
-          Other testers see your display name, @handle and bio, your posts and replies, the
+          Other testers see your display name, @handle, profile picture and bio, your posts and replies, the
           posts you like and repost, who you follow and who follows you, and any parlay you
           share to Community.
         </p>
@@ -74,7 +81,8 @@ export default function PrivacyPage() {
           Oobee&apos;s admins can see all of the above, to run the beta.
         </p>
         <p>
-          A photo you post can be opened by anyone who has its link, without signing in.
+          A photo you post, and your profile picture, can be opened by anyone who has its link,
+          without signing in.
         </p>
       </DocSection>
 

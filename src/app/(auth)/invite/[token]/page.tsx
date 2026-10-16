@@ -4,9 +4,10 @@ import Link from "next/link";
 import { getAuth, hashToken } from "@/lib/auth";
 import { isInviteUsable, lookupInvite } from "@/lib/invitations";
 import { OnboardingForm } from "@/components/onboarding-form";
+import { signupEnabled } from "@/lib/signup";
 
 export const metadata: Metadata = {
-  title: "Accept your invite",
+  title: "Create your account",
   robots: { index: false, follow: false },
 };
 
@@ -25,11 +26,20 @@ export default async function InvitePage({
     return (
       <>
         <h1 className="text-2xl font-semibold tracking-tight">
-          This invite link isn&apos;t valid anymore
+          This link isn&apos;t valid anymore
         </h1>
         <p className="mt-2 text-sm text-fg-muted">
-          It may have expired, been revoked, or already been used. If that&apos;s a
-          mistake, ask whoever invited you to send a new one.
+          It may have expired or already been used.{" "}
+          {signupEnabled() ? (
+            <>
+              <Link href="/signup" className="text-brand hover:underline">
+                Sign up again
+              </Link>{" "}
+              for a fresh one, or ask whoever invited you to resend it.
+            </>
+          ) : (
+            "If that's a mistake, ask whoever invited you to send a new one."
+          )}
         </p>
         <p className="mt-8 text-sm text-fg-muted">
           Already have an account?{" "}
@@ -41,5 +51,5 @@ export default async function InvitePage({
     );
   }
 
-  return <OnboardingForm email={invite.email} token={token} />;
+  return <OnboardingForm email={invite.email} token={token} selfServe={invite.invitedBy === null} />;
 }

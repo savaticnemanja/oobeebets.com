@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, MailCheck } from "lucide-react";
+import { CheckCircle2, Loader2, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { requestPasswordResetAction, resetPasswordAction } from "@/app/actions/password-reset";
+import { changePasswordAction, requestPasswordResetAction, resetPasswordAction } from "@/app/actions/password-reset";
 import type { ActionState } from "@/lib/validation";
 
 function FieldError({ errors, id }: { errors?: string[]; id: string }) {
@@ -139,6 +139,88 @@ export function ResetPasswordForm({ token, email }: { token: string; email: stri
       <p className="text-center text-xs text-fg-subtle">
         This signs you out on every other device.
       </p>
+    </form>
+  );
+}
+
+/** Signed in, on the account page: the current password, then the new one twice. */
+export function ChangePasswordForm({ email }: { email: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(changePasswordAction, null);
+  const fe = state && !state.ok ? state.fieldErrors : undefined;
+  const form = useRef<HTMLFormElement>(null);
+  // Done: empty the fields, so the passwords don't sit in the page.
+  useEffect(() => {
+    if (state?.ok) form.current?.reset();
+  }, [state]);
+
+  return (
+    <form ref={form} action={action} className="space-y-4">
+      <FormError state={state} />
+      {state?.ok && (
+        <p role="status" className="flex gap-3 rounded-lg border border-hit/30 bg-hit-dim px-4 py-3 text-sm text-hit">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{state.message}</span>
+        </p>
+      )}
+      <input type="email" name="username" value={email} autoComplete="username" readOnly hidden />
+      <div>
+        <Label htmlFor="current-password">Current password</Label>
+        <Input
+          id="current-password"
+          name="current"
+          type="password"
+          autoComplete="current-password"
+          required
+          className="mt-1.5"
+          aria-invalid={Boolean(fe?.current)}
+          aria-describedby={fe?.current ? "current-error" : undefined}
+        />
+        <FieldError errors={fe?.current} id="current-error" />
+      </div>
+      <div>
+        <Label htmlFor="new-password">New password</Label>
+        <Input
+          id="new-password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          className="mt-1.5"
+          aria-invalid={Boolean(fe?.password)}
+          aria-describedby={fe?.password ? "new-password-error" : "new-password-hint"}
+        />
+        {fe?.password ? (
+          <FieldError errors={fe.password} id="new-password-error" />
+        ) : (
+          <p id="new-password-hint" className="mt-1.5 text-xs text-fg-subtle">
+            At least 8 characters.
+          </p>
+        )}
+      </div>
+      <div>
+        <Label htmlFor="confirm-password">Confirm new password</Label>
+        <Input
+          id="confirm-password"
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          required
+          className="mt-1.5"
+          aria-invalid={Boolean(fe?.confirm)}
+          aria-describedby={fe?.confirm ? "confirm-password-error" : undefined}
+        />
+        <FieldError errors={fe?.confirm} id="confirm-password-error" />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button type="submit" className="rounded-full" disabled={pending}>
+          {pending && <Loader2 className="animate-spin" aria-hidden="true" />}
+          Change password
+        </Button>
+        <Link href="/forgot-password" className="text-sm text-brand hover:underline">
+          Forgot it?
+        </Link>
+      </div>
     </form>
   );
 }

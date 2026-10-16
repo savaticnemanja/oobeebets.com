@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { and, eq, gt, lt, sql } from "drizzle-orm";
+import { and, eq, gt, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users, rateLimits } from "@/db/schema";
 import type { User } from "@/db/schema";
@@ -87,6 +87,14 @@ export async function destroySession(): Promise<void> {
 /** Revoke every session for a user. Used on password change and admin action. */
 export async function revokeAllSessions(userId: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+/** Every session but this request's — a password change keeps you signed in here. */
+export async function revokeOtherSessions(userId: string): Promise<void> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  await db
+    .delete(sessions)
+    .where(token ? and(eq(sessions.userId, userId), ne(sessions.tokenHash, hashToken(token))) : eq(sessions.userId, userId));
 }
 
 export interface AuthContext {

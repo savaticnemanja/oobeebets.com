@@ -74,6 +74,7 @@ export interface ParlayView {
   /** Who built it — filled for the Community tab, null elsewhere. */
   ownerUsername: string | null;
   ownerDisplayName: string | null;
+  ownerAvatarId: string | null;
   legs: ParlayLegView[];
   status: PickStatus;
   price: number | null;
@@ -108,6 +109,7 @@ interface ParlayRow {
   shared: boolean;
   ownerUsername?: string | null;
   ownerDisplayName?: string | null;
+  ownerAvatarId?: string | null;
 }
 
 /**
@@ -217,6 +219,7 @@ async function hydrate(rows: ParlayRow[]): Promise<ParlayView[]> {
       shared: r.shared,
       ownerUsername: r.ownerUsername ?? null,
       ownerDisplayName: r.ownerDisplayName ?? null,
+      ownerAvatarId: r.ownerAvatarId ?? null,
       legs,
       status: parlayStatus(legs),
       price: parlayPrice(legs, r.price),
@@ -337,6 +340,7 @@ export async function getCommunityParlayPage({
       ownerEmail: sql<string | null>`null`,
       ownerUsername: users.username,
       ownerDisplayName: users.displayName,
+      ownerAvatarId: users.avatarId,
       ownerRole: users.role,
     })
     .from(parlays)
@@ -373,6 +377,7 @@ export async function getPlayedParlays(userId: string): Promise<ParlayView[]> {
       ownerEmail: sql<string | null>`null`,
       ownerUsername: users.username,
       ownerDisplayName: users.displayName,
+      ownerAvatarId: users.avatarId,
     })
     .from(parlayFollows)
     .innerJoin(parlays, eq(parlays.id, parlayFollows.parlayId))
@@ -391,6 +396,7 @@ export async function getParlaysByIds(ids: string[]): Promise<ParlayView[]> {
       ownerEmail: sql<string | null>`null`,
       ownerUsername: users.username,
       ownerDisplayName: users.displayName,
+      ownerAvatarId: users.avatarId,
     })
     .from(parlays)
     .leftJoin(users, eq(users.id, parlays.ownerId))

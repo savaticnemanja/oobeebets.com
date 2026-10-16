@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { ProfileForm } from "@/components/social/profile-form";
+import { AvatarPicker } from "@/components/social/avatar-picker";
+import { ChangePasswordForm } from "@/components/password-reset-forms";
+import { displayNameOf } from "@/components/social/identity";
 import { ManagePlanButton } from "@/components/billing/plan-button";
 import { PlanList } from "@/components/billing/plan-list";
 import { viewerAccess } from "@/lib/billing/access";
@@ -38,6 +41,9 @@ export default async function AccountPage() {
           What other testers see on your profile and next to your posts. Your email and
           phone number are never shown.
         </p>
+        <div className="pt-1 text-fg">
+          <AvatarPicker name={displayNameOf(auth.user)} avatarId={auth.user.avatarId} />
+        </div>
         <div className="pt-1 text-fg">
           <ProfileForm
             displayName={auth.user.displayName ?? ""}
@@ -110,8 +116,11 @@ export default async function AccountPage() {
       <DocSection title="Security">
         <p>
           You&apos;re signed in on this device for 30 days. Signing out revokes the session
-          on the server immediately.
+          on the server immediately. Changing your password signs out every other device.
         </p>
+        <div className="pt-1 text-fg">
+          <ChangePasswordForm email={auth.user.email} />
+        </div>
       </DocSection>
     </DocPage>
   );

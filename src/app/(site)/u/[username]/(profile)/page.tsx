@@ -90,7 +90,7 @@ export default async function ProfilePage({
       <div className="h-28 border-b border-border bg-gradient-to-br from-brand/25 via-surface-2 to-surface sm:h-36" />
       <div className="px-4 pb-3">
         <div className="flex items-end justify-between">
-          <Avatar name={name} size="lg" className="-mt-10 border-black bg-surface-2 sm:-mt-12" />
+          <Avatar name={name} avatarId={profile.avatarId} size="lg" className="-mt-10 border-black bg-surface-2 sm:-mt-12" />
           <div className="flex items-center gap-2 pt-3">
             {self ? (
               <Button variant="outline" size="sm" className="rounded-full" asChild>

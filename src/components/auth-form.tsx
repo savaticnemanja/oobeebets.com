@@ -18,7 +18,7 @@ function FieldError({ errors, id }: { errors?: string[]; id: string }) {
   );
 }
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, signupOpen }: { next?: string; signupOpen: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     loginAction,
     null,
@@ -89,13 +89,11 @@ export function LoginForm({ next }: { next?: string }) {
         You&apos;ll stay signed in on this device for 30 days.
       </p>
 
-      {/* Invite-only: "Create one" here used to lead to a page saying you can't. */}
       <p className="text-center text-sm text-fg-muted">
-        No account? The beta is{" "}
+        No account?{" "}
         <Link href="/signup" className="text-brand hover:underline">
-          invite-only
-        </Link>{" "}
-        for now.
+          {signupOpen ? "Sign up" : "Join the waitlist"}
+        </Link>
       </p>
     </form>
   );

@@ -120,6 +120,7 @@ export interface Actor {
   username: string;
   displayName: string | null;
   role: Role;
+  avatarId: string | null;
 }
 
 /**
@@ -199,7 +200,7 @@ export async function getNotifications(
   const [actorRows, postMap, parlayViews, parlayPosts] = await Promise.all([
     actorIds.length
       ? db
-          .select({ id: users.id, username: users.username, displayName: users.displayName, role: users.role })
+          .select({ id: users.id, username: users.username, displayName: users.displayName, role: users.role, avatarId: users.avatarId })
           .from(users)
           .where(inArray(users.id, actorIds))
       : Promise.resolve([] as Actor[]),

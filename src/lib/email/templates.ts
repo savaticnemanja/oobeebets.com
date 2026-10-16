@@ -287,3 +287,187 @@ ${bodyHtml}`,
 
   return { subject: heading, html, text };
 }
+
+/* ------------------------------------------------- account and waitlist mail */
+
+/** A paragraph: plain text, or text ending in one link ("…: <label>."). */
+type Para = string | { text: string; link: { label: string; url: string } };
+
+/**
+ * The card most of the mail below shares: an optional kicker, a heading, a
+ * few paragraphs, one button and the raw link under it. Each template only
+ * decides the words. Paragraphs are plain text and escaped here.
+ */
+function actionEmail({
+  subject,
+  preheader,
+  kicker,
+  heading,
+  paragraphs: body,
+  cta,
+  linkNote,
+  footerNote,
+}: {
+  subject: string;
+  preheader: string;
+  kicker?: string;
+  heading: string;
+  paragraphs: Para[];
+  cta?: { label: string; url: string };
+  /** The line above the pasted-in link, e.g. "This link works for 48 hours." */
+  linkNote?: string;
+  footerNote: string;
+}): Email {
+  const p = (para: Para, last: boolean) => {
+    const inner =
+      typeof para === "string"
+        ? esc(para)
+        : `${esc(para.text)} <a href="${para.link.url}" style="color:${c.brand};text-decoration:underline;">${esc(para.link.label)}</a>.`;
+    return `              <p style="margin:0 0 ${last ? "0" : "16px"};font-family:${FONT};font-size:15px;line-height:1.6;color:${c.fgMuted};">${inner}</p>`;
+  };
+  const plain = (para: Para) => (typeof para === "string" ? para : `${para.text} ${para.link.url}`);
+
+  const html = shell({
+    preheader,
+    footerNote: esc(footerNote),
+    cardHtml: [
+      kicker &&
+        `              <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:${c.brand};">${esc(kicker)}</p>`,
+      `              <h1 style="margin:0 0 16px;font-family:${FONT};font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;color:${c.fg};">${esc(heading)}</h1>`,
+      ...body.map((text, i) => p(text, i === body.length - 1 && !cta)),
+      cta &&
+        `              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;">
+                <tr>
+                  <td bgcolor="${c.brandBg}" style="background-color:${c.brandBg};border-radius:10px;">
+                    <a href="${cta.url}" style="display:inline-block;padding:13px 28px;font-family:${FONT};font-size:15px;font-weight:600;color:#000000;text-decoration:none;">${esc(cta.label)}</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:28px 0 0;font-family:${FONT};font-size:13px;line-height:1.6;color:${c.fgSubtle};">
+                ${linkNote ? `${esc(linkNote)} ` : ""}If the button above doesn't work, paste this into your browser:
+              </p>
+              <p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:1.5;word-break:break-all;">
+                <a href="${cta.url}" style="color:${c.brand};text-decoration:underline;">${esc(cta.url)}</a>
+              </p>`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  });
+
+  const text = [
+    ...(kicker ? [kicker.toUpperCase(), ""] : []),
+    heading,
+    "",
+    body.map(plain).join("\n\n"),
+    ...(cta ? ["", `${cta.label}: ${cta.url}`] : []),
+    ...(linkNote ? ["", linkNote] : []),
+    "",
+    footerNote,
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+/** "You're on the list" — the one mail a waitlist sign-up gets until we open. */
+export function waitlistJoinedEmail({ leaveUrl }: { leaveUrl: string }): Email {
+  return actionEmail({
+    subject: "You're on the oobee bets waitlist",
+    preheader: "We'll email you once, the day sign-ups open. Nothing before that.",
+    kicker: "Waitlist",
+    heading: "You're on the list",
+    paragraphs: [
+      "Thanks for signing up. We're letting people in a few at a time while the board is in beta, and we'll email you the day there's a place for you.",
+      "That's the only mail you'll get from this list — no picks, no promotions. Every pick we publish is graded against the real final score and stays on the record, wins and losses alike, so you'll be able to check our results before you decide anything.",
+      { text: "Changed your mind?", link: { label: "Leave the waitlist", url: leaveUrl } },
+    ],
+    footerNote: `You're getting this because this address was entered on ${SITE.name}. If that wasn't you, ignore it — or use the link above and we'll forget it.`,
+  });
+}
+
+/** Sent to the waitlist when SIGNUP_ENABLED goes on and an admin tells them. */
+export function signupsOpenEmail({ signupUrl, leaveUrl }: { signupUrl: string; leaveUrl: string }): Email {
+  return actionEmail({
+    subject: "Sign-ups are open on oobee bets",
+    preheader: "You asked us to tell you — your place is ready.",
+    kicker: "Waitlist",
+    heading: "Your place is ready",
+    paragraphs: [
+      "You asked us to tell you when oobee bets opened up. It has: you can create your account now.",
+      "Enter this address on the sign-up page and we'll send a link to finish setting up — it takes about a minute.",
+      { text: "Not interested any more?", link: { label: "Leave the waitlist", url: leaveUrl } },
+    ],
+    cta: { label: "Create your account", url: signupUrl },
+    footerNote: "This is the one email the waitlist promised.",
+  });
+}
+
+/** The self-serve "invite": the link that leads to the account form. */
+export function signupLinkEmail({ signupUrl, hours }: { signupUrl: string; hours: number }): Email {
+  return actionEmail({
+    subject: "Finish creating your oobee bets account",
+    preheader: `Your sign-up link — it works for ${hours} hours.`,
+    heading: "Finish creating your account",
+    paragraphs: [
+      "Thanks for signing up. Follow the link below to choose a password and set up your profile. It also confirms this address is yours, which is where receipts and password resets will go.",
+    ],
+    cta: { label: "Create my account", url: signupUrl },
+    linkNote: `This link works once, for ${hours} hours.`,
+    footerNote: "If you didn't sign up, ignore this — no account is made unless the link is used.",
+  });
+}
+
+/**
+ * Someone signed up (or joined the waitlist) with an address that already has
+ * an account. The form says the same either way, so this mail is the only
+ * place the difference shows — in the owner's own inbox.
+ */
+export function accountExistsEmail({ loginUrl, resetUrl }: { loginUrl: string; resetUrl: string }): Email {
+  return actionEmail({
+    subject: "You already have an oobee bets account",
+    preheader: "Someone tried to sign up with this address — it already has an account.",
+    heading: "You already have an account",
+    paragraphs: [
+      "Someone — probably you — just tried to sign up with this address, but it already has an oobee bets account. There's no need to make another: sign in instead.",
+      { text: "Forgotten your password?", link: { label: "Choose a new one", url: resetUrl } },
+    ],
+    cta: { label: "Sign in", url: loginUrl },
+    footerNote: "If this wasn't you, you can ignore it. Nothing about your account has changed.",
+  });
+}
+
+/** After the account form is done, invite or sign-up alike. */
+export function welcomeEmail({ name, homeUrl, accountUrl }: { name: string; homeUrl: string; accountUrl: string }): Email {
+  return actionEmail({
+    subject: "Welcome to oobee bets",
+    preheader: "Your account is ready — here's what's on the board.",
+    heading: `Welcome, ${name}`,
+    paragraphs: [
+      "Your account is ready. Every game day we put out our game bets and player props, each with its price, its stake and the reasoning behind it — logged before kick-off and graded against the final score after.",
+      "Mark the ones you take and your profile keeps your own record alongside ours.",
+      { text: "Add a profile picture and a bio from", link: { label: "your account page", url: accountUrl } },
+      "Please bet responsibly. If gambling stops being fun, call or text 1-800-GAMBLER.",
+    ],
+    cta: { label: "See the board", url: homeUrl },
+    footerNote: `You're getting this because you just created an account on ${SITE.name}.`,
+  });
+}
+
+/**
+ * Security notice after a password change or reset. Sent to the address on
+ * the account, so whoever really owns it hears about a change they didn't make.
+ */
+export function passwordChangedEmail({ at, resetUrl }: { at: Date; resetUrl: string }): Email {
+  const when = `${formatDate(at)} at ${at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" })}`;
+  return actionEmail({
+    subject: "Your oobee bets password was changed",
+    preheader: `Your password was changed ${when}.`,
+    heading: "Your password was changed",
+    paragraphs: [
+      `The password on your oobee bets account was changed ${when}, and every other device was signed out.`,
+      "If that was you, there's nothing to do. If it wasn't, reset it now — the link below signs everyone out again, including whoever changed it.",
+    ],
+    cta: { label: "Reset my password", url: resetUrl },
+    footerNote: "We send this after every password change, so you always know about one.",
+  });
+}

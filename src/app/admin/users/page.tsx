@@ -5,6 +5,7 @@ import { invitations, subscriptions, users } from "@/db/schema";
 import { LIVE_STATUSES } from "@/lib/billing/access";
 import { TIERS, TIER_ORDER } from "@/lib/tiers";
 import { getAuth } from "@/lib/auth";
+import { signupEnabled } from "@/lib/signup";
 import { UserTable } from "@/components/admin/user-table";
 import { InvitePanel } from "@/components/admin/invite-panel";
 import type { Metadata } from "next";
@@ -74,7 +75,9 @@ export default async function AdminUsersPage() {
       <div className="mt-8">
         <h2 className="text-sm font-semibold tracking-tight">Invite a tester</h2>
         <p className="mt-1 text-sm text-fg-muted">
-          Signup is invite-only — this is the only way a new account gets created.
+          {signupEnabled()
+            ? "Sign-ups are open, so anyone can also make an account from /signup."
+            : "Sign-ups are closed, so this and the waitlist are the only ways in."}
         </p>
         <div className="mt-4">
           <InvitePanel invitations={inviteRows} />

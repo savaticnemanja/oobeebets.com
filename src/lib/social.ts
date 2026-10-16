@@ -27,6 +27,8 @@ export interface PostAuthor {
   username: string;
   displayName: string | null;
   role: Role;
+  /** Their profile picture (users.avatar_id), for <Avatar>. */
+  avatarId: string | null;
 }
 
 export interface PostPreview {
@@ -141,6 +143,7 @@ function selectPosts(viewerId: string | null) {
       authorUsername: users.username,
       authorDisplayName: users.displayName,
       authorRole: users.role,
+      authorAvatarId: users.avatarId,
       replyToUsername: parentAuthor.username,
       likeCount: LIKE_COUNT,
       replyCount: REPLY_COUNT,
@@ -181,6 +184,7 @@ function toFeedPost(r: Row): FeedPost {
       username: r.authorUsername,
       displayName: r.authorDisplayName,
       role: r.authorRole,
+      avatarId: r.authorAvatarId,
     },
     replyToUsername: r.replyToUsername,
     likeCount: Number(r.likeCount),
@@ -340,6 +344,7 @@ async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
       username: users.username,
       displayName: users.displayName,
       role: users.role,
+      avatarId: users.avatarId,
     })
     .from(posts)
     .innerJoin(users, eq(users.id, posts.authorId))
@@ -357,7 +362,7 @@ async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
         id: r.id,
         body: r.body,
         createdAt: r.createdAt,
-        author: { id: r.authorId, username: r.username, displayName: r.displayName, role: r.role },
+        author: { id: r.authorId, username: r.username, displayName: r.displayName, role: r.role, avatarId: r.avatarId },
         parlayTitle: r.parlayId ? (title.get(r.parlayId) ?? null) : null,
         hasMedia: (media.get(r.id)?.length ?? 0) > 0,
       },
@@ -428,6 +433,7 @@ export async function getFollowingReposts(opts: {
       byUsername: reposter.username,
       byDisplayName: reposter.displayName,
       byRole: reposter.role,
+      byAvatarId: reposter.avatarId,
     })
     .from(postReposts)
     .innerJoin(reposter, eq(reposter.id, postReposts.userId))
@@ -449,7 +455,7 @@ export async function getFollowingReposts(opts: {
   return rows.flatMap((r) => {
     const post = byId.get(r.postId);
     if (!post) return [];
-    return [{ post, at: r.at, by: { id: r.byId, username: r.byUsername, displayName: r.byDisplayName, role: r.byRole } }];
+    return [{ post, at: r.at, by: { id: r.byId, username: r.byUsername, displayName: r.byDisplayName, role: r.byRole, avatarId: r.byAvatarId } }];
   });
 }
 
@@ -535,6 +541,7 @@ export interface Profile {
   displayName: string | null;
   bio: string | null;
   role: Role;
+  avatarId: string | null;
   createdAt: Date;
   followers: number;
   following: number;
@@ -553,6 +560,7 @@ export async function getProfile(username: string, viewerId: string | null): Pro
       displayName: users.displayName,
       bio: users.bio,
       role: users.role,
+      avatarId: users.avatarId,
       createdAt: users.createdAt,
       followers: sql<number>`(select count(*)::int from ${userFollows} where ${userFollows.followeeId} = ${users.id})`,
       following: sql<number>`(select count(*)::int from ${userFollows} where ${userFollows.followerId} = ${users.id})`,
@@ -592,6 +600,7 @@ export interface UserListItem {
   displayName: string | null;
   bio: string | null;
   role: Role;
+  avatarId: string | null;
   viewerFollows: boolean;
   followsViewer: boolean;
 }
@@ -603,6 +612,7 @@ function userListColumns(viewerId: string | null) {
     displayName: users.displayName,
     bio: users.bio,
     role: users.role,
+    avatarId: users.avatarId,
     viewerFollows: viewerId
       ? sql<boolean>`exists(select 1 from ${userFollows} as "vf" where "vf"."follower_id" = ${viewerId} and "vf"."followee_id" = ${users.id})`
       : sql<boolean>`false`,

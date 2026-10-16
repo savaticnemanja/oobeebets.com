@@ -104,7 +104,7 @@ function FieldError({ message, id }: { message?: string; id: string }) {
   );
 }
 
-export function OnboardingForm({ email, token }: { email: string; token: string }) {
+export function OnboardingForm({ email, token, selfServe }: { email: string; token: string; selfServe: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(acceptInviteAction, null);
   const [step, setStep] = React.useState<Step>(1);
 
@@ -213,7 +213,9 @@ export function OnboardingForm({ email, token }: { email: string; token: string 
         {/* --------------------------------------------------------- step 1 */}
         <div className={step === 1 ? "space-y-4" : "hidden"}>
           <p className="text-sm text-fg-muted">
-            You&apos;ve been invited to oobee bets. This link is tied to one email address.
+            {selfServe
+              ? "You're creating an oobee bets account. This link is tied to one email address."
+              : "You've been invited to oobee bets. This link is tied to one email address."}
           </p>
           <div>
             <Label>Email</Label>

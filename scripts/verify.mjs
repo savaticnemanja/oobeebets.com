@@ -439,7 +439,7 @@ console.log("\nStripe webhook (/api/webhooks/stripe)");
 
 console.log("\nAccess control");
 
-const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/announce", "/admin/feedback"];
+const adminRoutes = ["/admin", "/admin/slate", "/admin/settle", "/admin/users", "/admin/waitlist", "/admin/announce", "/admin/feedback"];
 
 {
   for (const route of adminRoutes) {

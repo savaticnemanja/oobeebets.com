@@ -117,7 +117,7 @@ export async function loadCommunityChunk({
           key={pl.id}
           parlay={pl}
           variant="row"
-          owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName, role: ownerRole }}
+          owner={{ username: pl.ownerUsername!, displayName: pl.ownerDisplayName, avatarId: pl.ownerAvatarId, role: ownerRole }}
         />
       ),
     );

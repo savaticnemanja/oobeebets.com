@@ -47,7 +47,7 @@ export function ParlayCard({
    * are posts and draw as one (social/parlay-ticket.tsx); this is for the
    * rare shared ticket with no post behind it.
    */
-  owner?: { username: string; displayName: string | null; role?: Role };
+  owner?: { username: string; displayName: string | null; avatarId?: string | null; role?: Role };
   /** A line above the header — where a ticket on Stats came from. */
   kicker?: React.ReactNode;
   /** The viewer can play (tail) this ticket: its circle, as on a pick. */
@@ -108,7 +108,7 @@ export function ParlayCard({
               href={`/u/${owner.username}`}
               className="flex min-w-0 items-center gap-2 text-xs hover:underline"
             >
-              <Avatar name={displayNameOf(owner)} size="sm" className="size-6 text-[0.625rem]" />
+              <Avatar name={displayNameOf(owner)} avatarId={owner.avatarId} size="sm" className="size-6 text-[0.625rem]" />
               <span className="truncate font-semibold text-fg">{displayNameOf(owner)}</span>
               {owner.role && <TeamBadge role={owner.role} />}
               <span className="truncate text-fg-subtle">@{owner.username}</span>

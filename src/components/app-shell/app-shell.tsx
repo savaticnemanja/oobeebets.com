@@ -37,7 +37,7 @@ export async function AppShell({
   const [suggestions, unread] = await Promise.all([getWhoToFollow(user.id, 5), unreadCount(user.id)]);
 
   return (
-    <ViewerProvider viewer={{ id: user.id, name: user.name, username: user.username }}>
+    <ViewerProvider viewer={{ id: user.id, name: user.name, username: user.username, avatarId: user.avatarId }}>
     <UnreadProvider initial={unread}>
     <div className="mx-auto flex w-full max-w-[1325px] justify-center pl-safe-left pr-safe-right">
       <header className="sticky top-0 hidden h-dvh w-[4.5rem] shrink-0 flex-col items-center px-2 pb-3 pt-safe-top sm:flex xl:w-[275px] xl:items-stretch xl:px-3">

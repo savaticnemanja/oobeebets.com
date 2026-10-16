@@ -54,6 +54,8 @@ export interface SendEmailArgs {
    * person would be swallowed. See issueInvite, which keys on the token.
    */
   idempotencyKey?: string;
+  /** Extra headers — List-Unsubscribe on waitlist mail (see lib/waitlist.ts). */
+  headers?: Record<string, string>;
 }
 
 export async function sendEmail({
@@ -62,13 +64,14 @@ export async function sendEmail({
   html,
   text,
   idempotencyKey: key,
+  headers,
 }: SendEmailArgs): Promise<void> {
   if (!from) {
     throw new Error("EMAIL_FROM is not set — see .env.example.");
   }
 
   const { error } = await resend().emails.send(
-    { from, to, subject, html, text, replyTo },
+    { from, to, subject, html, text, replyTo, headers },
     key ? { idempotencyKey: key } : undefined,
   );
   if (error) {
@@ -131,4 +134,36 @@ export async function sendBulkEmail(
   }
 
   return result;
+}
+
+/**
+ * Different mail to each recipient, a hundred per request — the waitlist's
+ * "sign-ups are open", where every message carries its reader's own link.
+ * Returns the addresses that went, so the caller records exactly those.
+ */
+export async function sendEmailBatch(messages: SendEmailArgs[]): Promise<{ sent: string[]; failed: string[] }> {
+  if (!from) {
+    throw new Error("EMAIL_FROM is not set — see .env.example.");
+  }
+  const out = { sent: [] as string[], failed: [] as string[] };
+  const client = resend();
+  for (let i = 0; i < messages.length; i += BATCH_LIMIT) {
+    const chunk = messages.slice(i, i + BATCH_LIMIT);
+    const to = chunk.map((m) => m.to);
+    try {
+      const { error } = await client.batch.send(
+        chunk.map((m) => ({ from: from!, to: m.to, subject: m.subject, html: m.html, text: m.text, replyTo, headers: m.headers })),
+      );
+      if (error) {
+        console.error(`[email] batch of ${chunk.length} rejected: ${error.name} — ${error.message}`);
+        out.failed.push(...to);
+      } else {
+        out.sent.push(...to);
+      }
+    } catch (err) {
+      console.error(`[email] batch of ${chunk.length} failed:`, err);
+      out.failed.push(...to);
+    }
+  }
+  return out;
 }

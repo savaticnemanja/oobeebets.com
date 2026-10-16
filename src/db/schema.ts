@@ -133,6 +133,12 @@ export const users = pgTable(
     termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
     /** Their Stripe Customer, made at their first checkout and reused after. */
     stripeCustomerId: text("stripe_customer_id"),
+    /**
+     * Their profile picture, if they've set one (see `avatars`). A new
+     * picture is a new row and a new id, which is what lets /api/avatars
+     * serve each one as immutable.
+     */
+    avatarId: uuid("avatar_id").references((): AnyPgColumn => avatars.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -233,6 +239,39 @@ export const invitations = pgTable(
   (t) => [
     uniqueIndex("invitations_email_unique").on(t.email),
     uniqueIndex("invitations_token_hash_unique").on(t.tokenHash),
+  ],
+);
+
+/* -------------------------------------------------------------- waitlist */
+
+/**
+ * People who asked to hear when sign-ups open — the form on the landing page
+ * and /signup while SIGNUP_ENABLED is off. Stored here, not only in Resend,
+ * because admins invite from it (/admin/waitlist) and a row goes the moment
+ * its address makes an account.
+ *
+ * `leave_token` is in the link every waitlist email carries to take them off
+ * it. Stored as-is, unlike invite tokens: each later email has to carry the
+ * same working link, and the worst a leaked one does is take someone off a
+ * waitlist. Leaving deletes the row — the leave page promises to forget them.
+ */
+export const waitlist = pgTable(
+  "waitlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    leaveToken: text("leave_token").notNull(),
+    /** "landing" or "signup" — which form they used. */
+    source: text("source").notNull(),
+    /** When an admin sent them an invite from /admin/waitlist. */
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    /** When they were told sign-ups are open. */
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("waitlist_email_unique").on(t.email),
+    uniqueIndex("waitlist_leave_token_unique").on(t.leaveToken),
   ],
 );
 
@@ -654,6 +693,29 @@ export const parlayFollows = pgTable(
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
 });
+
+/**
+ * Profile pictures, already processed (lib/avatars.ts): square WebP, metadata
+ * stripped, in the two sizes the site shows — `small` (96px) for feeds and
+ * lists, `large` (320px) for the profile header. A few KB and ~15 KB, so a
+ * page of thirty posts costs well under 100 KB of avatars, once.
+ *
+ * One live row per user (the unique index); replacing a picture deletes the
+ * old row in the same transaction.
+ */
+export const avatars = pgTable(
+  "avatars",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    small: bytea("small").notNull(),
+    large: bytea("large").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("avatars_user_unique").on(t.userId)],
+);
 
 /**
  * Images and GIFs on posts, up to four per post. An upload is written before

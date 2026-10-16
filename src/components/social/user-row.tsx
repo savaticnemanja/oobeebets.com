@@ -16,7 +16,7 @@ export function UserRow({
   return (
     <div className="flex gap-3 px-4 py-3 transition-colors hover:bg-surface/60">
       <Link href={`/u/${user.username}`} aria-label={displayNameOf(user)}>
-        <Avatar name={displayNameOf(user)} />
+        <Avatar name={displayNameOf(user)} avatarId={user.avatarId} />
       </Link>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">

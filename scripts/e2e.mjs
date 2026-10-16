@@ -24,6 +24,8 @@ import { chromium } from "playwright";
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
 import { addDays } from "../src/lib/slate-date.ts";
+import bcrypt from "bcryptjs";
+import sharp from "sharp";
 import {
   STATS_PLAYERS,
   STATS_SEASON,
@@ -130,6 +132,8 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   const inviteTokenHash = createHash("sha256").update(inviteToken).digest("hex");
   await sql`insert into invitations (email, token_hash, status, expires_at)
             values (${testEmail}, ${inviteTokenHash}, 'pending', ${new Date(Date.now() + 3600_000)})`;
+  // They'd joined the waitlist first; making the account takes them off it.
+  await sql`insert into waitlist (email, leave_token, source) values (${testEmail}, ${randomBytes(24).toString("base64url")}, 'landing')`;
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -172,6 +176,8 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(page.url().includes("/home"), "onboarding lands on Home");
   const [accepted] = await sql`select terms_accepted_at from users where email = ${testEmail}`;
   check(Boolean(accepted?.terms_accepted_at), "the account records when the Terms were accepted");
+  const [{ waiting }] = await sql`select count(*)::int as waiting from waitlist where email = ${testEmail}`;
+  check(waiting === 0, "making the account takes the address off the waitlist");
   // Waited for, not read straight off the page: Home has a loading skeleton,
   // and the client-side redirect after Finish lands while it is still showing.
   check(
@@ -957,6 +963,151 @@ console.log("\nGame-day board");
 
   await sql`update slates set published_at = ${publishedAt} where date = ${latestSlate}`;
   await sql`delete from games where id = 'e2e-gameday-1'`;
+}
+
+/* ------------------------------------- waitlist, password, profile picture */
+
+console.log("\nWaitlist, change password and profile pictures");
+{
+  // Sign-ups are closed in CI (SIGNUP_ENABLED unset): the landing form joins
+  // the waitlist. The email itself fails without Resend; the row is what counts.
+  const waitEmail = `e2e-wait-${Date.now()}@example.com`;
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/`);
+  await hydrated(page, 'form input[name="email"]');
+  await page.locator('form input[name="email"]').first().fill(waitEmail);
+  await page.getByRole("button", { name: "Join waitlist" }).first().click();
+  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  let row;
+  for (let i = 0; i < 40 && !row; i++) {
+    [row] = await sql`select leave_token, source from waitlist where email = ${waitEmail}`;
+    if (!row) await page.waitForTimeout(250);
+  }
+  check(row?.source === "landing", "the landing form puts you on the waitlist", `${row?.source}`);
+
+  // An address that already has an account gets the very same reply, and no row.
+  await page.goto(`${APP_URL}/signup`);
+  await hydrated(page, 'form input[name="email"]');
+  await page.locator('form input[name="email"]').fill(testEmail);
+  await page.getByRole("button", { name: "Join waitlist" }).click();
+  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  await page.waitForTimeout(500);
+  const [{ n: accountRows }] = await sql`select count(*)::int as n from waitlist where email = ${testEmail}`;
+  check(accountRows === 0, "an existing account isn't put on it, and the reply doesn't say so");
+
+  await page.goto(`${APP_URL}/login`);
+  check((await page.getByRole("link", { name: "Join the waitlist" }).count()) === 1, "sign-in points to the waitlist while sign-ups are closed");
+
+  // Admins see who's waiting.
+  const adminCtx = await browser.newContext();
+  await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const admin = await adminCtx.newPage();
+  await admin.goto(`${APP_URL}/admin/waitlist`);
+  await loaded(admin);
+  check((await admin.locator("li[data-waitlist-id]", { hasText: waitEmail }).count()) === 1, "the admin waitlist lists them");
+  await adminCtx.close();
+
+  // The leave link asks first: opening it changes nothing.
+  await page.goto(`${APP_URL}/waitlist/leave?token=${encodeURIComponent(row.leave_token)}`);
+  await hydrated(page);
+  const [{ n: still }] = await sql`select count(*)::int as n from waitlist where email = ${waitEmail}`;
+  check(still === 1, "opening the leave link doesn't act on its own");
+  await page.getByRole("button", { name: "Yes, take me off the waitlist" }).click();
+  await page.getByText("You're off the waitlist").waitFor({ timeout: 10000 });
+  const [{ n: gone }] = await sql`select count(*)::int as n from waitlist where email = ${waitEmail}`;
+  check(gone === 0, "leaving deletes the address");
+
+  // A mailbox's one-click unsubscribe (RFC 8058) is a bare POST.
+  const oneClick = randomBytes(24).toString("base64url");
+  await sql`insert into waitlist (email, leave_token, source) values (${`e2e-oneclick-${Date.now()}@example.com`}, ${oneClick}, 'signup')`;
+  const res = await page.request.post(`${APP_URL}/api/waitlist/leave?token=${oneClick}`);
+  const [{ n: oneClickLeft }] = await sql`select count(*)::int as n from waitlist where leave_token = ${oneClick}`;
+  check(res.status() === 204 && oneClickLeft === 0, "one-click unsubscribe takes them off", `${res.status()}`);
+  await ctx.close();
+}
+{
+  // Change password, signed in: needs the current one, keeps this device,
+  // signs out every other. The account's password is the one section 6 set.
+  const [u] = await sql`select id from users where email = ${testEmail}`;
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(testEmail)]);
+  const elsewhere = await sessionCookie(testEmail);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/account`);
+  await hydrated(page, "#current-password");
+  await page.fill("#current-password", "not-my-password");
+  await page.fill("#new-password", "changed-on-the-account-page");
+  await page.fill("#confirm-password", "changed-on-the-account-page");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await page.getByText("That isn't your current password").waitFor({ timeout: 10000 });
+  check(true, "a wrong current password is refused");
+
+  await page.fill("#current-password", "a-brand-new-password");
+  await page.fill("#new-password", "changed-on-the-account-page");
+  await page.fill("#confirm-password", "changed-on-the-account-page");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await page.getByText("Password changed").waitFor({ timeout: 10000 });
+  const [{ password_hash: hash }] = await sql`select password_hash from users where id = ${u.id}`;
+  check(await bcrypt.compare("changed-on-the-account-page", hash), "the new password is the one stored");
+  const elsewhereHash = createHash("sha256").update(elsewhere.value).digest("hex");
+  const [{ n: otherLeft }] = await sql`select count(*)::int as n from sessions where token_hash = ${elsewhereHash}`;
+  const [{ n: mine }] = await sql`select count(*)::int as n from sessions where user_id = ${u.id}`;
+  check(otherLeft === 0 && mine === 1, "every other device is signed out, this one stays", `other=${otherLeft} mine=${mine}`);
+  await ctx.close();
+}
+{
+  // A profile picture: shrunk in the browser, cropped and re-encoded on the
+  // server, served small, and shown wherever the person is.
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/account`);
+  await hydrated(page, 'input[aria-label="Profile picture"]');
+  const photo = await sharp({ create: { width: 1800, height: 1200, channels: 3, background: { r: 30, g: 140, b: 220 } } })
+    .jpeg()
+    .toBuffer();
+  await page.locator('input[aria-label="Profile picture"]').setInputFiles({ name: "me.jpg", mimeType: "image/jpeg", buffer: photo });
+  let avatarId = null;
+  for (let i = 0; i < 60 && !avatarId; i++) {
+    [{ avatar_id: avatarId }] = await sql`select avatar_id from users where id = ${tester.id}`;
+    if (!avatarId) await page.waitForTimeout(250);
+  }
+  check(Boolean(avatarId), "uploading a photo sets the profile picture");
+
+  const small = await page.request.get(`${APP_URL}/api/avatars/${avatarId}/small`);
+  const large = await page.request.get(`${APP_URL}/api/avatars/${avatarId}/large`);
+  const smallMeta = await sharp(await small.body()).metadata();
+  const largeMeta = await sharp(await large.body()).metadata();
+  check(
+    small.headers()["content-type"] === "image/webp" && smallMeta.width === 96 && smallMeta.height === 96 && largeMeta.width === 320,
+    "it's stored as square WebP in two sizes",
+    `${smallMeta.width}x${smallMeta.height}, ${largeMeta.width}x${largeMeta.height}`,
+  );
+  check((await small.body()).length < 10_000, "the small one is a few KB", `${(await small.body()).length} bytes`);
+  check((small.headers()["cache-control"] ?? "").includes("immutable"), "each picture is cached for good");
+
+  await page.goto(`${APP_URL}/home`);
+  await loaded(page);
+  check((await page.locator(`img[src="/api/avatars/${avatarId}/small"]`).count()) >= 1, "it shows in the app, not only on the account page");
+
+  const notImage = await page.request.post(`${APP_URL}/api/avatar`, {
+    multipart: { file: { name: "x.png", mimeType: "image/png", buffer: Buffer.from("not an image at all") } },
+  });
+  check(notImage.status() === 415, "a file that isn't an image is refused", `${notImage.status()}`);
+
+  await page.goto(`${APP_URL}/account`);
+  await hydrated(page, 'input[aria-label="Profile picture"]');
+  await page.getByRole("button", { name: "Remove" }).click();
+  let cleared = false;
+  for (let i = 0; i < 40 && !cleared; i++) {
+    const [r] = await sql`select avatar_id, (select count(*)::int from avatars where user_id = ${tester.id}) as n from users where id = ${tester.id}`;
+    cleared = r.avatar_id === null && r.n === 0;
+    if (!cleared) await page.waitForTimeout(250);
+  }
+  check(cleared, "removing it deletes the picture");
+  await ctx.close();
 }
 
 /* ------------------------------- back to the same spot, replies, quotes */

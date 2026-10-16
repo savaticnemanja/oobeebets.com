@@ -69,6 +69,7 @@ export const NAV_ADMIN = [
   { href: "/admin/slate", label: "Publish slate" },
   { href: "/admin/settle", label: "Settle" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/waitlist", label: "Waitlist" },
   { href: "/admin/follows", label: "Follows" },
   { href: "/admin/parlays", label: "Parlays" },
   { href: "/admin/announce", label: "Announce" },

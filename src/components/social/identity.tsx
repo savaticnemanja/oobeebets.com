@@ -2,11 +2,12 @@ import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import type { Role } from "@/db/schema";
 import { cn } from "@/lib/utils";
+import { avatarSrc } from "@/lib/avatar-src";
 
 /**
- * Who someone is, in the three sizes the social pages need. No uploaded
- * avatars yet — an initial on the brand surface, the same mark the header's
- * account menu already uses, so a person looks the same everywhere.
+ * Who someone is, in the three sizes the social pages need: their profile
+ * picture if they've set one (lib/avatars.ts), else an initial on the brand
+ * surface — the same mark everywhere, so a person looks the same everywhere.
  *
  * Admins carry a check, as X's verified badge does, because on this site an
  * admin *is* the house: a tester should be able to tell Oobee's own posts
@@ -21,13 +22,29 @@ const SIZES = {
 
 export function Avatar({
   name,
+  avatarId,
   size = "md",
   className,
 }: {
   name: string;
+  /** users.avatar_id; null or absent shows the initial. */
+  avatarId?: string | null;
   size?: keyof typeof SIZES;
   className?: string;
 }) {
+  if (avatarId) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- already sized WebP; next/image would only re-encode it
+      <img
+        src={avatarSrc(avatarId, size === "lg" ? "large" : "small")}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        className={cn("shrink-0 rounded-full border border-border bg-surface-2 object-cover", SIZES[size], className)}
+      />
+    );
+  }
   return (
     <span
       aria-hidden="true"

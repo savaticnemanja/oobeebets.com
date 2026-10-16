@@ -22,6 +22,8 @@ import { HelpLine } from "@/components/help-line";
 export interface ShellUser {
   name: string;
   username: string;
+  /** users.avatar_id, for <Avatar>. */
+  avatarId: string | null;
   isAdmin: boolean;
 }
 
@@ -40,7 +42,7 @@ export function SidebarAccount({ user }: { user: ShellUser }) {
         aria-label={t().nav.accountMenu}
         className="flex w-full items-center justify-center gap-3 rounded-full p-2 text-left transition-colors duration-150 hover:bg-white/[0.07] xl:justify-start xl:px-3 xl:py-2.5"
       >
-        <Avatar name={user.name} />
+        <Avatar name={user.name} avatarId={user.avatarId} />
         <span className="hidden min-w-0 flex-1 xl:block">
           <span className="block truncate text-sm font-semibold text-fg">{user.name}</span>
           <span className="block truncate text-sm text-fg-subtle">@{user.username}</span>
@@ -84,12 +86,12 @@ export function MobileTopBar({ user }: { user: ShellUser }) {
         <div className="relative flex h-14 items-center px-4">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger aria-label={t().nav.openMenu} className="rounded-full">
-              <Avatar name={user.name} size="sm" className="size-8" />
+              <Avatar name={user.name} avatarId={user.avatarId} size="sm" className="size-8" />
             </DialogTrigger>
             {/* A sheet from the left edge rather than the centred card. */}
             <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[80vw] max-w-xs translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 pt-[calc(1.5rem+var(--spacing-safe-top))]">
               <DialogTitle className="sr-only">Navigation</DialogTitle>
-              <Avatar name={user.name} />
+              <Avatar name={user.name} avatarId={user.avatarId} />
               <p className="mt-3 truncate font-semibold text-fg">{user.name}</p>
               <p className="truncate text-sm text-fg-subtle">@{user.username}</p>
               <nav aria-label={t().nav.mobileNav} className="mt-6 flex flex-col">

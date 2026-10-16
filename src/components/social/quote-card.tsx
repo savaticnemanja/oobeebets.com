@@ -16,7 +16,7 @@ export function QuoteCard({ quote, link = true, className }: { quote: QuotedPost
   const inner = (
     <>
       <div className="flex min-w-0 items-center gap-1.5">
-        <Avatar name={displayNameOf(quote.author)} size="sm" className="size-5 text-[0.625rem]" />
+        <Avatar name={displayNameOf(quote.author)} avatarId={quote.author.avatarId} size="sm" className="size-5 text-[0.625rem]" />
         <NameLine user={quote.author} link={false} />
         <span className="text-sm text-fg-subtle" aria-hidden="true">·</span>
         <LocalTime at={quote.createdAt} format="ago" className="shrink-0 text-sm text-fg-subtle" />

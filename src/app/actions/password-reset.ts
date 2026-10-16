@@ -8,10 +8,10 @@ import { and, eq, gt, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { auditLog, passwordResets, rateLimits, sessions, users } from "@/db/schema";
-import { clientIp, createSession, hashPassword, hashToken, rateLimit } from "@/lib/auth";
+import { clientIp, createSession, getAuth, hashPassword, hashToken, rateLimit, revokeOtherSessions, verifyPassword } from "@/lib/auth";
 import { emailSchema, fieldErrorsFrom, passwordSchema, type ActionState } from "@/lib/validation";
 import { idempotencyKey, sendEmail } from "@/lib/email/resend-client";
-import { passwordResetEmail } from "@/lib/email/templates";
+import { passwordChangedEmail, passwordResetEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
 
 /**
@@ -147,6 +147,67 @@ export async function resetPasswordAction(_prev: ActionState, formData: FormData
 
   if (!done) return { ok: false, error: "This reset link isn't valid anymore. Ask for a new one." };
 
+  notifyPasswordChanged(done.email);
   await createSession(done.id);
   redirect("/home");
+}
+
+/** The "your password was changed" notice, after the response — see passwordChangedEmail. */
+function notifyPasswordChanged(email: string) {
+  const at = new Date();
+  after(async () => {
+    try {
+      await sendEmail({ to: email, ...passwordChangedEmail({ at, resetUrl: appUrl("/forgot-password") }) });
+    } catch (err) {
+      console.error("[password] could not send the change notice:", err);
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ change */
+
+const changeSchema = z
+  .object({
+    current: z.string().min(1, "Enter your current password"),
+    password: passwordSchema,
+    confirm: z.string(),
+  })
+  .refine((d) => d.password === d.confirm, { message: "Passwords don't match", path: ["confirm"] })
+  .refine((d) => d.password !== d.current, { message: "That's the password you have now", path: ["password"] });
+
+/**
+ * Changing it while signed in, from the account page. Needs the current one,
+ * so a session left open on a shared computer can't be used to take the
+ * account over. Keeps this device signed in and signs out every other.
+ */
+export async function changePasswordAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const auth = await getAuth();
+  if (!auth) return { ok: false, error: "Your session expired — sign in again." };
+
+  const parsed = changeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { ok: false, error: "Check the fields below", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+  if (!(await rateLimit("password:change", auth.user.id, 5, 15 * 60 * 1000))) {
+    return { ok: false, error: "Too many attempts. Try again in 15 minutes." };
+  }
+  if (!(await verifyPassword(parsed.data.current, auth.user.passwordHash))) {
+    return { ok: false, error: "Check the fields below", fieldErrors: { current: ["That isn't your current password"] } };
+  }
+
+  await db
+    .update(users)
+    .set({ passwordHash: await hashPassword(parsed.data.password), updatedAt: new Date() })
+    .where(eq(users.id, auth.user.id));
+  await revokeOtherSessions(auth.user.id);
+  await db.insert(auditLog).values({
+    actorId: auth.user.id,
+    actorEmail: auth.user.email,
+    action: "user.password_changed",
+    entity: "user",
+    entityId: auth.user.id,
+  });
+
+  notifyPasswordChanged(auth.user.email);
+  return { ok: true, message: "Password changed. Every other device has been signed out." };
 }

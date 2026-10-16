@@ -24,6 +24,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             id: auth.user.id,
             name: displayNameOf(auth.user),
             username: auth.user.username,
+            avatarId: auth.user.avatarId,
             isAdmin: auth.isAdmin,
           }}
         >

@@ -6,6 +6,7 @@ export interface Viewer {
   id: string;
   name: string;
   username: string;
+  avatarId: string | null;
 }
 
 const ViewerContext = React.createContext<Viewer | null>(null);

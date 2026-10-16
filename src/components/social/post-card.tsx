@@ -141,7 +141,7 @@ export function PostCard({
               together with the ancestor's it spans the whole gap. */}
           {threadAbove && <span className="mb-1 h-2 w-0.5 bg-border-strong" aria-hidden="true" />}
           <Link href={`/u/${post.author.username}`} aria-label={displayNameOf(post.author)}>
-            <Avatar name={displayNameOf(post.author)} />
+            <Avatar name={displayNameOf(post.author)} avatarId={post.author.avatarId} />
           </Link>
           {/* Runs to the row's very bottom (no bottom padding on an ancestor),
               meeting the line at the top of the reply. */}
@@ -156,7 +156,7 @@ export function PostCard({
         {detail ? (
           <div className="flex items-center gap-3">
             <Link href={`/u/${post.author.username}`} aria-label={displayNameOf(post.author)}>
-              <Avatar name={displayNameOf(post.author)} />
+              <Avatar name={displayNameOf(post.author)} avatarId={post.author.avatarId} />
             </Link>
             <NameLine user={post.author} stacked />
             <div className="ml-auto">

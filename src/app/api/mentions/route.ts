@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const like = q.replace(/_/g, "\\_");
   const follows = sql<boolean>`exists(select 1 from ${userFollows} where ${userFollows.followerId} = ${auth.user.id} and ${userFollows.followeeId} = ${users.id})`;
   const rows = await db
-    .select({ id: users.id, username: users.username, displayName: users.displayName, role: users.role })
+    .select({ id: users.id, username: users.username, displayName: users.displayName, role: users.role, avatarId: users.avatarId })
     .from(users)
     .where(
       and(

@@ -7,6 +7,8 @@ import { SITE, appUrl } from "@/lib/site";
 import { getAuth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { billingEnabled } from "@/lib/billing/stripe";
+import { signupEnabled } from "@/lib/signup";
+import { GetStartedForm } from "@/components/get-started-form";
 
 // No `title`: the root layout's default is this page's title, and a title
 // here would go through its "%s · oobee bets" template — the brand twice.
@@ -19,6 +21,7 @@ export default async function HomePage() {
   // Signed in, the front page is the feed — as on X.
   if (await getAuth()) redirect("/home");
   const paid = billingEnabled();
+  const open = signupEnabled();
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -69,13 +72,14 @@ export default async function HomePage() {
         </Reveal>
 
         <Reveal delay={0.15}>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" asChild>
-              <Link href="/picks">
-                Today&apos;s board
-                <ArrowRight aria-hidden="true" />
+          <div className="mt-8 max-w-lg">
+            <GetStartedForm open={open} source="landing" />
+            <p className="mt-4 text-sm text-fg-muted">
+              Already have an account?{" "}
+              <Link href="/login" className="text-brand hover:underline">
+                Sign in
               </Link>
-            </Button>
+            </p>
           </div>
         </Reveal>
       </section>
@@ -101,7 +105,9 @@ export default async function HomePage() {
             {
               icon: Eye,
               title: "You see all of it",
-              body: "Every pick is free during our beta — nothing held back behind a plan. Mark the ones you take and keep your own record.",
+              body: paid
+                ? "The #1 game bet and prop are free every game day, and every settled pick is open to everyone — the record is never behind a plan. Mark the ones you take and keep your own."
+                : "Every pick is free during our beta — nothing held back behind a plan. Mark the ones you take and keep your own record.",
             },
             {
               icon: ShieldCheck,

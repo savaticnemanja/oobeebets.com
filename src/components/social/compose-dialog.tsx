@@ -137,7 +137,7 @@ function ReplyingTo({ post }: { post: FeedPost }) {
   return (
     <div className="flex gap-3 px-4">
       <div className="flex flex-col items-center">
-        <Avatar name={displayNameOf(post.author)} />
+        <Avatar name={displayNameOf(post.author)} avatarId={post.author.avatarId} />
         <span className="mt-1 w-0.5 flex-1 bg-border-strong" aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1 pb-4">

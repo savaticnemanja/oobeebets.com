@@ -10,6 +10,7 @@ interface Suggestion {
   username: string;
   displayName: string | null;
   role: Role;
+  avatarId: string | null;
 }
 
 /** "@" and up to 20 handle characters right before the caret, not inside a word or an email. */
@@ -136,7 +137,7 @@ export function useMentionSuggest({
           onMouseEnter={() => setActive(i)}
           className={cn("flex cursor-pointer items-center gap-3 px-3 py-2", i === active && "bg-white/[0.07]")}
         >
-          <Avatar name={displayNameOf(u)} size="sm" />
+          <Avatar name={displayNameOf(u)} avatarId={u.avatarId} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1 truncate text-sm font-semibold text-fg">
               <span className="truncate">{displayNameOf(u)}</span>

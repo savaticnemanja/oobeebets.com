@@ -110,7 +110,7 @@ function GroupRow({
         <div className="flex gap-1">
           {item.actors.map((a) => (
             <Link key={a.id} href={`/u/${a.username}`} aria-label={displayNameOf(a)} className="relative z-10">
-              <Avatar name={displayNameOf(a)} size="sm" className="size-8" />
+              <Avatar name={displayNameOf(a)} avatarId={a.avatarId} size="sm" className="size-8" />
             </Link>
           ))}
         </div>
