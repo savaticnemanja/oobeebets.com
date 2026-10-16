@@ -20,6 +20,7 @@ import {
   type PickCategory,
 } from "@/lib/board";
 import { slateDateString } from "@/lib/slate-date";
+import { nextGameDay } from "@/lib/odds/board";
 import type { Metadata } from "next";
 import { formatSlateDate, formatUnits } from "@/lib/i18n/format";
 import { LocalTime } from "@/components/local-time";
@@ -31,14 +32,18 @@ export const dynamic = "force-dynamic";
 export default async function AdminOverviewPage() {
   await requireAdminPage();
   const today = slateDateString();
+  // The slate to work on: the next day with a game still to come, which is
+  // where "Build the slate" opens too (see admin/slate). On a day without
+  // games that's the next game day, not an empty today.
+  const day = (await nextGameDay(new Date())) ?? today;
 
-  const [record, todaySlate, counts, awaiting, recentAudit] = await Promise.all([
+  const [record, daySlate, counts, awaiting, recentAudit] = await Promise.all([
     getTrackRecord(),
-    db.select().from(slates).where(eq(slates.date, today)).limit(1),
+    db.select().from(slates).where(eq(slates.date, day)).limit(1),
     db
       .select({ category: picks.category, n: sql<number>`count(*)::int` })
       .from(picks)
-      .where(eq(picks.slateDate, today))
+      .where(eq(picks.slateDate, day))
       .groupBy(picks.category),
     db
       .select({ n: sql<number>`count(*)::int` })
@@ -61,7 +66,7 @@ export default async function AdminOverviewPage() {
   // List prices, so an estimate: grandfathered and discounted plans pay less.
   const mrrCents = planCounts.reduce((n, r) => n + r.n * TIERS[r.tier].priceCents, 0);
 
-  const slate = todaySlate[0];
+  const slate = daySlate[0];
   const byCategory = Object.fromEntries(
     pickCategories.map((c) => [c, counts.find((r) => r.category === c)?.n ?? 0]),
   ) as Record<PickCategory, number>;
@@ -80,7 +85,9 @@ export default async function AdminOverviewPage() {
         <Card className={slate?.publishedAt ? "border-hit/25" : "border-pending/30"}>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>Today&apos;s slate</CardTitle>
+              <CardTitle>
+                {day === today ? "Today's slate" : <>Next slate <span className="num font-normal text-fg-muted">· {formatSlateDate(day)}</span></>}
+              </CardTitle>
               {slate?.publishedAt ? (
                 <Badge variant="hit">Published</Badge>
               ) : (
@@ -107,7 +114,7 @@ export default async function AdminOverviewPage() {
               {slate?.publishedAt
                 ? "Live to everyone."
                 : pickCount === 0
-                  ? "Nothing added yet today."
+                  ? "Nothing added yet."
                   : "Not published — testers can't see these."}
             </p>
             <Button className="mt-4" size="sm" asChild>

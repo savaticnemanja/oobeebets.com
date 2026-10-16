@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     "sports betting picks",
     "betting tips",
     "verified track record",
-    "daily picks",
+    "NFL picks",
     "sports handicapping",
   ],
   authors: [{ name: SITE.name, url: SITE.url }],

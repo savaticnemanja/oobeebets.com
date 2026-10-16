@@ -180,7 +180,7 @@ export async function createPickAction(
       return { ok: false, error: msg };
     }
     if (msg.includes("Already on the board")) {
-      return { ok: false, error: "That exact bet is already on today's board." };
+      return { ok: false, error: "That exact bet is already on this day's board." };
     }
     if (violates(err, "picks_slate_rank_unique")) {
       return { ok: false, error: "Someone else just added a pick — try again." };

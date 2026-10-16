@@ -34,7 +34,7 @@ export default function manifest(): MetadataRoute.Manifest {
         name: "Today's picks",
         short_name: "Picks",
         url: "/picks",
-        description: "Today's board",
+        description: "The board",
       },
     ],
   };

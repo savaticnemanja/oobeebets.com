@@ -3,6 +3,7 @@ import { and, asc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { games, lines, parlaySelectionLegs, picks, selections } from "@/db/schema";
 import type { Game, Line } from "@/db/schema";
+import { slateDateString } from "@/lib/slate-date";
 import { slateBounds } from "./sync";
 import {
   FEED_LEAGUES,
@@ -106,6 +107,33 @@ function gameOption(g: Game, ls: Line[]): GameOption {
 export async function getSlateGames(date: string): Promise<GameOption[]> {
   const { from, to } = slateBounds(date);
   return gamesBetween(new Date(Math.max(from.getTime(), Date.now())), to);
+}
+
+/**
+ * The slate day of the first game on file kicking off at or after `from`, in
+ * the leagues the site covers, or null when none is. NFL plays on a few days a
+ * week, so this is how a page says "no games today, next up Sunday".
+ *
+ * Reads what's on file and never calls the feed: callers that need the week
+ * filled in run ensureUpcomingOdds first.
+ */
+export async function nextGameDay(from: Date): Promise<string | null> {
+  const [g] = await db
+    .select({ commenceTime: games.commenceTime })
+    .from(games)
+    .where(and(gte(games.commenceTime, from), inArray(games.league, [...FEED_LEAGUES])))
+    .orderBy(asc(games.commenceTime))
+    .limit(1);
+  return g ? slateDateString(g.commenceTime) : null;
+}
+
+/**
+ * The day the board leads with: today when a game is on today's slate (played
+ * or not), otherwise the next day with one. Falls back to today when nothing
+ * is on file, so there is always a day to say "nothing yet" under.
+ */
+export async function leadGameDay(today: string): Promise<string> {
+  return (await nextGameDay(slateBounds(today).from)) ?? today;
 }
 
 /** How far ahead the parlay builder looks: a full NFL week, Thursday to Monday. */

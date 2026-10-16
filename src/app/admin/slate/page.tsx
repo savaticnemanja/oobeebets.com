@@ -4,8 +4,9 @@ import { db } from "@/db";
 import { picks, slates } from "@/db/schema";
 import { PickComposer } from "@/components/admin/pick-composer";
 import { requireAdminPage } from "@/lib/auth";
-import { getSlateGames } from "@/lib/odds/board";
-import { ensureSlateOdds, getFeedStatus } from "@/lib/odds/sync";
+import { UPCOMING_DAYS, getSlateGames, nextGameDay } from "@/lib/odds/board";
+import { ensureSlateOdds, ensureUpcomingOdds, getFeedStatus, slateBounds } from "@/lib/odds/sync";
+import { formatSlateDate } from "@/lib/i18n/format";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
 import { PublishBar } from "@/components/admin/publish-bar";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
@@ -38,8 +39,15 @@ export default async function AdminSlatePage({
 }) {
   await requireAdminPage();
   const params = await searchParams;
-  const date =
-    params.date && isValidSlateDate(params.date) ? params.date : slateDateString();
+  // With no date asked for, open the next day that still has a game to pick
+  // from: NFL plays on a few days a week, and today is often not one of them.
+  let date: string;
+  if (params.date && isValidSlateDate(params.date)) {
+    date = params.date;
+  } else {
+    await ensureUpcomingOdds(UPCOMING_DAYS);
+    date = (await nextGameDay(new Date())) ?? slateDateString();
+  }
   const requestedTab = tabFromParam(params.category);
   const tab = requestedTab === "community" ? "game" : requestedTab;
   const isParlayTab = tab === "parlay";
@@ -78,6 +86,12 @@ export default async function AdminSlatePage({
     !isParlayTab && !published
       ? await Promise.all([getSlateGames(date), getFeedStatus()])
       : [[], null];
+  // Nothing left to pick on this day: point at the next day that has a game.
+  const nextDay =
+    !isParlayTab && !published && games.length === 0
+      // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "what hasn't kicked off yet" is the point
+      ? await nextGameDay(new Date(Math.max(slateBounds(date).from.getTime(), Date.now())))
+      : null;
 
   return (
     <div>
@@ -85,9 +99,10 @@ export default async function AdminSlatePage({
       <p className="mt-1.5 text-sm text-fg-muted">
         Two boards, ranked separately. Add picks in any order, then drag rows below
         to set the final rank; star any you want featured — they lead their day on
-        the board, as many as you like, even after publishing. All{" "}
-        {PICKS_PER_SLATE.game} game bets and {PICKS_PER_SLATE.prop} player props go
-        out free to every tester, and both publish together.
+        the board, as many as you like, even after publishing. Each game day takes up
+        to {PICKS_PER_SLATE.game} game bets and {PICKS_PER_SLATE.prop} player props —
+        as many as its games are worth, so a one-game Thursday can go out short. Both
+        lists publish together.
       </p>
 
       <PublishBar
@@ -99,6 +114,16 @@ export default async function AdminSlatePage({
         // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "has a game started yet" is the point
         anyStarted={rows.some((r) => r.startsAt.getTime() <= Date.now())}
       />
+
+      {nextDay && nextDay !== date && (
+        <p className="mt-4 text-sm text-fg-muted">
+          No games left to pick on {formatSlateDate(date)}. Next game day:{" "}
+          <Link href={`/admin/slate?date=${nextDay}&category=${category}`} className="text-brand hover:underline">
+            {formatSlateDate(nextDay)}
+          </Link>
+          .
+        </p>
+      )}
 
       {/* ---------------------------------------------------------- category */}
       <nav

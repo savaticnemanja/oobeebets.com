@@ -20,7 +20,8 @@ import { SocialShell } from "@/components/social/social-shell";
 import { InfoTip } from "@/components/ui/info-tip";
 import { ScrollActiveTab } from "@/components/ui/scroll-active-tab";
 import { after } from "next/server";
-import { refreshResults } from "@/lib/odds/sync";
+import { ensureUpcomingOdds, refreshResults } from "@/lib/odds/sync";
+import { UPCOMING_DAYS, leadGameDay } from "@/lib/odds/board";
 import { slateDateString } from "@/lib/slate-date";
 import { loadBoardAction } from "@/app/actions/feeds";
 import { loadBoardDays } from "./board-days";
@@ -31,7 +32,7 @@ import { TIERS } from "@/lib/tiers";
 
 export const metadata: Metadata = {
   title: "Picks",
-  description: `${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props, day by day.`,
+  description: `Up to ${PICKS_PER_SLATE.game} game bets and ${PICKS_PER_SLATE.prop} player props every game day.`,
   robots: { index: false, follow: false },
 };
 
@@ -70,29 +71,37 @@ export default async function PicksPage({
   const category = categoryFromParam(params.category);
   // The pill under the tabs — a league, or a whole sport for soccer/tennis.
   const sportFilter = sportFilterFromParam(params.sport);
-  // Grade anything that has finished — after the response, so nobody waits
-  // on the odds provider to see the page (see refreshResults).
+  // Grade anything that has finished, and keep the week's games on file so
+  // a day without games can name the next one — both after the response, so
+  // nobody waits on the odds provider to see the page (see refreshResults).
   after(refreshResults);
+  after(() => ensureUpcomingOdds(UPCOMING_DAYS));
 
-  const [first, todaySlate] = await Promise.all([
+  // The tab counts are for the day the board leads with: today, or on a day
+  // without games the next game day.
+  const todaySlate = await db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, today)).limit(1);
+  const lead = todaySlate[0] ? today : await leadGameDay(today);
+  const [first, leadSlate] = await Promise.all([
     loadBoardDays({ auth, tab, category, sportFilter, before: null }),
-    db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, today)).limit(1),
+    lead === today
+      ? todaySlate
+      : db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, lead)).limit(1),
   ]);
-  const publishedToday = Boolean(todaySlate[0]?.publishedAt);
+  const publishedLead = Boolean(leadSlate[0]?.publishedAt);
   // Back from Stripe Checkout: say so, and wait out the webhook.
   const justSubscribed = params.subscribed === "1" ? await viewerAccess(auth) : null;
   const plan = justSubscribed?.access && justSubscribed.access !== "free" ? TIERS[justSubscribed.access].name : null;
 
-  // Counts for today's tab labels — the alternative is a tab that claims
-  // nothing is there until you click it.
+  // Counts for the tab labels — the alternative is a tab that claims nothing
+  // is there until you click it.
   const tallies =
-    publishedToday || auth.isAdmin
+    publishedLead || auth.isAdmin
       ? await db
           .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
           .from(picksTable)
           .where(
             and(
-              eq(picksTable.slateDate, today),
+              eq(picksTable.slateDate, lead),
               sportFilter ? eq(picksTable.sport, sportFilter.sport) : undefined,
               sportFilter?.league ? eq(picksTable.league, sportFilter.league) : undefined,
             ),
@@ -126,7 +135,7 @@ export default async function PicksPage({
         >
           {pickTabs.map((c) => {
             const isActive = c === tab;
-            // Today's count; the parlay tab counts its own table.
+            // The lead day's count; the parlay tab counts its own table.
             const n = c === "parlay" ? 0 : (countFor.get(c) ?? 0);
             return (
               <Link
@@ -156,7 +165,7 @@ export default async function PicksPage({
         <div className="flex shrink-0 items-center pr-2">
           <InfoTip label="About Picks">
             <p>
-              Every day&apos;s picks, newest first, graded against the final score. All free during
+              Every game day&apos;s picks, newest first, graded against the final score. All free during
               our beta.
             </p>
             {(tab === "game" || tab === "prop") && (
@@ -189,7 +198,7 @@ export default async function PicksPage({
           <Link href="/community/new" className="text-brand hover:underline">
             Build one on Community
           </Link>{" "}
-          from any line on today&apos;s games.
+          from any line on this week&apos;s games.
         </p>
       )}
     </SocialShell>

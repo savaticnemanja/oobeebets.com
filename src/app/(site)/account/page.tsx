@@ -70,10 +70,10 @@ export default async function AccountPage() {
             <p>
               {auth.isAdmin
                 ? "As an admin you see the whole board — every pick, drafts included. No plan needed."
-                : "You have the whole board — all 15 picks, free during our beta. No plan needed."}
+                : "You have the whole board — every pick, free during our beta. No plan needed."}
             </p>
             <Button asChild className="rounded-full">
-              <Link href="/picks">See today&apos;s picks</Link>
+              <Link href="/picks">See the picks</Link>
             </Button>
           </>
         ) : subscription ? (
@@ -92,7 +92,7 @@ export default async function AccountPage() {
           </>
         ) : (
           <p>
-            You&apos;re on the free board: the #1 game bet and #1 player prop each day. A plan opens up to all 15
+            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A plan opens up to all 15
             of each. Every plan is monthly and can be cancelled any time.
           </p>
         )}

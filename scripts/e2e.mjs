@@ -23,6 +23,7 @@ import { chromium } from "playwright";
 // package.json.
 import { VISIBLE_PICKS } from "../src/lib/board.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
+import { addDays } from "../src/lib/slate-date.ts";
 import {
   STATS_PLAYERS,
   STATS_SEASON,
@@ -892,6 +893,70 @@ console.log("\nNFL only, and the parlay builder");
   if (saved) await sql`delete from parlays where id = ${saved.id}`;
   await sql`delete from selections where game_id like 'e2e-nfl-%'`;
   await sql`delete from games where id like 'e2e-nfl-%'`;
+}
+
+/* ------------------------------------------------------- game-day board */
+
+console.log("\nGame-day board");
+{
+  // NFL plays on a few days a week. With no board out today and no game on
+  // today's slate, Picks leads with the next game day and the admin builder
+  // opens on it. Today's fixture slate goes back to a draft for this.
+  const gameAt = new Date(Date.now() + 50 * 3600_000);
+  const gameDay = slateDateString(gameAt);
+  await sql`insert into games (id, league, sport_key, home_team, away_team, commence_time)
+            values ('e2e-gameday-1', 'NFL', 'americanfootball_nfl', 'Detroit Lions', 'Green Bay Packers', ${gameAt})`;
+  const [{ published_at: publishedAt }] = await sql`select published_at from slates where date = ${latestSlate}`;
+  await sql`update slates set published_at = null where date = ${latestSlate}`;
+
+  const ctx = await browser.newContext();
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/picks`);
+  await loaded(page);
+  const lead = page.locator(`#day-${gameDay}`);
+  check((await lead.count()) === 1, "with no games today, the board leads with the next game day", gameDay);
+  check((await lead.innerText()).includes("No NFL games today"), "and says there are no games today");
+  check((await page.locator(`#day-${latestSlate}`).count()) === 0, "today isn't listed as if picks were coming");
+
+  // A game on today's slate makes today the lead again, with "nothing yet".
+  const todayAt = new Date(Date.now() - 60_000);
+  if (slateDateString(todayAt) === latestSlate) {
+    await sql`insert into games (id, league, sport_key, home_team, away_team, commence_time)
+              values ('e2e-gameday-0', 'NFL', 'americanfootball_nfl', 'Chicago Bears', 'Minnesota Vikings', ${todayAt})`;
+    await page.goto(`${APP_URL}/picks`);
+    await loaded(page);
+    const today = page.locator(`#day-${latestSlate}`);
+    check((await today.count()) === 1 && (await today.innerText()).includes("up yet"), "on a game day, today leads and says picks are coming");
+    check((await page.locator(`#day-${gameDay}`).count()) === 0, "and the next game day waits its turn");
+    await sql`delete from games where id = 'e2e-gameday-0'`;
+  }
+  await ctx.close();
+
+  const adminCtx = await browser.newContext();
+  await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const admin = await adminCtx.newPage();
+  await admin.goto(`${APP_URL}/admin/slate`);
+  await loaded(admin);
+  const opened = await admin.locator('input[aria-label="Slate date"]').inputValue();
+  check(opened === gameDay, "the slate builder opens on the next game day", opened);
+  // The builder's date carries the tab, so a different day's link needs it too.
+  const noGames = addDays(latestSlate, 1);
+  await admin.goto(`${APP_URL}/admin/slate?date=${noGames}&category=game`);
+  await loaded(admin);
+  check(
+    (await admin.getByText("No games left to pick on").count()) === 1 &&
+      (await admin.locator(`a[href="/admin/slate?date=${gameDay}&category=game"]`).count()) === 1,
+    "a day without games links to the next game day",
+  );
+  check((await admin.locator('[aria-label="Slate completeness"]').count()) === 0, "a short slate isn't shown as incomplete");
+  await admin.goto(`${APP_URL}/admin`);
+  await loaded(admin);
+  check((await admin.getByText("Next slate").count()) === 1, "the overview's slate card is the next game day's");
+  await adminCtx.close();
+
+  await sql`update slates set published_at = ${publishedAt} where date = ${latestSlate}`;
+  await sql`delete from games where id = 'e2e-gameday-1'`;
 }
 
 /* ------------------------------- back to the same spot, replies, quotes */

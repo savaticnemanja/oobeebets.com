@@ -4,12 +4,13 @@ import { db } from "@/db";
 import { parlays as parlaysTable, pickFollows, picks as picksTable, slates } from "@/db/schema";
 import type { Pick, PickCategory } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
-import { CATEGORY_NOUN, matchesSportFilter, visiblePicks, type BoardTab, type SportFilter } from "@/lib/board";
+import { CATEGORY_NOUN, ONLY_SPORT, matchesSportFilter, visiblePicks, type BoardTab, type SportFilter } from "@/lib/board";
+import { leadGameDay } from "@/lib/odds/board";
 import { getOobeeParlays, markPlayed, type ParlayView } from "@/lib/parlay-store";
 import { followWindowOpen, type ViewerFollow } from "@/lib/follows";
 import { pickProfit } from "@/lib/settlement";
 import { slateDateString } from "@/lib/slate-date";
-import { formatSlateDate } from "@/lib/i18n/format";
+import { formatSlateDate, formatSlateWeekday } from "@/lib/i18n/format";
 import { ParlayCard } from "@/components/parlay-card";
 import { playable } from "@/components/social/parlay-row";
 import { PickCard } from "@/components/pick-card";
@@ -32,7 +33,8 @@ function dayDiff(a: string, b: string): number {
  * rendered under its own heading, plus the cursor for the chunk after it.
  *
  * `before` null is the first chunk: any upcoming days already out, then
- * today, then the days before it. The page
+ * today (or, on a day without games, the next game day), then the days before
+ * it. The page
  * renders that one; the infinite-scroll action renders the rest, so both come
  * from this one function and look the same.
  *
@@ -98,10 +100,15 @@ export async function loadBoardDays({
     before === null ? datesWhere({ gt: today }) : Promise.resolve([] as string[]),
     datesWhere(before ? { lt: before } : { lte: today }, DAYS_PER_CHUNK + 1),
   ]);
-  // Today always leads the past, so there is somewhere to say "nothing yet".
-  const withToday = before === null && !found.includes(today) ? [today, ...found] : found;
+  // The first chunk always has a day to say "nothing yet" under: today, or on
+  // a day without games the next game day (unless its board is already out,
+  // above).
+  const lead = before === null && !found.includes(today) ? await leadGameDay(today) : null;
+  const leadDay = lead ?? today;
+  const withToday = lead === today ? [today, ...found] : found;
+  const ahead = lead && lead !== today && !upcoming.includes(lead) ? [...upcoming, lead].sort().reverse() : upcoming;
   const past = withToday.slice(0, DAYS_PER_CHUNK);
-  const days = [...upcoming, ...past];
+  const days = [...ahead, ...past];
   const next = withToday.length > DAYS_PER_CHUNK || found.length > DAYS_PER_CHUNK ? past.at(-1)! : null;
 
   const slateRows = days.length
@@ -196,15 +203,20 @@ export async function loadBoardDays({
 
   // "MLB game bets", "Soccer parlays" — the empty states name the pill.
   const what = sportFilter ? `${sportFilter.label} ` : "";
+  // A pill someone chose drops empty days. With one sport there is no pill
+  // row, only the default, and the lead day has to stay to say "nothing yet".
+  const narrowed = sportFilter !== null && sportFilter !== ONLY_SPORT;
 
   const node = days.map((d) => {
     const isToday = d === today;
+    // The day without its board yet: today, or the next game day.
+    const isLead = d === leadDay;
     const draft = draftOn.has(d) && auth.isAdmin;
     const dayPicks = picksOn.get(d) ?? [];
 
     if (isParlayTab && !rule.parlays) {
-      // Today only: one prompt, not one under every past day.
-      if (!isToday) return null;
+      // The lead day only: one prompt, not one under every past day.
+      if (!isLead) return null;
       return (
         <DaySection key={d} date={d} today={today} draft={draft}>
           <UnlockRow tier="pro" what="Oobee's parlays" />
@@ -214,14 +226,16 @@ export async function loadBoardDays({
 
     if (isParlayTab) {
       const list = (oobeeOn.get(d) ?? []).filter(ticketMatches);
-      if (sportFilter && list.length === 0) return null;
+      if (narrowed && list.length === 0) return null;
       return (
         <DaySection key={d} date={d} today={today} draft={draft}>
           {list.length === 0 ? (
             <Empty>
-              {isToday
-                ? `No ${what}parlays up yet today — they go out with the rest of the board.`
-                : `No ${what}Oobee parlays this day.`}
+              {isLead && !isToday
+                ? `No ${what}games today. Oobee's ${formatSlateWeekday(d)} parlays go out with the rest of the board.`
+                : isToday
+                  ? `No ${what}parlays up yet today — they go out with the rest of the board.`
+                  : `No ${what}Oobee parlays this day.`}
             </Empty>
           ) : (
             <>
@@ -245,14 +259,16 @@ export async function loadBoardDays({
     // lighter), then the rest, each group by kick-off. Under a pill an empty
     // today is dropped too.
     const locked = lockedOn(d);
-    if (sportFilter && dayPicks.length === 0 && locked === 0) return null;
+    if (narrowed && dayPicks.length === 0 && locked === 0) return null;
     return (
       <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
         {dayPicks.length === 0 && locked === 0 ? (
           <Empty>
-            {isToday
-              ? `No ${what}${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
-              : `No ${what}${CATEGORY_NOUN[category]}s this day.`}
+            {isLead && !isToday
+              ? `No ${what}games today. ${formatSlateWeekday(d)}'s ${CATEGORY_NOUN[category]}s go out before the first kick-off.`
+              : isToday
+                ? `No ${what}${CATEGORY_NOUN[category]}s up yet — picks go out before the first kick-off.`
+                : `No ${what}${CATEGORY_NOUN[category]}s this day.`}
           </Empty>
         ) : (
           featuredFirst(dayPicks, (p) => p.featured).map((p) => (
@@ -269,13 +285,13 @@ export async function loadBoardDays({
     );
   });
 
-  // Today normally stays even when empty, to say "nothing yet". Under a pill
-  // that would be a row of "No NHL…" above the NHL picks on other days, so
-  // empty days go — and if that leaves nothing on the first chunk, one line
+  // The lead day normally stays even when empty, to say "nothing yet". Under
+  // a pill that would be a row of "No NHL…" above the NHL picks on other days,
+  // so empty days go — and if that leaves nothing on the first chunk, one line
   // says so instead.
   const shown = node.filter(Boolean);
   const out =
-    sportFilter && before === null && shown.length === 0 ? (
+    narrowed && before === null && shown.length === 0 ? (
       <Empty>
         No {what}
         {isParlayTab ? "parlays" : `${CATEGORY_NOUN[category]}s`} on the board yet.

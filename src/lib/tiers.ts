@@ -49,8 +49,8 @@ export const TIERS = {
     name: "Base",
     priceCents: 4999,
     lookupKey: "oobee_base_monthly",
-    tagline: "The top of the board, every day.",
-    features: ["Top 5 game bets daily", "Top 5 player props daily", "Full reasoning on every pick"],
+    tagline: "The top of the board, every game day.",
+    features: ["Top 5 game bets every game day", "Top 5 player props every game day", "Full reasoning on every pick"],
   },
   pro: {
     id: "pro",
@@ -58,7 +58,7 @@ export const TIERS = {
     priceCents: 9999,
     lookupKey: "oobee_pro_monthly",
     tagline: "Twice the board, and Oobee's parlays.",
-    features: ["Top 10 game bets daily", "Top 10 player props daily", "Oobee's parlays", "Everything in Base"],
+    features: ["Top 10 game bets every game day", "Top 10 player props every game day", "Oobee's parlays", "Everything in Base"],
   },
   elite: {
     id: "elite",
@@ -66,7 +66,7 @@ export const TIERS = {
     priceCents: 19999,
     lookupKey: "oobee_elite_monthly",
     tagline: "Every pick we make. Nothing held back.",
-    features: ["All 15 game bets daily", "All 15 player props daily", "Oobee's parlays", "Everything in Pro"],
+    features: ["Every game bet — up to 15 a game day", "Every player prop — up to 15 a game day", "Oobee's parlays", "Everything in Pro"],
   },
 } as const satisfies Record<Tier, TierConfig>;
 

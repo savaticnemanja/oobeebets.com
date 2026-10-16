@@ -96,7 +96,7 @@ export function ParlayComposer({
     return (
       <div className="card-hairline p-5">
         <p className="text-sm text-fg-muted">
-          Parlay board is full — {PARLAYS_PER_SLATE} is the daily limit. Remove one
+          Parlay board is full — {PARLAYS_PER_SLATE} is the limit per game day. Remove one
           to add another.
         </p>
       </div>

@@ -84,6 +84,14 @@ export function formatSlateDate(dateStr: string, locale: Locale = DEFAULT_LOCALE
   ).format(new Date(`${dateStr}T12:00:00Z`));
 }
 
+/** "Wednesday" — a slate day's weekday, read the same way as formatSlateDate. */
+export function formatSlateWeekday(dateStr: string, locale: Locale = DEFAULT_LOCALE): string {
+  const { formats } = localeConfig(locale);
+  return memo(`weekday:${formats}`, () =>
+    new Intl.DateTimeFormat(formats, { weekday: "long", timeZone: "UTC" }),
+  ).format(new Date(`${dateStr}T12:00:00Z`));
+}
+
 /** "Wed 4:15 PM" — kickoff, without the zone; pair it with `zoneLabel`. */
 export function formatKickoff(at: Date, { timeZone }: InZone = {}, locale: Locale = DEFAULT_LOCALE): string {
   const { formats } = localeConfig(locale);

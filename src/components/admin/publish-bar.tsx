@@ -11,7 +11,6 @@ import { publishSlateAction, unpublishSlateAction } from "@/app/actions/admin";
 import {
   CATEGORY_LABELS,
   PICKS_PER_SLATE,
-  TOTAL_PICKS_PER_SLATE,
   pickCategories,
   type PickCategory,
 } from "@/lib/board";
@@ -47,9 +46,9 @@ export function PublishBar({
   }, [pubState, unpubState]);
 
   // One bar for the day, not one per tab: publish is a single action over both
-  // lists, so the thing worth showing is how close the whole slate is.
+  // lists. There's no "how full" meter: a game day takes as many picks as its
+  // games are worth, so a short slate is a finished one.
   const total = pickCategories.reduce((n, c) => n + counts[c], 0);
-  const pct = Math.round((total / TOTAL_PICKS_PER_SLATE) * 100);
 
   return (
     <div className="card-hairline mt-6 p-4">
@@ -126,20 +125,6 @@ export function PublishBar({
           games — delete those picks, then publish the rest.
         </p>
       )}
-
-      <div
-        className="mt-3 h-1 overflow-hidden rounded-full bg-surface-2"
-        role="progressbar"
-        aria-valuenow={total}
-        aria-valuemin={0}
-        aria-valuemax={TOTAL_PICKS_PER_SLATE}
-        aria-label="Slate completeness"
-      >
-        <div
-          className="h-full rounded-full bg-brand transition-all duration-500"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
     </div>
   );
 }
