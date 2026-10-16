@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Image as ImageIcon, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import type { QuotedPost } from "@/lib/social";
 import { LocalTime } from "@/components/local-time";
 import { Avatar, NameLine, displayNameOf } from "@/components/social/identity";
@@ -22,19 +22,10 @@ export function QuoteCard({ quote, link = true, className }: { quote: QuotedPost
         <LocalTime at={quote.createdAt} format="ago" className="shrink-0 text-sm text-fg-subtle" />
       </div>
       {quote.body && <PostBody body={quote.body} className="mt-1 line-clamp-4 text-[0.9375rem] leading-normal" />}
-      {(quote.parlayTitle || quote.hasMedia) && (
+      {quote.parlayTitle && (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-fg-subtle">
-          {quote.parlayTitle ? (
-            <>
-              <Layers className="size-4 text-brand" aria-hidden="true" />
-              {quote.parlayTitle}
-            </>
-          ) : (
-            <>
-              <ImageIcon className="size-4" aria-hidden="true" />
-              Photo
-            </>
-          )}
+          <Layers className="size-4 text-brand" aria-hidden="true" />
+          {quote.parlayTitle}
         </p>
       )}
     </>
@@ -56,7 +47,6 @@ export function asQuoted(post: {
   createdAt: Date;
   author: QuotedPost["author"];
   parlay?: { title: string | null; legs: unknown[] } | null;
-  media?: unknown[];
 }): QuotedPost {
   return {
     id: post.id,
@@ -64,6 +54,5 @@ export function asQuoted(post: {
     createdAt: post.createdAt,
     author: post.author,
     parlayTitle: post.parlay ? (post.parlay.title ?? `${post.parlay.legs.length}-leg parlay`) : null,
-    hasMedia: (post.media?.length ?? 0) > 0,
   };
 }

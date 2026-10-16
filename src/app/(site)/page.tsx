@@ -61,7 +61,7 @@ export default async function HomePage() {
 
         <Reveal delay={0.1}>
           <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
-            Fifteen NFL game bets and fifteen player props every game day, each with the
+            Up to fifteen NFL game bets and fifteen player props every game day, each with the
             reasoning behind it —{" "}
             {paid
               ? "the top pick of each free, the rest on a plan."
@@ -100,7 +100,7 @@ export default async function HomePage() {
             {
               icon: ListChecks,
               title: "We build the board",
-              body: "Fifteen NFL game bets and fifteen player props every game day, each with its price, stake and reasoning. The ones we like most are featured at the top.",
+              body: "Up to fifteen NFL game bets and fifteen player props every game day, each with its price, stake and reasoning. The ones we like most are featured at the top.",
             },
             {
               icon: Eye,

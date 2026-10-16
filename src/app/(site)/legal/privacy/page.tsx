@@ -38,8 +38,8 @@ export default function PrivacyPage() {
           signed in.
         </p>
         <p>
-          <strong className="text-fg">What you do here.</strong> Your posts and replies, the
-          photos and GIFs you add to them, your poll votes, likes, reposts and follows, and which
+          <strong className="text-fg">What you do here.</strong> Your posts and replies, your
+          likes, reposts and follows, and which
           posts you have viewed (that is how view counts work). The picks you mark as taken, and
           the parlays you build, share or play. Feedback you send us, with the page you sent it
           from and your browser. Reports you file, and who you mute or block — the person you
@@ -81,8 +81,7 @@ export default function PrivacyPage() {
           Oobee&apos;s admins can see all of the above, to run the beta.
         </p>
         <p>
-          A photo you post, and your profile picture, can be opened by anyone who has its link,
-          without signing in.
+          Your profile picture can be opened by anyone who has its link, without signing in.
         </p>
       </DocSection>
 
@@ -96,22 +95,13 @@ export default function PrivacyPage() {
             </li>
           )}
           <li>
-            <strong className="text-fg">Resend</strong> sends our emails — invites, password
-            resets and announcements — so it receives your email address and the message.
+            <strong className="text-fg">Resend</strong> sends our emails — invites, sign-up
+            links, waitlist mail, password resets and announcements — so it receives your email
+            address and the message.
           </li>
           <li>
             <strong className="text-fg">The Odds API</strong> supplies odds and scores. Nothing
             about you is sent to it.
-          </li>
-          <li>
-            <strong className="text-fg">GIPHY</strong>, when GIF search is on: what you search
-            for goes to GIPHY from our server, and the GIFs you see load from GIPHY&apos;s
-            servers, which see your IP address.
-          </li>
-          <li>
-            <strong className="text-fg">Link previews:</strong> when a post contains a link, our
-            server fetches that page to build its preview, and the preview&apos;s image loads in
-            your browser from that website, which sees your IP address.
           </li>
         </ul>
         <p>Everything else stays on our own servers.</p>
@@ -137,7 +127,7 @@ export default function PrivacyPage() {
         <p>
           Email us to get a copy of your data or to delete your account. During the beta we do
           this by hand, within 30 days. Deleting your account removes your profile and
-          everything in it — posts, photos, likes, follows, ticks and parlays — and signs you
+          everything in it — posts, profile picture, likes, follows, ticks and parlays — and signs you
           out everywhere. Oobee&apos;s own picks and their results stay on the record; they never
           contained anything about you.
         </p>

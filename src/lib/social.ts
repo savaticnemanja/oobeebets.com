@@ -4,8 +4,7 @@ import { cache } from "react";
 import { and, desc, asc, eq, gte, inArray, isNull, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { linkPreviews, pollOptions, pollVotes, postLikes, postPolls, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
-import { getMediaFor, type MediaView } from "@/lib/media";
+import { postLikes, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
 import { getParlaysByIds, markPlayed, type ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { extractMentions, isReservedUsername } from "@/lib/social-rules";
@@ -31,15 +30,6 @@ export interface PostAuthor {
   avatarId: string | null;
 }
 
-export interface PostPreview {
-  url: string;
-  title: string | null;
-  description: string | null;
-  imageUrl: string | null;
-  siteName: string | null;
-  cardType: string | null;
-}
-
 export interface FeedPost {
   id: string;
   body: string;
@@ -57,13 +47,9 @@ export interface FeedPost {
   liked: boolean;
   /** Whether the viewer has reposted it. Always false signed out. */
   reposted: boolean;
-  preview: PostPreview | null;
   /** A shared Community parlay: the post carries this ticket (see withAttachments). */
   parlayId: string | null;
   parlay?: ParlayView | null;
-  /** Photos or a GIF, in order (see withAttachments). */
-  media?: MediaView[];
-  poll?: PollView | null;
   /** A quote post's id for the post it quotes; the post itself in `quote` (see withAttachments). */
   quoteId: string | null;
   quote?: QuotedPost | null;
@@ -79,16 +65,6 @@ export interface QuotedPost {
   author: PostAuthor;
   /** It shares a parlay: the ticket's title, for one line in the card. */
   parlayTitle: string | null;
-  /** It has photos or a GIF. */
-  hasMedia: boolean;
-}
-
-export interface PollView {
-  endsAt: Date;
-  options: Array<{ id: string; label: string; votes: number }>;
-  total: number;
-  /** The option the viewer voted for, if they did. */
-  myVote: string | null;
 }
 
 /* ------------------------------------------------------------- the query */
@@ -153,21 +129,11 @@ function selectPosts(viewerId: string | null) {
       reposted: repostedBy(viewerId),
       parlayId: posts.parlayId,
       quoteId: posts.quoteId,
-      previewUrl: linkPreviews.url,
-      previewTitle: linkPreviews.title,
-      previewDescription: linkPreviews.description,
-      previewImageUrl: linkPreviews.imageUrl,
-      previewSiteName: linkPreviews.siteName,
-      previewCardType: linkPreviews.cardType,
     })
     .from(posts)
     .innerJoin(users, eq(users.id, posts.authorId))
     .leftJoin(parentPost, eq(parentPost.id, posts.parentId))
     .leftJoin(parentAuthor, eq(parentAuthor.id, parentPost.authorId))
-    .leftJoin(
-      linkPreviews,
-      and(eq(linkPreviews.url, posts.linkUrl), eq(linkPreviews.status, "ok")),
-    )
     .$dynamic();
 }
 
@@ -195,16 +161,6 @@ function toFeedPost(r: Row): FeedPost {
     reposted: Boolean(r.reposted),
     parlayId: r.parlayId,
     quoteId: r.quoteId,
-    preview: r.previewUrl
-      ? {
-          url: r.previewUrl,
-          title: r.previewTitle,
-          description: r.previewDescription,
-          imageUrl: r.previewImageUrl,
-          siteName: r.previewSiteName,
-          cardType: r.previewCardType,
-        }
-      : null,
   };
 }
 
@@ -299,23 +255,19 @@ export async function withParlays(list: FeedPost[], viewerId: string | null = nu
 }
 
 /**
- * Everything a post carries besides its text: a parlay's ticket, photos or a
- * GIF, a poll. One query per kind for the whole page.
+ * Everything a post carries besides its text: a shared parlay's ticket, the
+ * post it quotes, and which of its @handles are real. One query per kind for
+ * the whole page.
  */
 export async function withAttachments(list: FeedPost[], viewerId: string | null): Promise<FeedPost[]> {
   if (list.length === 0) return list;
-  const ids = list.map((p) => p.id);
-  const [withTickets, media, polls, quotes, known] = await Promise.all([
+  const [withTickets, quotes, known] = await Promise.all([
     withParlays(list, viewerId),
-    getMediaFor(ids),
-    getPollsFor(ids, viewerId),
     getQuotedPosts(list.flatMap((p) => (p.quoteId ? [p.quoteId] : []))),
     knownHandles(list.flatMap((p) => extractMentions(p.body))),
   ]);
   return withTickets.map((p) => ({
     ...p,
-    media: media.get(p.id) ?? [],
-    poll: polls.get(p.id) ?? null,
     quote: p.quoteId ? (quotes.get(p.quoteId) ?? null) : null,
     knownMentions: extractMentions(p.body).filter((h) => known.has(h)),
   }));
@@ -331,7 +283,7 @@ async function knownHandles(handles: string[]): Promise<Set<string>> {
   return new Set(rows.map((r) => r.username));
 }
 
-/** The posts some quote posts embed, as cards: one query, plus their tickets and media. */
+/** The posts some quote posts embed, as cards: one query, plus their tickets. */
 async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
   if (ids.length === 0) return new Map();
   const rows = await db
@@ -350,10 +302,7 @@ async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
     .innerJoin(users, eq(users.id, posts.authorId))
     .where(inArray(posts.id, [...new Set(ids)]));
   const parlayIds = rows.flatMap((r) => (r.parlayId ? [r.parlayId] : []));
-  const [tickets, media] = await Promise.all([
-    parlayIds.length ? getParlaysByIds(parlayIds) : Promise.resolve([]),
-    getMediaFor(rows.map((r) => r.id)),
-  ]);
+  const tickets = parlayIds.length ? await getParlaysByIds(parlayIds) : [];
   const title = new Map(tickets.map((t) => [t.id, t.title ?? `${t.legs.length}-leg parlay`]));
   return new Map(
     rows.map((r) => [
@@ -364,43 +313,8 @@ async function getQuotedPosts(ids: string[]): Promise<Map<string, QuotedPost>> {
         createdAt: r.createdAt,
         author: { id: r.authorId, username: r.username, displayName: r.displayName, role: r.role, avatarId: r.avatarId },
         parlayTitle: r.parlayId ? (title.get(r.parlayId) ?? null) : null,
-        hasMedia: (media.get(r.id)?.length ?? 0) > 0,
       },
     ]),
-  );
-}
-
-async function getPollsFor(postIds: string[], viewerId: string | null): Promise<Map<string, PollView>> {
-  const polls = await db.select().from(postPolls).where(inArray(postPolls.postId, postIds));
-  if (polls.length === 0) return new Map();
-  const pollIds = polls.map((p) => p.postId);
-  const [options, mine] = await Promise.all([
-    db
-      .select({
-        id: pollOptions.id,
-        postId: pollOptions.postId,
-        label: pollOptions.label,
-        votes: sql<number>`(select count(*)::int from ${pollVotes} where ${pollVotes.optionId} = ${pollOptions.id})`,
-      })
-      .from(pollOptions)
-      .where(inArray(pollOptions.postId, pollIds))
-      .orderBy(pollOptions.position),
-    viewerId
-      ? db
-          .select({ postId: pollVotes.postId, optionId: pollVotes.optionId })
-          .from(pollVotes)
-          .where(and(inArray(pollVotes.postId, pollIds), eq(pollVotes.userId, viewerId)))
-      : Promise.resolve([] as Array<{ postId: string; optionId: string }>),
-  ]);
-  const myVote = new Map(mine.map((m) => [m.postId, m.optionId]));
-  return new Map(
-    polls.map((p) => {
-      const opts = options.filter((o) => o.postId === p.postId).map((o) => ({ id: o.id, label: o.label, votes: Number(o.votes) }));
-      return [
-        p.postId,
-        { endsAt: p.endsAt, options: opts, total: opts.reduce((n, o) => n + o.votes, 0), myVote: myVote.get(p.postId) ?? null },
-      ];
-    }),
   );
 }
 

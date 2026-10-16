@@ -35,7 +35,6 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const snippet = text.length > 120 ? `${text.slice(0, 119)}…` : text;
   const title = post.body ? `${who} on oobee: "${snippet}"` : `${who} on oobee: ${snippet}`;
   const url = appUrl(`/p/${post.id}`);
-  const image = post.preview?.imageUrl ?? undefined;
   return {
     title,
     description: text,
@@ -45,13 +44,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       title: who,
       description: text,
       url,
-      ...(image ? { images: [{ url: image }] } : {}),
     },
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      card: "summary",
       title: who,
       description: text,
-      ...(image ? { images: [image] } : {}),
     },
   };
 }

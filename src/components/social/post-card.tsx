@@ -12,10 +12,7 @@ import type { FeedPost } from "@/lib/social";
 import { compactCount } from "@/lib/social-rules";
 import { LocalTime } from "@/components/local-time";
 import { Avatar, NameLine, displayNameOf } from "@/components/social/identity";
-import { LinkCard } from "@/components/social/link-card";
 import { PostBody } from "@/components/social/post-body";
-import { PostMedia } from "@/components/social/post-media";
-import { PostPoll } from "@/components/social/post-poll";
 import { trackView } from "@/components/social/view-tracker";
 import { ACTION_BTN, ACTION_ICON } from "@/components/social/action-row";
 import { FollowToggle } from "@/components/follow-toggle";
@@ -189,10 +186,6 @@ export function PostCard({
           <PostBody body={post.body} known={post.knownMentions} className={cn("mt-1", detail ? "mt-3 text-lg leading-relaxed" : "text-[0.9375rem] leading-normal")} />
         )}
 
-        {post.media && post.media.length > 0 && <PostMedia media={post.media} className="mt-3" />}
-        {post.poll && <PostPoll postId={post.id} poll={post.poll} viewerId={viewerId} authorId={post.author.id} />}
-        {/* A link card only when nothing else is showing, as on X. */}
-        {post.preview && !post.media?.length && !post.poll && !post.quote && <LinkCard preview={post.preview} className="mt-3" />}
         {post.quote && <QuoteCard quote={post.quote} className="mt-3" />}
         {attachment && <div className="mt-3">{attachment}</div>}
 

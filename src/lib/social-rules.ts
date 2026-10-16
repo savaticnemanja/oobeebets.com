@@ -1,7 +1,7 @@
 /**
  * The rules of the social layer that both sides need: the composer counts
- * characters and finds the link to preview in the browser, and the action
- * re-checks the same things on the server. Nothing here touches the database,
+ * characters in the browser, and the action re-checks the same things on the
+ * server. Nothing here touches the database,
  * so the two run one copy of the rules rather than agreeing by coincidence —
  * the same arrangement as lib/follows.ts.
  */
@@ -41,27 +41,6 @@ export const usernameSchema = z
       .regex(USERNAME_PATTERN, "Letters, numbers and underscores only")
       .refine((u) => !isReservedUsername(u), "That handle is reserved"),
   );
-
-/** Polls: two to four options of up to 25 characters, as on X. */
-export const POLL_OPTION_MAX = 25;
-export const POLL_MIN_OPTIONS = 2;
-export const POLL_MAX_OPTIONS = 4;
-/** How long a poll may run, in hours — the composer's choices. */
-export const POLL_DURATIONS = [1, 6, 24, 72, 168] as const;
-
-export const pollSchema = z.object({
-  options: z
-    .array(z.string().trim().min(1, "Fill in every choice").max(POLL_OPTION_MAX, `Choices are at most ${POLL_OPTION_MAX} characters`))
-    .min(POLL_MIN_OPTIONS, `A poll needs at least ${POLL_MIN_OPTIONS} choices`)
-    .max(POLL_MAX_OPTIONS, `A poll has at most ${POLL_MAX_OPTIONS} choices`),
-  hours: z.number().refine((h) => (POLL_DURATIONS as readonly number[]).includes(h), "Pick a poll length"),
-});
-
-/** The body may be empty only when something else carries the post. */
-export const postBodyOptionalSchema = z
-  .string()
-  .transform((s) => s.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim())
-  .pipe(z.string().max(POST_MAX_LENGTH, `Posts are at most ${POST_MAX_LENGTH} characters`));
 
 export const postBodySchema = z
   .string()
@@ -108,17 +87,6 @@ function trimUrl(raw: string): string {
 
 function withScheme(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
-}
-
-/**
- * The link a post's card is built from: the last one in the body, which is
- * what X does too — a post that says "via @x: <article>" previews the
- * article, not the first link that happens to appear.
- */
-export function extractCardUrl(body: string): string | null {
-  const matches = [...body.matchAll(URL_RE)];
-  const last = matches.at(-1);
-  return last ? withScheme(trimUrl(last[0])) : null;
 }
 
 /** At most this many people notified by one post's @mentions. */
@@ -174,15 +142,6 @@ export function tokenizeBody(body: string): BodyToken[] {
 export function displayUrl(url: string): string {
   const stripped = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
   return stripped.length > 32 ? `${stripped.slice(0, 31)}…` : stripped;
-}
-
-/** "espn.com" — the domain line on a link card. */
-export function linkDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }
 
 /** "1.2K", "34K" — counts on the action row. */

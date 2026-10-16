@@ -22,7 +22,6 @@ import bcrypt from "bcryptjs";
 import {
   auditLog,
   invitations,
-  linkPreviews,
   parlayLegs,
   parlays,
   pickFollows,
@@ -122,7 +121,6 @@ async function main() {
   await db.delete(postLikes);
   await db.delete(userFollows);
   await db.delete(posts);
-  await db.delete(linkPreviews);
   // Legs before parlays before picks: each cascades from the next, but the
   // list is the claim this function makes about itself and should be readable
   // without chasing foreign keys.

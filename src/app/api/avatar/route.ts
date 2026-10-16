@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuth, rateLimit } from "@/lib/auth";
-import { AVATAR_UPLOAD_LIMIT, AvatarError, processAvatar, removeAvatar, saveAvatar } from "@/lib/avatars";
-import { sniffImage } from "@/lib/media";
+import { AVATAR_UPLOAD_LIMIT, AvatarError, processAvatar, removeAvatar, saveAvatar, sniffImage } from "@/lib/avatars";
 import { avatarSrc } from "@/lib/avatar-src";
 
 /** Set your profile picture: one image, multipart, field `file`. */

@@ -1,16 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, parlays, pollOptions, pollVotes, postLikes, postMedia, postPolls, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
-import { MAX_MEDIA_PER_POST } from "@/lib/media";
-import { gifSearchConfigured, isGiphyUrl, searchGifs, type GifResult } from "@/lib/giphy";
+import { auditLog, parlays, postLikes, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
 import { getAuth, rateLimit } from "@/lib/auth";
-import { getLinkPreview, normalizeLinkUrl } from "@/lib/link-preview";
-import { usernameTaken, type PostPreview } from "@/lib/social";
-import { extractCardUrl, pollSchema, postBodyOptionalSchema, profileSchema } from "@/lib/social-rules";
+import { usernameTaken } from "@/lib/social";
+import { postBodySchema, profileSchema } from "@/lib/social-rules";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 import { violates } from "@/lib/db-errors";
 import { notify, notifyNewPost, unnotify } from "@/lib/notifications";
@@ -37,8 +34,6 @@ const SIGNED_OUT = "Your session expired — sign in again.";
 /** Thirty posts in fifteen minutes is a lot of talking; more is a script. */
 const POST_LIMIT = 30;
 const POST_WINDOW_MS = 15 * 60 * 1000;
-/** The composer previews as you type, so this one is looser. */
-const PREVIEW_LIMIT = 60;
 
 /** Every surface a post or a like can appear on goes stale together. */
 function revalidateSocial(username?: string) {
@@ -60,45 +55,20 @@ export async function createPostAction(
   const auth = await getAuth();
   if (!auth) return { ok: false, error: SIGNED_OUT };
 
-  // Attachments arrive as JSON in hidden fields: uploaded media ids, a GIF
-  // picked from GIPHY, or a poll. One kind per post, as on X.
-  const json = (key: string) => {
-    const raw = formData.get(key);
-    if (typeof raw !== "string" || raw === "") return undefined;
-    try {
-      return JSON.parse(raw) as unknown;
-    } catch {
-      return null;
-    }
-  };
+  // Plain text: the body, and what it answers or quotes. Nothing attached.
   const parsed = z
     .object({
-      body: postBodyOptionalSchema,
+      body: postBodySchema,
       parentId: z.string().uuid().optional().or(z.literal("")),
       quoteId: z.string().uuid().optional().or(z.literal("")),
-      mediaIds: z.array(z.string().uuid()).max(MAX_MEDIA_PER_POST, `At most ${MAX_MEDIA_PER_POST} photos`).optional(),
-      gif: z
-        .object({ url: z.string().url().refine(isGiphyUrl, "That GIF isn't from GIPHY"), width: z.number().int().positive(), height: z.number().int().positive() })
-        .optional(),
-      poll: pollSchema.optional(),
     })
     .safeParse({
       body: formData.get("body") ?? "",
       parentId: formData.get("parentId") ?? "",
       quoteId: formData.get("quoteId") ?? "",
-      mediaIds: json("mediaIds"),
-      gif: json("gif"),
-      poll: json("poll"),
     });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check your post", fieldErrors: fieldErrorsFrom(parsed.error) };
-  }
-  const mediaIds = parsed.data.mediaIds ?? [];
-  const { gif, poll } = parsed.data;
-  const kinds = [mediaIds.length > 0, Boolean(gif), Boolean(poll)].filter(Boolean).length;
-  if (kinds > 1) return { ok: false, error: "A post can have photos, a GIF or a poll — one of them." };
-  if (!parsed.data.body && (kinds === 0 || poll)) {
-    return { ok: false, error: poll ? "Ask a question for your poll" : "Write something first" };
   }
 
   if (!(await rateLimit("post:create", auth.user.id, POST_LIMIT, POST_WINDOW_MS))) {
@@ -111,58 +81,17 @@ export async function createPostAction(
     if (!parent) return { ok: false, error: "That post was deleted." };
     if (!(await canInteract(auth.user.id, parent.authorId))) return { ok: false, error: BLOCKED };
   }
-  // A quote needs something of your own to say; with nothing, it's a repost.
   const quoteId = parsed.data.quoteId || null;
   if (quoteId) {
-    if (!parsed.data.body) return { ok: false, error: "Add a comment to quote it — or just repost it." };
     const [quoted] = await db.select({ id: posts.id, authorId: posts.authorId }).from(posts).where(eq(posts.id, quoteId)).limit(1);
     if (!quoted) return { ok: false, error: "That post was deleted." };
     if (!(await canInteract(auth.user.id, quoted.authorId))) return { ok: false, error: BLOCKED };
   }
 
-  // The card is resolved before the insert so the post never renders twice —
-  // once bare, then again with its card. The composer has usually warmed the
-  // cache already (previewLinkAction), which makes this a single indexed read.
-  const cardUrl = extractCardUrl(parsed.data.body);
-  const linkUrl = cardUrl ? normalizeLinkUrl(cardUrl) : null;
-  if (linkUrl) await getLinkPreview(linkUrl);
-
-  // The uploads must be this person's own and not already on a post. An
-  // uploaded GIF goes alone, as a GIF does on X.
-  if (mediaIds.length > 0) {
-    const owned = await db
-      .select({ id: postMedia.id, kind: postMedia.kind })
-      .from(postMedia)
-      .where(and(inArray(postMedia.id, mediaIds), eq(postMedia.uploaderId, auth.user.id), isNull(postMedia.postId)));
-    if (owned.length !== mediaIds.length) return { ok: false, error: "A photo didn't finish uploading — remove it and add it again." };
-    if (owned.some((m) => m.kind === "gif") && owned.length > 1) return { ok: false, error: "A GIF goes on its own." };
-  }
-
-  const created = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(posts)
-      .values({ authorId: auth.user.id, parentId, quoteId, body: parsed.data.body, linkUrl })
-      .returning({ id: posts.id });
-    for (const [position, id] of mediaIds.entries()) {
-      await tx.update(postMedia).set({ postId: row.id, position }).where(eq(postMedia.id, id));
-    }
-    if (gif) {
-      await tx.insert(postMedia).values({
-        postId: row.id,
-        uploaderId: auth.user.id,
-        kind: "gif",
-        mime: "image/gif",
-        url: gif.url,
-        width: gif.width,
-        height: gif.height,
-      });
-    }
-    if (poll) {
-      await tx.insert(postPolls).values({ postId: row.id, endsAt: new Date(Date.now() + poll.hours * 3600_000) });
-      await tx.insert(pollOptions).values(poll.options.map((label, position) => ({ postId: row.id, position, label })));
-    }
-    return row;
-  });
+  const [created] = await db
+    .insert(posts)
+    .values({ authorId: auth.user.id, parentId, quoteId, body: parsed.data.body })
+    .returning({ id: posts.id });
 
   await notifyNewPost({ id: created.id, authorId: auth.user.id, body: parsed.data.body, parentId, quoteId });
   revalidateSocial(auth.user.username);
@@ -281,51 +210,6 @@ export async function recordPostViewsAction(postIds: string[]): Promise<void> {
     .onConflictDoNothing();
 }
 
-/* ----------------------------------------------------------------- polls */
-
-/**
- * Vote in a poll. One vote, final — as on X — and not on your own poll or
- * one that has closed.
- */
-export async function votePollAction(postId: string, optionId: string): Promise<ActionState> {
-  const auth = await getAuth();
-  if (!auth) return { ok: false, error: SIGNED_OUT };
-  const ids = z.object({ postId: z.string().uuid(), optionId: z.string().uuid() }).safeParse({ postId, optionId });
-  if (!ids.success) return { ok: false, error: "Bad request" };
-
-  const [poll] = await db
-    .select({ endsAt: postPolls.endsAt, authorId: posts.authorId, optionPost: pollOptions.postId })
-    .from(postPolls)
-    .innerJoin(posts, eq(posts.id, postPolls.postId))
-    .leftJoin(pollOptions, and(eq(pollOptions.id, ids.data.optionId), eq(pollOptions.postId, postPolls.postId)))
-    .where(eq(postPolls.postId, ids.data.postId))
-    .limit(1);
-  if (!poll || !poll.optionPost) return { ok: false, error: "That poll is gone." };
-  if (poll.endsAt.getTime() <= Date.now()) return { ok: false, error: "This poll has closed." };
-  if (poll.authorId === auth.user.id) return { ok: false, error: "You can't vote in your own poll." };
-
-  await db
-    .insert(pollVotes)
-    .values({ postId: ids.data.postId, userId: auth.user.id, optionId: ids.data.optionId })
-    .onConflictDoNothing();
-  // Not revalidated — see setPostLikeAction.
-  return { ok: true };
-}
-
-/* ------------------------------------------------------------------- gifs */
-
-/** GIF search for the composer's picker; `configured` false means no GIPHY key yet. */
-export async function searchGifsAction(query: string): Promise<{ configured: boolean; results: GifResult[]; error?: string }> {
-  const auth = await getAuth();
-  if (!auth) return { configured: false, results: [], error: SIGNED_OUT };
-  if (!gifSearchConfigured()) return { configured: false, results: [] };
-  try {
-    return { configured: true, results: await searchGifs(String(query).slice(0, 50)) };
-  } catch {
-    return { configured: true, results: [], error: "GIF search isn't answering — try again." };
-  }
-}
-
 /* --------------------------------------------------------------- reposts */
 
 /**
@@ -401,32 +285,6 @@ export async function setUserFollowAction(userId: string, follow: boolean): Prom
   revalidatePath(`/u/${target.username}`, "layout");
   revalidatePath(`/u/${auth.user.username}`, "layout");
   return { ok: true };
-}
-
-/* ---------------------------------------------------------- link preview */
-
-/**
- * The card the composer shows while you type, as X does. Also warms the cache
- * createPostAction reads, so posting a link is not a second network fetch.
- */
-export async function previewLinkAction(rawUrl: string): Promise<PostPreview | null> {
-  const auth = await getAuth();
-  if (!auth) return null;
-  if (typeof rawUrl !== "string" || rawUrl.length > 2000) return null;
-  const url = normalizeLinkUrl(rawUrl);
-  if (!url) return null;
-  if (!(await rateLimit("post:preview", auth.user.id, PREVIEW_LIMIT, POST_WINDOW_MS))) return null;
-
-  const preview = await getLinkPreview(url);
-  if (!preview) return null;
-  return {
-    url: preview.url,
-    title: preview.title,
-    description: preview.description,
-    imageUrl: preview.imageUrl,
-    siteName: preview.siteName,
-    cardType: preview.cardType,
-  };
 }
 
 /* --------------------------------------------------------------- profile */

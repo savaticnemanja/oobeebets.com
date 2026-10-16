@@ -1110,6 +1110,51 @@ console.log("\nWaitlist, change password and profile pictures");
   await ctx.close();
 }
 
+/* ------------------------------------------------------ plain-text posts */
+
+console.log("\nPlain-text posts");
+{
+  // A post is its text: no photos, GIFs, polls, emoji picker or link cards.
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const page = await ctx.newPage();
+  await page.goto(`${APP_URL}/home`);
+  await loaded(page);
+  await hydrated(page, "#compose-body");
+  const form = page.locator("form#compose");
+  const buttons = await form.getByRole("button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") || e.textContent.trim()));
+  check(
+    (await form.locator('input[type="file"]').count()) === 0 && buttons.length === 1 && buttons[0] === "Post",
+    "the composer is a text box and a Post button",
+    JSON.stringify(buttons),
+  );
+  check(await form.getByRole("button", { name: "Post", exact: true }).isDisabled(), "an empty post can't be sent");
+
+  // A link stays a link in the text, with no card under it.
+  const text = `plain e2e ${Date.now()} https://example.com/story`;
+  await page.locator("#compose-body").fill(text);
+  await form.getByRole("button", { name: "Post", exact: true }).click();
+  let posted;
+  for (let i = 0; i < 40 && !posted; i++) {
+    [posted] = await sql`select id from posts where author_id = ${tester.id} and body = ${text}`;
+    if (!posted) await page.waitForTimeout(250);
+  }
+  check(Boolean(posted), "a text post goes out");
+  await page.goto(`${APP_URL}/p/${posted.id}`);
+  await loaded(page);
+  const article = page.locator("article").first();
+  check((await article.locator('a[href="https://example.com/story"]').count()) === 1, "a link in it is still a link");
+  check((await article.locator('img:not([src^="/api/avatars/"])').count()) === 0, "and nothing is drawn under it");
+
+  // The photo routes are gone. (A GET: Next answers a multipart POST to any
+  // unknown path as a server action it can't find, which is a 500.)
+  const media = await page.request.get(`${APP_URL}/api/media/00000000-0000-4000-8000-000000000000`);
+  check(media.status() === 404, "photo uploads are gone", `${media.status()}`);
+  await sql`delete from posts where id = ${posted.id}`;
+  await ctx.close();
+}
+
 /* ------------------------------- back to the same spot, replies, quotes */
 
 console.log("\nBack to the same spot, reply popup, quotes, profile");

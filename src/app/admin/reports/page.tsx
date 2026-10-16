@@ -115,7 +115,7 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
 
               {r.postBody !== null && (
                 <blockquote className="mt-3 rounded-xl border border-border px-3 py-2 text-sm text-fg">
-                  {r.postBody || <span className="text-fg-subtle">(no text — a photo, poll or parlay)</span>}
+                  {r.postBody || <span className="text-fg-subtle">(no text — a shared parlay)</span>}
                   {r.postId && (
                     <Link href={`/p/${r.postId}`} className="mt-1 block text-xs text-brand hover:underline">
                       Open the post
