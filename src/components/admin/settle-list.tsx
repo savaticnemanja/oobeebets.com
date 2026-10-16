@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { pickProfit } from "@/lib/settlement";
 import { SPORT_EMOJI, STATUS_LABEL, STATUS_VARIANT } from "@/components/pick-card";
 import { formatOdds, formatSlateDate, formatUnits } from "@/lib/i18n/format";
+import { CATEGORY_NOUN } from "@/lib/board";
 import { LocalTime } from "@/components/local-time";
 
 export function SettleList({
@@ -29,18 +30,24 @@ export function SettleList({
   emptyMessage,
   muted,
   settled,
+  scores,
+  hideEvent,
 }: {
   picks: Pick[];
   emptyMessage: string;
   muted?: boolean;
   settled?: boolean;
+  /** The feed's final score per pick id, to fill in the confirm dialog. */
+  scores?: Record<string, string>;
+  /** The rows sit under a heading naming the game already. */
+  hideEvent?: boolean;
 }) {
   const [state, action] = useActionState(settlePickAction, null);
   const [unsetState, unsetAction] = useActionState(unsettlePickAction, null);
   const [target, setTarget] = React.useState<SettleTarget | null>(null);
   const [reopen, setReopen] = React.useState<Pick | null>(null);
   const choose = (p: Pick, status: SettleChoice) =>
-    setTarget({ id: p.id, title: p.selection, sub: p.event, price: p.price, status });
+    setTarget({ id: p.id, title: p.selection, sub: p.event, price: p.price, status, score: scores?.[p.id] ?? null });
 
   // Toasting is talking to an external system, which is what effects are for.
   // Closing the dialog is not done here — see SettleConfirm's onSubmit.
@@ -96,10 +103,20 @@ export function SettleList({
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-fg-muted">{p.event}</p>
+                  {!hideEvent && <p className="mt-0.5 truncate text-xs text-fg-muted">{p.event}</p>}
                   <p className="num mt-0.5 text-[0.6875rem] text-fg-subtle">
-                    {formatSlateDate(p.slateDate)} · <LocalTime at={p.startsAt} format="datetime" />
+                    {CATEGORY_NOUN[p.category].replace(/^./, (c) => c.toUpperCase())} · {formatSlateDate(p.slateDate)}
+                    {!hideEvent && (
+                      <>
+                        {" "}· <LocalTime at={p.startsAt} format="datetime" />
+                      </>
+                    )}
                     {p.finalScore && ` · Final ${p.finalScore}`}
+                    {settled && p.settledAt && (
+                      <>
+                        {" "}· {p.settledBy ? "settled" : "graded"} <LocalTime at={p.settledAt} format="datetime" />
+                      </>
+                    )}
                   </p>
                 </div>
 

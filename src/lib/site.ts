@@ -63,16 +63,3 @@ export const NAV_APP = [
   { href: "/account", label: t().nav.account },
 ] as const;
 
-/** Every admin sees every tab — there is one admin role and it holds the lot. */
-export const NAV_ADMIN = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/slate", label: "Publish slate" },
-  { href: "/admin/settle", label: "Settle" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/waitlist", label: "Waitlist" },
-  { href: "/admin/follows", label: "Follows" },
-  { href: "/admin/parlays", label: "Parlays" },
-  { href: "/admin/announce", label: "Announce" },
-  { href: "/admin/feedback", label: "Feedback" },
-  { href: "/admin/reports", label: "Reports" },
-] as const;

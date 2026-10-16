@@ -290,7 +290,7 @@ console.log("\nSettling a pick");
 {
   // Pick something in the future so it appears in the "not started yet" list.
   const [target] = await sql`
-    select p.id, p.rank, p.category, p.selection, p.price, p.slate_date
+    select p.id, p.rank, p.category, p.selection, p.price, p.slate_date, p.starts_at
     from picks p where p.status = 'pending'
     order by p.starts_at asc limit 1
   `;
@@ -302,8 +302,11 @@ console.log("\nSettling a pick");
     await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
     const page = await ctx.newPage();
 
-    await page.goto(`${APP_URL}/admin/settle`);
-    await hydrated(page);
+    // Started picks are under "Needs a result", the rest under "Not started".
+    const started = new Date(target.starts_at ?? 0) <= new Date();
+    await page.goto(`${APP_URL}/admin/settle${started ? "" : "?tab=upcoming"}`);
+    await loaded(page);
+    await hydrated(page, `[data-pick-id="${target.id}"] button`);
     // Won asks first; nothing is recorded until it's confirmed.
     await page.locator(`[data-pick-id="${target.id}"]`).getByRole("button", { name: "Won", exact: true }).click();
     const confirm = page.getByRole("dialog");
@@ -326,6 +329,12 @@ console.log("\nSettling a pick");
       where entity_id = ${target.id} order by created_at desc limit 1
     `;
     check(audit?.action === "pick.settled.won", "audit log written", `action=${audit?.action}`);
+    await page.goto(`${APP_URL}/admin/activity?type=results`);
+    await loaded(page);
+    check(
+      (await page.locator('li[data-activity="pick.settled.won"]', { hasText: `Settled ${target.selection} as Won` }).count()) >= 1,
+      "the activity log reads it back as a sentence",
+    );
     check(
       audit?.actor_email === ADMIN_EMAIL,
       "audit log names the actor",
@@ -620,9 +629,40 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   await ctx.addCookies([await sessionCookie(secondAdmin)]);
   const page = await ctx.newPage();
 
-  for (const route of ["/admin", "/admin/users", "/admin/follows", "/admin/parlays", "/admin/announce", "/admin/feedback"]) {
+  const [someone] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  for (const route of [
+    "/admin",
+    "/admin/activity",
+    "/admin/users",
+    "/admin/users?tab=invites",
+    `/admin/users/${someone.id}`,
+    `/admin/users/${someone.id}?tab=bets`,
+    `/admin/users/${someone.id}?tab=parlays`,
+    `/admin/users/${someone.id}?tab=activity`,
+    "/admin/follows",
+    "/admin/follows?tab=breakdown",
+    "/admin/follows?tab=day",
+    "/admin/follows?tab=testers",
+    `/admin/follows/${someone.id}`,
+    "/admin/parlays",
+    "/admin/slate",
+    "/admin/slate?category=parlay",
+    "/admin/settle",
+    "/admin/settle?tab=community",
+    "/admin/settle?tab=upcoming",
+    "/admin/settle?tab=settled",
+    "/admin/waitlist",
+    "/admin/announce",
+    "/admin/feedback",
+    "/admin/reports",
+  ]) {
     const res = await page.goto(`${APP_URL}${route}`);
-    check(res.status() === 200, `second admin opens ${route}`, `${res.status()}`);
+    // The console streams a skeleton first (admin/loading.tsx), so the status
+    // is sent before the page has run: a page that throws still says 200.
+    // Wait for it, then look for the error screen as well.
+    await loaded(page);
+    const broke = await page.getByRole("heading", { name: "Something broke" }).count();
+    check(res.status() === 200 && broke === 0, `second admin opens ${route}`, `${res.status()}${broke ? " but it broke" : ""}`);
   }
 
   // Both admins are listed, and the promoted one is not a special case.
@@ -952,13 +992,19 @@ console.log("\nGame-day board");
   await loaded(admin);
   check(
     (await admin.getByText("No games left to pick on").count()) === 1 &&
-      (await admin.locator(`a[href="/admin/slate?date=${gameDay}&category=game"]`).count()) === 1,
+      (await admin.locator("p", { hasText: "No games left to pick on" }).locator(`a[href="/admin/slate?date=${gameDay}&category=game"]`).count()) === 1,
     "a day without games links to the next game day",
   );
   check((await admin.locator('[aria-label="Slate completeness"]').count()) === 0, "a short slate isn't shown as incomplete");
   await admin.goto(`${APP_URL}/admin`);
   await loaded(admin);
-  check((await admin.getByText("Next slate").count()) === 1, "the overview's slate card is the next game day's");
+  check((await admin.getByRole("heading", { name: /^Next slate/ }).count()) === 1, "the overview's slate card is the next game day's");
+  check(
+    (await admin.getByRole("heading", { name: "Needs your attention" }).count()) === 1 &&
+      (await admin.locator('a[href^="/admin/slate?date="]', { hasText: "isn't published" }).count()) === 1,
+    "the overview lists the unpublished game day as a to-do",
+  );
+  check((await admin.locator('nav[aria-label="Admin sections"] a').count()) >= 11, "the sidebar lists every admin section");
   await adminCtx.close();
 
   await sql`update slates set published_at = ${publishedAt} where date = ${latestSlate}`;
@@ -1446,7 +1492,10 @@ console.log("\nMute, block, report — and the audit's fixes");
   // A role change asks first; Cancel leaves it as it was.
   await adminPage.goto(`${APP_URL}/admin/users`);
   await loaded(adminPage);
-  await hydrated(adminPage, "button");
+  check((await adminPage.locator(`tr[data-user-id="${tester.id}"]`).count()) === 1, "the users directory lists the tester");
+  await adminPage.goto(`${APP_URL}/admin/users/${tester.id}`);
+  await loaded(adminPage);
+  await hydrated(adminPage, "button[role=combobox]");
   await adminPage.getByRole("combobox", { name: `Role for ${TESTER_EMAIL}` }).click();
   await adminPage.getByRole("option", { name: "admin" }).click();
   const roleDialog = adminPage.getByRole("alertdialog");

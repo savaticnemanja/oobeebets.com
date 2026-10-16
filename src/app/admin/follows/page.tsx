@@ -8,7 +8,7 @@ import { getAuth } from "@/lib/auth";
 import { getFollowAnalytics, getSlateTakeRates } from "@/lib/stats";
 import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
 import { FOLLOW_STAKE_UNITS } from "@/lib/follows";
-import { StatTile } from "@/components/stat-tile";
+import { Kpi, PageHeader, TabNav } from "@/components/admin/kit";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -67,10 +67,13 @@ function Units({ units, settled }: { units: number; settled: number }) {
   );
 }
 
+const TABS = ["summary", "breakdown", "day", "testers"] as const;
+type Tab = (typeof TABS)[number];
+
 export default async function AdminFollowsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; tab?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   // 404 rather than 403, same as the layout: a non-admin does not learn this
@@ -80,6 +83,7 @@ export default async function AdminFollowsPage({
 
   const today = slateDateString();
   const date = params.date && isValidSlateDate(params.date) ? params.date : today;
+  const tab: Tab = TABS.includes(params.tab as Tab) ? (params.tab as Tab) : "summary";
 
   const [analytics, takeRates, availableDates] = await Promise.all([
     getFollowAnalytics(),
@@ -103,36 +107,46 @@ export default async function AdminFollowsPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Follows</h1>
-          <p className="mt-1.5 max-w-2xl text-sm text-fg-muted">
-            Who took what. A tester taps one circle on a pick card and nothing
-            else is asked for — no stake, no book — so every unit figure below is
-            flat at {Number(FOLLOW_STAKE_UNITS).toFixed(2)}u a bet, which is the
-            one thing we can honestly claim to know about their stake.
-          </p>
-        </div>
-        {analytics.follows > 0 && (
-          <Badge variant="brand">{analytics.follows} followed</Badge>
-        )}
-      </div>
+      <PageHeader
+        title="Follows"
+        description="Who took which picks, and how those bets did — the testers' record next to Oobee's."
+        info={
+          <>
+            A tester taps one circle on a pick card and nothing else is asked for — no stake, no book — so every unit
+            figure here is flat at {Number(FOLLOW_STAKE_UNITS).toFixed(2)}u a bet, the one thing we can honestly claim to
+            know about their stake. Admin accounts are left out of every cohort figure.
+          </>
+        }
+        actions={analytics.follows > 0 ? <Badge variant="brand">{analytics.follows} followed</Badge> : undefined}
+      />
 
+      <TabNav
+        label="Follows views"
+        tabs={[
+          { href: "/admin/follows", label: "Summary", active: tab === "summary" },
+          { href: "/admin/follows?tab=breakdown", label: "What they take", active: tab === "breakdown" },
+          { href: `/admin/follows?tab=day&date=${date}`, label: "Pick by pick", active: tab === "day" },
+          { href: "/admin/follows?tab=testers", label: "Testers", count: analytics.testerRows.length, active: tab === "testers" },
+        ]}
+      />
+
+      {tab === "summary" && (
+      <>
       {/* ------------------------------------------------------------ tiles */}
-      <dl className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
           label="Testers"
           value={analytics.testers}
           sub={`${analytics.followers} have followed something`}
         />
-        <StatTile label="Bets followed" value={analytics.follows} />
-        <StatTile
+        <Kpi label="Bets followed" value={analytics.follows} />
+        <Kpi
           label="Take-up"
           tone="brand"
           value={analytics.takeRate === null ? "—" : formatRate(analytics.takeRate)}
           sub="of the chances testers had"
         />
-        <StatTile
+        <Kpi
           label="Per follower"
           value={
             analytics.avgPerFollower === null
@@ -213,24 +227,6 @@ export default async function AdminFollowsPage({
         </CardContent>
       </Card>
 
-      {/* --------------------------------------------------- what they follow */}
-      <section aria-labelledby="types-heading" className="mt-10">
-        <h2 id="types-heading" className="text-sm font-semibold tracking-tight">
-          What they follow
-        </h2>
-        <p className="mt-1 max-w-2xl text-xs text-fg-subtle">
-          &ldquo;vs. share&rdquo; is this slice&apos;s share of all follows over its share
-          of all published picks. 1.00× is followed exactly in proportion to how
-          often it appeared; above that is over its weight.
-        </p>
-
-        <div className="mt-4 space-y-6">
-          <FollowBreakdownTable rows={analytics.byCategory} dimension="Board" />
-          <FollowBreakdownTable rows={analytics.byMarket} dimension="Bet type" />
-          <FollowBreakdownTable rows={analytics.byLeague} dimension="League" />
-        </div>
-      </section>
-
       {/* ------------------------------------------------- consistency split */}
       <Card className="mt-10">
         <CardHeader>
@@ -297,8 +293,35 @@ export default async function AdminFollowsPage({
         </CardContent>
       </Card>
 
+      </>
+      )}
+
+      {/* --------------------------------------------------- what they follow */}
+      {tab === "breakdown" && (
+      <>
+      <section aria-labelledby="types-heading">
+        <h2 id="types-heading" className="text-sm font-semibold tracking-tight">
+          What they follow
+        </h2>
+        <p className="mt-1 max-w-2xl text-xs text-fg-subtle">
+          &ldquo;vs. share&rdquo; is this slice&apos;s share of all follows over its share
+          of all published picks. 1.00× is followed exactly in proportion to how
+          often it appeared; above that is over its weight.
+        </p>
+
+        <div className="mt-4 space-y-6">
+          <FollowBreakdownTable rows={analytics.byCategory} dimension="Board" />
+          <FollowBreakdownTable rows={analytics.byMarket} dimension="Bet type" />
+          <FollowBreakdownTable rows={analytics.byLeague} dimension="League" />
+        </div>
+      </section>
+
+      </>
+      )}
+
       {/* ------------------------------------------------------ per-pick take */}
-      <section aria-labelledby="takeup-heading" className="mt-10">
+      {tab === "day" && (
+      <section aria-labelledby="takeup-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="takeup-heading" className="text-sm font-semibold tracking-tight">
@@ -315,6 +338,7 @@ export default async function AdminFollowsPage({
               current={date}
               today={today}
               basePath="/admin/follows"
+              keep={{ tab: "day" }}
             />
           )}
         </div>
@@ -372,8 +396,11 @@ export default async function AdminFollowsPage({
         )}
       </section>
 
+      )}
+
       {/* -------------------------------------------------------- per tester */}
-      <section aria-labelledby="testers-heading" className="mt-10">
+      {tab === "testers" && (
+      <section aria-labelledby="testers-heading">
         <h2 id="testers-heading" className="text-sm font-semibold tracking-tight">
           Tester by tester
         </h2>
@@ -416,7 +443,7 @@ export default async function AdminFollowsPage({
                       {/* The row is the way into one player's card — their open
                           bets and every day they have played. */}
                       <Link
-                        href={`/admin/follows/${u.userId}`}
+                        href={`/admin/users/${u.userId}?tab=bets`}
                         className="text-fg underline-offset-4 transition-colors hover:text-brand hover:underline"
                       >
                         {u.email}
@@ -445,6 +472,7 @@ export default async function AdminFollowsPage({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

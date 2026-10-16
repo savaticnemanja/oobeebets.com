@@ -56,8 +56,8 @@ async function audit(
 function revalidateSlate() {
   revalidatePath("/");
   revalidatePath("/picks");
-  revalidatePath("/admin/slate");
-  revalidatePath("/admin/settle");
+  // The whole console: the sidebar's counts and the overview read these too.
+  revalidatePath("/admin", "layout");
 }
 
 /* ------------------------------------------------------------ create pick */
@@ -550,7 +550,7 @@ export async function setUserRoleAction(
     email: target.email,
   });
 
-  revalidatePath("/admin/users");
+  revalidatePath("/admin/users", "layout");
   return { ok: true, message: `${target.email} is now ${parsed.data.role}.` };
 }
 

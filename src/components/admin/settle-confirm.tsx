@@ -16,6 +16,8 @@ export interface SettleTarget {
   sub: string;
   price: number;
   status: SettleChoice;
+  /** The feed's final score, if it has one — filled in, still editable. */
+  score?: string | null;
 }
 
 const VERB: Record<SettleChoice, string> = { won: "Won", lost: "Lost", push: "Push", void: "Void" };
@@ -82,7 +84,14 @@ export function SettleConfirm({
                   <Label htmlFor="settle-score">
                     {scoreLabel} <span className="font-normal text-fg-subtle">(optional)</span>
                   </Label>
-                  <Input id="settle-score" name="finalScore" autoFocus placeholder={scorePlaceholder} className="mt-1.5" />
+                  <Input
+                    id="settle-score"
+                    name="finalScore"
+                    autoFocus
+                    defaultValue={target.score ?? undefined}
+                    placeholder={scorePlaceholder}
+                    className="mt-1.5"
+                  />
                 </>
               )}
             </div>

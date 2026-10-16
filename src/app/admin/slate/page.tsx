@@ -6,12 +6,15 @@ import { PickComposer } from "@/components/admin/pick-composer";
 import { requireAdminPage } from "@/lib/auth";
 import { UPCOMING_DAYS, getSlateGames, nextGameDay } from "@/lib/odds/board";
 import { ensureSlateOdds, ensureUpcomingOdds, getFeedStatus, slateBounds } from "@/lib/odds/sync";
-import { formatSlateDate } from "@/lib/i18n/format";
+import { formatSlateDate, formatSlateWeekday } from "@/lib/i18n/format";
 import { SlatePickList } from "@/components/admin/slate-pick-list";
-import { PublishBar } from "@/components/admin/publish-bar";
+import { PublishPanel } from "@/components/admin/publish-bar";
+import { SlateDays } from "@/components/admin/slate-days";
+import { PageHeader, TabNav } from "@/components/admin/kit";
+import { getSlateDays } from "@/lib/admin/overview";
+import { addDays } from "@/lib/slate-date";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import {
-  PARLAYS_PER_SLATE,
   PICKS_PER_SLATE,
   TAB_LABELS,
   adminBoardTabs,
@@ -25,7 +28,7 @@ import { ParlayComposer } from "@/components/admin/parlay-composer";
 import { ParlayCard } from "@/components/parlay-card";
 import { DeleteOobeeParlayButton } from "@/components/admin/parlay-delete";
 import { FeatureToggle } from "@/components/admin/feature-toggle";
-import { cn } from "@/lib/utils";
+import { CalendarX2 } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Publish slate" };
@@ -72,12 +75,22 @@ export default async function AdminSlatePage({
     pickCategories.map((c) => [c, byCategory[c].length]),
   ) as Record<PickCategory, number>;
 
-  // Oobee's parlays are a different table, so only the parlay tab pays for
-  // them. `legs` is what the composer may build from — this slate's picks that
-  // are published-or-draft and still ahead of kick-off.
-  const [oobeeParlays, legs] = isParlayTab
-    ? await Promise.all([getOobeeParlays(date), selectableLegs(date)])
-    : [[], []];
+  // Oobee's parlays go out with the day, so the panel counts them on every
+  // tab; `legs` — what the parlay composer may build from, this slate's picks
+  // still ahead of kick-off — only on the parlay tab.
+  //
+  // The day strip covers the coming week and a little behind; a day picked
+  // from further off gets its own few days either side instead.
+  const today = slateDateString();
+  const [from, to] =
+    date >= addDays(today, -2) && date <= addDays(today, 9)
+      ? [addDays(today, -2), addDays(today, 9)]
+      : [addDays(date, -3), addDays(date, 3)];
+  const [oobeeParlays, legs, days] = await Promise.all([
+    getOobeeParlays(date),
+    isParlayTab ? selectableLegs(date) : [],
+    getSlateDays(from, to),
+  ]);
 
   // The pick composer chooses from the odds feed. Refreshed here only when
   // the stored copy is stale, so reloading this screen does not spend credits.
@@ -93,73 +106,75 @@ export default async function AdminSlatePage({
       ? await nextGameDay(new Date(Math.max(slateBounds(date).from.getTime(), Date.now())))
       : null;
 
+  // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "has a game started yet" is the point
+  const now = Date.now();
+  const firstKickoff =
+    rows.length > 0
+      ? new Date(Math.min(...rows.map((r) => r.startsAt.getTime())))
+      : (days.find((d) => d.day === date)?.firstKickoff ?? null);
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Publish slate</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">
-        Two boards, ranked separately. Add picks in any order, then drag rows below
-        to set the final rank; star any you want featured — they lead their day on
-        the board, as many as you like, even after publishing. Each game day takes up
-        to {PICKS_PER_SLATE.game} game bets and {PICKS_PER_SLATE.prop} player props —
-        as many as its games are worth, so a one-game Thursday can go out short. Both
-        lists publish together.
-      </p>
+      <PageHeader
+        title="Publish slate"
+        description="Choose a game day, add picks from the odds feed, put them in order, then publish the day."
+        info={
+          <>
+            Game bets and player props are two boards, ranked separately: add picks in any order, then drag rows to set
+            the final rank. Each game day takes up to {PICKS_PER_SLATE.game} game bets and {PICKS_PER_SLATE.prop} player
+            props — as many as its games are worth, so a one-game Thursday can go out short. Star any you want featured:
+            they lead their day on the board, as many as you like, even after publishing. Everything on the day publishes
+            together, and only before its first game.
+          </>
+        }
+      />
 
-      <PublishBar
+      <SlateDays
+        days={days.map(({ day, games, published, picks, parlays }) => ({ day, games, published, picks, parlays }))}
+        current={date}
+        today={today}
+        category={tab}
+      />
+
+      <PublishPanel
         date={date}
-        category={category}
+        dayLabel={`${formatSlateWeekday(date)}, ${formatSlateDate(date).replace(/^\w+, /, "")}`}
         published={published}
+        publishedAt={slate?.publishedAt ?? null}
         counts={counts}
+        parlays={oobeeParlays.length}
+        featured={rows.filter((r) => r.featured).length + oobeeParlays.filter((p) => p.featured).length}
+        firstKickoff={firstKickoff}
         anySettled={rows.some((r) => r.settledAt !== null)}
-        // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "has a game started yet" is the point
-        anyStarted={rows.some((r) => r.startsAt.getTime() <= Date.now())}
+        anyStarted={rows.some((r) => r.startsAt.getTime() <= now)}
       />
 
       {nextDay && nextDay !== date && (
-        <p className="mt-4 text-sm text-fg-muted">
-          No games left to pick on {formatSlateDate(date)}. Next game day:{" "}
-          <Link href={`/admin/slate?date=${nextDay}&category=${category}`} className="text-brand hover:underline">
-            {formatSlateDate(nextDay)}
-          </Link>
-          .
+        <p className="mb-6 flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm text-fg-muted">
+          <CalendarX2 className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
+          <span>
+            No games left to pick on {formatSlateDate(date)}. Next game day:{" "}
+            <Link href={`/admin/slate?date=${nextDay}&category=${category}`} className="text-brand hover:underline">
+              {formatSlateDate(nextDay)}
+            </Link>
+            .
+          </span>
         </p>
       )}
 
-      {/* ---------------------------------------------------------- category */}
-      <nav
-        aria-label="Board"
-        className="mt-6 -mb-px flex items-center gap-1 border-b border-border"
-      >
-        {adminBoardTabs.map((c) => {
-          const isActive = c === tab;
-          const [have, limit] =
-            c === "parlay"
-              ? [oobeeParlays.length, PARLAYS_PER_SLATE]
-              : [counts[c], PICKS_PER_SLATE[c]];
-          return (
-            <Link
-              key={c}
-              href={`/admin/slate?date=${date}&category=${c}`}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "relative inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive ? "text-brand" : "text-fg-muted hover:text-fg",
-              )}
-            >
-              {TAB_LABELS[c]}
-              <span className="num text-xs text-fg-subtle">
-                {have}/{limit}
-              </span>
-              {isActive && (
-                <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand" />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      <TabNav
+        label="Board"
+        className="mb-6"
+        tabs={adminBoardTabs.map((c) => ({
+          href: `/admin/slate?date=${date}&category=${c}`,
+          label: TAB_LABELS[c],
+          count: c === "parlay" ? oobeeParlays.length : counts[c],
+          active: c === tab,
+        }))}
+      />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-        <div className="lg:sticky lg:top-32 lg:self-start">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-6 lg:self-start">
           {isParlayTab ? (
             <ParlayComposer
               date={date}
@@ -179,6 +194,17 @@ export default async function AdminSlatePage({
           )}
         </div>
 
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold tracking-tight">On the board</h2>
+            <p className="text-xs text-fg-subtle">
+              {published
+                ? "Published — the order is fixed; stars still work"
+                : isParlayTab
+                  ? "Built from this day's picks"
+                  : "Drag a row to change its rank · ★ to feature"}
+            </p>
+          </div>
         {isParlayTab ? (
           <div>
             {oobeeParlays.length === 0 ? (
@@ -208,6 +234,7 @@ export default async function AdminSlatePage({
             published={published}
           />
         )}
+        </div>
       </div>
     </div>
   );

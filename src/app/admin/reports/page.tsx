@@ -9,7 +9,8 @@ import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { requireAdminPage } from "@/lib/auth";
 import { REPORT_REASON_LABEL } from "@/lib/report-reasons";
-import { cn } from "@/lib/utils";
+import { Empty, PageHeader, TabNav } from "@/components/admin/kit";
+import { Flag } from "lucide-react";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -59,31 +60,16 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">
-        Posts and accounts testers reported. Remove a post that breaks the Terms, or dismiss the report.
-      </p>
-
-      <nav aria-label="Report lists" className="mt-6 flex gap-2">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={tab.active ? "page" : undefined}
-            className={cn(
-              "rounded-lg border px-3 py-2 text-sm transition-colors",
-              tab.active ? "border-brand/50 bg-brand/10 text-brand" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
-            )}
-          >
-            {tab.label} <span className="num">{tab.n}</span>
-          </Link>
-        ))}
-      </nav>
+      <PageHeader
+        title="Reports"
+        description="Posts and accounts testers reported. Remove a post that breaks the Terms, or dismiss the report."
+      />
+      <TabNav label="Report lists" tabs={tabs.map((t) => ({ href: t.href, label: t.label, count: t.n, active: t.active, attention: t.label === "Open" }))} />
 
       {rows.length === 0 ? (
-        <p className="mt-8 text-sm text-fg-muted">{showResolved ? "Nothing resolved yet." : "No open reports."}</p>
+        <Empty icon={Flag} title={showResolved ? "Nothing resolved yet" : "No open reports"} />
       ) : (
-        <ul className="mt-6 space-y-3">
+        <ul className="space-y-3">
           {rows.map((r) => (
             <li key={r.id} className="card-hairline p-4" data-report-id={r.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">

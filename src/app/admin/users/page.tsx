@@ -1,92 +1,78 @@
-import { notFound } from "next/navigation";
-import { desc, eq, inArray, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { invitations, subscriptions, users } from "@/db/schema";
-import { LIVE_STATUSES } from "@/lib/billing/access";
-import { TIERS, TIER_ORDER } from "@/lib/tiers";
-import { getAuth } from "@/lib/auth";
-import { signupEnabled } from "@/lib/signup";
-import { UserTable } from "@/components/admin/user-table";
-import { InvitePanel } from "@/components/admin/invite-panel";
+import Link from "next/link";
 import type { Metadata } from "next";
+import { desc, eq } from "drizzle-orm";
+import { UserPlus } from "lucide-react";
+import { db } from "@/db";
+import { invitations, users } from "@/db/schema";
+import { requireAdminPage } from "@/lib/auth";
+import { signupEnabled } from "@/lib/signup";
+import { listUsers } from "@/lib/admin/users";
+import { UserDirectory } from "@/components/admin/user-directory";
+import { InvitePanel } from "@/components/admin/invite-panel";
+import { PageHeader, TabNav } from "@/components/admin/kit";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Users" };
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminUsersPage() {
-  const auth = await getAuth();
-  if (!auth?.isAdmin) notFound();
+export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const [auth, params] = await Promise.all([requireAdminPage(), searchParams]);
+  const tab = params.tab === "invites" ? "invites" : "accounts";
 
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      role: users.role,
-      createdAt: users.createdAt,
-      lastLoginAt: users.lastLoginAt,
-    })
-    .from(users)
-    .orderBy(desc(users.createdAt))
-    .limit(200);
-
-  // Each account's best live plan; free otherwise.
-  const live = await db
-    .select({ userId: subscriptions.userId, tier: subscriptions.tier, status: subscriptions.status })
-    .from(subscriptions)
-    .where(inArray(subscriptions.status, LIVE_STATUSES));
-  const planOf = new Map<string, (typeof live)[number]>();
-  for (const s of live) {
-    const had = planOf.get(s.userId);
-    if (!had || TIER_ORDER.indexOf(s.tier) > TIER_ORDER.indexOf(had.tier)) planOf.set(s.userId, s);
-  }
-  const withPlans = rows.map((u) => {
-    const s = planOf.get(u.id);
-    return { ...u, plan: s ? `${TIERS[s.tier].name}${s.status === "past_due" ? " · past due" : ""}` : null };
-  });
-
-  const [{ n: adminCount }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(users)
-    .where(eq(users.role, "admin"));
-
-  const inviteRows = await db
-    .select({
-      id: invitations.id,
-      email: invitations.email,
-      status: invitations.status,
-      invitedByEmail: users.email,
-      createdAt: invitations.createdAt,
-      expiresAt: invitations.expiresAt,
-    })
-    .from(invitations)
-    .leftJoin(users, eq(users.id, invitations.invitedBy))
-    .orderBy(desc(invitations.createdAt))
-    .limit(200);
+  const [rows, inviteRows] = await Promise.all([
+    tab === "accounts" ? listUsers() : Promise.resolve([]),
+    db
+      .select({
+        id: invitations.id,
+        email: invitations.email,
+        status: invitations.status,
+        invitedByEmail: users.email,
+        createdAt: invitations.createdAt,
+        expiresAt: invitations.expiresAt,
+      })
+      .from(invitations)
+      .leftJoin(users, eq(users.id, invitations.invitedBy))
+      .orderBy(desc(invitations.createdAt))
+      .limit(200),
+  ]);
+  const pendingInvites = inviteRows.filter((i) => i.status === "pending" && i.expiresAt > new Date()).length;
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">
-        {rows.length} accounts · {adminCount} with admin access. Any admin can
-        change roles, but not their own — and the last admin can&apos;t be demoted.
-      </p>
+      <PageHeader
+        title="Users"
+        description={
+          signupEnabled()
+            ? "Every account, and the invites that let people in. Sign-ups are open, so anyone can also join from /signup."
+            : "Every account, and the invites that let people in. Sign-ups are closed: an invite or the waitlist is the only way in."
+        }
+        info="Open an account to see its bets, parlays, sessions and activity, and to change its role. Any admin can change anyone's role except their own, and the last admin can't be demoted."
+        actions={
+          tab === "accounts" && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/admin/users?tab=invites">
+                <UserPlus aria-hidden="true" />
+                Invite a tester
+              </Link>
+            </Button>
+          )
+        }
+      />
 
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold tracking-tight">Invite a tester</h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          {signupEnabled()
-            ? "Sign-ups are open, so anyone can also make an account from /signup."
-            : "Sign-ups are closed, so this and the waitlist are the only ways in."}
-        </p>
-        <div className="mt-4">
-          <InvitePanel invitations={inviteRows} />
-        </div>
-      </div>
+      <TabNav
+        label="Users"
+        tabs={[
+          { href: "/admin/users", label: "Accounts", active: tab === "accounts" },
+          { href: "/admin/users?tab=invites", label: "Invitations", count: pendingInvites, active: tab === "invites" },
+        ]}
+      />
 
-      <div className="mt-10">
-        <UserTable users={withPlans} currentUserId={auth.user.id} />
-      </div>
+      {tab === "accounts" ? (
+        <UserDirectory rows={rows} currentUserId={auth.user.id} />
+      ) : (
+        <InvitePanel invitations={inviteRows} />
+      )}
     </div>
   );
 }

@@ -49,6 +49,7 @@ const SHOTS = [
   { name: "03b-picks-props", path: "/picks?category=prop", user: TESTER_EMAIL, full: false },
   { name: "04-account", path: "/account", user: TESTER_EMAIL, full: false },
   { name: "05-admin", path: "/admin", user: ADMIN_EMAIL, full: false },
+  { name: "05b-admin-activity", path: "/admin/activity", user: ADMIN_EMAIL, full: false },
   { name: "06-admin-slate", path: "/admin/slate", user: ADMIN_EMAIL, full: false },
   { name: "06b-admin-slate-props", path: "/admin/slate?category=prop", user: ADMIN_EMAIL, full: false },
   { name: "07-admin-settle", path: "/admin/settle", user: ADMIN_EMAIL, full: false },

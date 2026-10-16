@@ -1,114 +1,216 @@
-import { asc, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import type { Metadata } from "next";
+import { CircleCheck, Clock3, Layers } from "lucide-react";
 import { db } from "@/db";
-import { picks } from "@/db/schema";
+import { games, picks, selections } from "@/db/schema";
 import { SettleList } from "@/components/admin/settle-list";
 import { CommunityLegList } from "@/components/admin/community-leg-list";
 import { getPendingCommunityLegs } from "@/lib/odds/board";
 import { requireAdminPage } from "@/lib/auth";
 import { refreshResults } from "@/lib/odds/sync";
-import { Badge } from "@/components/ui/badge";
-import type { Metadata } from "next";
+import { pickProfit } from "@/lib/settlement";
+import { formatUnits } from "@/lib/i18n/format";
+import { Empty, Kpi, KpiGrid, PageHeader, TabNav, since } from "@/components/admin/kit";
+import { LocalTime } from "@/components/local-time";
+import type { Pick } from "@/db/schema";
 
 export const metadata: Metadata = { title: "Settle" };
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminSettlePage() {
-  await requireAdminPage();
+const TABS = ["due", "community", "upcoming", "settled"] as const;
+type Tab = (typeof TABS)[number];
+
+/** Picks under the game they're on, kick-off order. */
+function byGame(list: Pick[]) {
+  const groups: { key: string; event: string; startsAt: Date; picks: Pick[] }[] = [];
+  for (const p of list) {
+    const key = `${p.event}|${p.startsAt.toISOString()}`;
+    const g = groups.find((x) => x.key === key);
+    if (g) g.picks.push(p);
+    else groups.push({ key, event: p.event, startsAt: p.startsAt, picks: [p] });
+  }
+  return groups;
+}
+
+export default async function AdminSettlePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const [, params] = await Promise.all([requireAdminPage(), searchParams]);
+  const tab: Tab = TABS.includes(params.tab as Tab) ? (params.tab as Tab) : "due";
+
   // Game lines grade themselves from the final score; fetch any that are due
   // first, so this page only lists what genuinely needs a person.
   await refreshResults();
-  const communityLegs = await getPendingCommunityLegs();
 
-  // Anything that has started and is still pending needs a result. Ordered
-  // oldest-first so the longest-outstanding games get cleared first.
-  const due = await db
-    .select()
-    .from(picks)
-    .where(sql`${picks.status} = 'pending' and ${picks.startsAt} < now()`)
-    .orderBy(asc(picks.startsAt));
+  // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "this week" is the point
+  const weekAgo = new Date(Date.now() - 7 * 24 * 3600_000);
+  const [communityLegs, due, upcoming, recent, [week]] = await Promise.all([
+    getPendingCommunityLegs(),
+    // Started and still pending: needs a result. Oldest first, so the
+    // longest-outstanding games get cleared first.
+    db
+      .select()
+      .from(picks)
+      .where(sql`${picks.status} = 'pending' and ${picks.startsAt} < now()`)
+      .orderBy(asc(picks.startsAt)),
+    db
+      .select()
+      .from(picks)
+      .where(sql`${picks.status} = 'pending' and ${picks.startsAt} >= now()`)
+      .orderBy(asc(picks.startsAt))
+      .limit(40),
+    db.select().from(picks).where(isNotNull(picks.settledAt)).orderBy(desc(picks.settledAt)).limit(30),
+    db
+      .select({
+        settled: sql<number>`count(*)::int`,
+        auto: sql<number>`count(*) filter (where ${picks.settledBy} is null)::int`,
+      })
+      .from(picks)
+      .where(and(isNotNull(picks.settledAt), gte(picks.settledAt, weekAgo))),
+  ]);
 
-  const upcoming = await db
-    .select()
-    .from(picks)
-    .where(sql`${picks.status} = 'pending' and ${picks.startsAt} >= now()`)
-    .orderBy(asc(picks.startsAt))
-    .limit(20);
+  // What the feed says the score was, for picks it couldn't grade itself
+  // (props, mostly) — filled into the dialog so it's one click to confirm.
+  const selIds = due.flatMap((p) => (p.selectionId ? [p.selectionId] : []));
+  const scored = selIds.length
+    ? await db
+        .select({ id: selections.id, game: games })
+        .from(selections)
+        .innerJoin(games, eq(games.id, selections.gameId))
+        .where(inArray(selections.id, selIds))
+    : [];
+  const finals = new Map(
+    scored
+      .filter((s) => s.game.homeScore !== null && s.game.awayScore !== null)
+      .map((s) => [s.id, `${s.game.awayTeam} ${s.game.awayScore}–${s.game.homeScore} ${s.game.homeTeam}`]),
+  );
+  const scores = Object.fromEntries(
+    due.flatMap((p) => (p.selectionId && finals.has(p.selectionId) ? [[p.id, finals.get(p.selectionId)!]] : [])),
+  );
 
-  const recent = await db
-    .select()
-    .from(picks)
-    .where(sql`${picks.settledAt} is not null`)
-    .orderBy(sql`${picks.settledAt} desc`)
-    .limit(15);
+  const recentNet = recent
+    .filter((p) => p.settledAt && p.settledAt >= weekAgo)
+    .reduce((n, p) => n + pickProfit(p), 0);
+
+  const tabs = [
+    { href: "/admin/settle", label: "Needs a result", count: due.length, active: tab === "due", attention: true },
+    { href: "/admin/settle?tab=community", label: "Community legs", count: communityLegs.length, active: tab === "community", attention: true },
+    { href: "/admin/settle?tab=upcoming", label: "Not started", count: upcoming.length, active: tab === "upcoming" },
+    { href: "/admin/settle?tab=settled", label: "Recently settled", active: tab === "settled" },
+  ];
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settle</h1>
-          <p className="mt-1.5 text-sm text-fg-muted">
-            Game bets settle themselves from the final score, and NFL player props from
-            the box score a few hours after the game. What is left here is a prop the
-            stats feed couldn&apos;t match to one player, a player who didn&apos;t play,
-            hand-entered picks from before the feed, and corrections. Every result is written to the audit log and appears on
-            the public record immediately.
-          </p>
-        </div>
-        {due.length > 0 && <Badge variant="brand">{due.length} waiting</Badge>}
-      </div>
+      <PageHeader
+        title="Settle"
+        description="Results the feed couldn't record for itself. Everything you settle goes on the public record at once."
+        info={
+          <>
+            Game bets settle themselves from the final score, and NFL player props from the box score a few hours after
+            the game. What&apos;s left here is a prop the stats feed couldn&apos;t match to one player, a player who
+            didn&apos;t play, hand-entered picks from before the feed, and corrections. Settling a leg grades every
+            parlay it&apos;s in. Every result is written to the activity log.
+          </>
+        }
+      />
 
-      <div className="mt-8 space-y-10">
-        <section aria-labelledby="due-heading">
-          <h2 id="due-heading" className="text-sm font-semibold tracking-tight">
-            Games that have finished
-          </h2>
-          <div className="mt-3">
-            <SettleList picks={due} emptyMessage="Nothing waiting — you're up to date." />
+      <KpiGrid className="mb-6">
+        <Kpi
+          label="Needs a result"
+          value={due.length}
+          tone={due.length > 0 ? "brand" : "neutral"}
+          sub={due[0] ? `oldest kicked off ${since(due[0].startsAt)}` : "nothing waiting"}
+          href="/admin/settle"
+        />
+        <Kpi
+          label="Community legs"
+          value={communityLegs.length}
+          tone={communityLegs.length > 0 ? "brand" : "neutral"}
+          sub={
+            communityLegs.length > 0
+              ? `${communityLegs.reduce((n, l) => n + l.parlays, 0)} parlays waiting on them`
+              : "nothing waiting"
+          }
+          href="/admin/settle?tab=community"
+        />
+        <Kpi
+          label="Not started"
+          value={upcoming.length}
+          sub={upcoming[0] ? <>next <LocalTime at={upcoming[0].startsAt} format="kickoff" /></> : "nothing pending"}
+          href="/admin/settle?tab=upcoming"
+        />
+        <Kpi
+          label="Settled this week"
+          value={week.settled}
+          sub={
+            week.settled > 0 ? (
+              <>
+                {week.auto} by the grader · {formatUnits(recentNet)}
+              </>
+            ) : (
+              "none yet"
+            )
+          }
+          href="/admin/settle?tab=settled"
+        />
+      </KpiGrid>
+
+      <TabNav label="Settle lists" tabs={tabs} />
+
+      {tab === "due" &&
+        (due.length === 0 ? (
+          <Empty icon={CircleCheck} title="You're up to date">
+            Every pick that has started has a result.
+          </Empty>
+        ) : (
+          <div className="space-y-6">
+            {byGame(due).map((g) => (
+              <section key={g.key} aria-label={g.event}>
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <h2 className="text-sm font-semibold tracking-tight text-fg">{g.event}</h2>
+                  <p className="text-xs text-fg-subtle">
+                    <LocalTime at={g.startsAt} format="datetime" /> · started {since(g.startsAt)}
+                    {g.picks[0].selectionId && finals.has(g.picks[0].selectionId) && (
+                      <span className="text-fg-muted"> · Final {finals.get(g.picks[0].selectionId)}</span>
+                    )}
+                  </p>
+                </div>
+                <SettleList picks={g.picks} emptyMessage="" scores={scores} hideEvent />
+              </section>
+            ))}
           </div>
-        </section>
+        ))}
 
-        <section aria-labelledby="community-legs-heading">
-          <h2 id="community-legs-heading" className="text-sm font-semibold tracking-tight">
-            Community parlay legs
-          </h2>
-          <p className="mt-1 text-xs text-fg-subtle">
-            Player props testers put in their parlays. NFL props grade themselves from the
-            box score; anything still here needs a result from you.
-          </p>
-          <div className="mt-3">
-            <CommunityLegList legs={communityLegs} />
-          </div>
-        </section>
+      {tab === "community" &&
+        (communityLegs.length === 0 ? (
+          <Empty icon={Layers} title="No community legs waiting">
+            Props in testers&apos; parlays that the box score can&apos;t grade show up here.
+          </Empty>
+        ) : (
+          <CommunityLegList legs={communityLegs} />
+        ))}
 
-        {upcoming.length > 0 && (
-          <section aria-labelledby="upcoming-heading">
-            <h2 id="upcoming-heading" className="text-sm font-semibold tracking-tight">
-              Not started yet
-            </h2>
-            <p className="mt-1 text-xs text-fg-subtle">
-              You can settle early if a result is already known.
+      {tab === "upcoming" &&
+        (upcoming.length === 0 ? (
+          <Empty icon={Clock3} title="Nothing pending" />
+        ) : (
+          <>
+            <p className="mb-3 text-xs text-fg-subtle">You can settle early if a result is already known.</p>
+            <SettleList picks={upcoming} emptyMessage="" muted />
+          </>
+        ))}
+
+      {tab === "settled" &&
+        (recent.length === 0 ? (
+          <Empty icon={CircleCheck} title="Nothing settled yet" />
+        ) : (
+          <>
+            <p className="mb-3 text-xs text-fg-subtle">
+              The last {recent.length}. Reopening a settled pick takes it off the record until it&apos;s settled again —
+              it&apos;s logged.
             </p>
-            <div className="mt-3">
-              <SettleList picks={upcoming} emptyMessage="" muted />
-            </div>
-          </section>
-        )}
-
-        {recent.length > 0 && (
-          <section aria-labelledby="recent-heading">
-            <h2 id="recent-heading" className="text-sm font-semibold tracking-tight">
-              Recently settled
-            </h2>
-            <p className="mt-1 text-xs text-fg-subtle">
-              Reopening a settled pick changes published numbers — it is logged.
-            </p>
-            <div className="mt-3">
-              <SettleList picks={recent} emptyMessage="" settled />
-            </div>
-          </section>
-        )}
-      </div>
+            <SettleList picks={recent} emptyMessage="" settled />
+          </>
+        ))}
     </div>
   );
 }

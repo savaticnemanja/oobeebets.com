@@ -1,14 +1,5 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { z } from "zod";
-import { getAuth } from "@/lib/auth";
-import { getPlayerFollows, type FollowedPick } from "@/lib/stats";
-import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
-import { FOLLOW_STAKE_UNITS } from "@/lib/follows";
-import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
+import { Kpi } from "@/components/admin/kit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -19,7 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CATEGORY_LABELS } from "@/lib/board";
-import { pickProfit } from "@/lib/settlement";
+import { MIN_SAMPLE_FOR_RATE, pickProfit } from "@/lib/settlement";
+import { FOLLOW_STAKE_UNITS } from "@/lib/follows";
+import type { FollowedPick, PlayerFollows } from "@/lib/stats";
 import {
   formatOdds,
   formatRate,
@@ -30,9 +23,10 @@ import { LocalTime } from "@/components/local-time";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Player" };
-
-export const dynamic = "force-dynamic";
+/*
+ * One account's bets: what is riding now and every settled bet they took, day
+ * by day — the Bets tab of their page in Users.
+ */
 
 const STATUS_LABEL = t().status;
 
@@ -124,73 +118,33 @@ function CardTable({ picks }: { picks: FollowedPick[] }) {
   );
 }
 
-export default async function PlayerFollowsPage({
-  params,
-}: {
-  params: Promise<{ userId: string }>;
-}) {
-  const [auth, { userId }] = await Promise.all([getAuth(), params]);
-  if (!auth?.isAdmin) notFound();
-
-  // A hand-typed id should 404 like any other missing player, not reach
-  // Postgres as a malformed uuid and throw.
-  if (!z.string().uuid().safeParse(userId).success) notFound();
-
-  const player = await getPlayerFollows(userId);
-  if (!player) notFound();
-
+export function PlayerBets({ player }: { player: PlayerFollows }) {
   const { user, record } = player;
   const followed = player.open.length + player.days.reduce((n, d) => n + d.picks.length, 0);
 
   return (
     <div>
-      <Link
-        href="/admin/follows"
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-fg"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden="true" />
-        All follows
-      </Link>
-
-      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{user.email}</h1>
-          <p className="mt-1.5 text-sm text-fg-muted">
-            Joined <LocalTime at={user.createdAt} format="date" /> ·{" "}
-            {user.lastLoginAt ? (
-              <>
-                last seen <LocalTime at={user.lastLoginAt} format="datetime" />
-              </>
-            ) : (
-              "never signed in"
-            )}
-          </p>
-        </div>
-        {user.role === "admin" && <Badge variant="brand">admin</Badge>}
-      </div>
-
       {user.role === "admin" && (
-        <p className="mt-4 rounded-lg border border-pending/30 bg-pending-dim px-4 py-2.5 text-xs text-pending">
-          This is an admin account. Its follows are deliberately excluded from
-          every cohort figure on the summary page, so the numbers below will not
-          add up to anything there.
+        <p className="mb-4 rounded-lg border border-pending/30 bg-pending-dim px-4 py-2.5 text-xs text-pending">
+          This is an admin account. Its bets are left out of every cohort figure on Follows, so the numbers below
+          won&apos;t add up to anything there.
         </p>
       )}
 
       {/* ------------------------------------------------------------ tiles */}
-      <dl className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
           label="Bets followed"
           value={followed}
           sub={`of ${player.opportunities} they could have`}
         />
-        <StatTile
+        <Kpi
           label="Follows"
           tone="brand"
           value={player.consistency === null ? "—" : formatRate(player.consistency)}
           sub="of the chances they had"
         />
-        <StatTile
+        <Kpi
           label="Record"
           value={`${record.wins}–${record.losses}`}
           sub={
@@ -201,7 +155,7 @@ export default async function PlayerFollowsPage({
                 : undefined
           }
         />
-        <StatTile
+        <Kpi
           label="Net units"
           tone={record.netUnits >= 0 ? "hit" : "miss"}
           value={record.settled === 0 ? "—" : formatUnits(record.netUnits)}

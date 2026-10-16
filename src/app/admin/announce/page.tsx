@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
-import { getAuth } from "@/lib/auth";
+import { requireAdminPage } from "@/lib/auth";
+import { PageHeader } from "@/components/admin/kit";
 import { selectableRecipients } from "@/lib/announcements";
 import { AnnounceComposer } from "@/components/admin/announce-composer";
 import { LocalTime } from "@/components/local-time";
@@ -20,9 +20,7 @@ interface SentMeta {
 }
 
 export default async function AdminAnnouncePage() {
-  const auth = await getAuth();
-  // 404 rather than 403 — same posture as the rest of /admin.
-  if (!auth?.isAdmin) notFound();
+  await requireAdminPage();
 
   const [accounts, history] = await Promise.all([
     selectableRecipients(),
@@ -38,14 +36,13 @@ export default async function AdminAnnouncePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Announce</h1>
-      <p className="mt-1.5 max-w-2xl text-sm text-fg-muted">
-        Write once and send it to the testers. Same envelope as the invite email —
-        wordmark, card and footer — with your heading and words inside it. Everyone
-        gets their own copy, so no address is visible to anyone else.
-      </p>
+      <PageHeader
+        title="Announce"
+        description="Write once and email it to testers."
+        info="Same envelope as the invite email — wordmark, card and footer — with your heading and words inside it. Everyone gets their own copy, so no address is visible to anyone else."
+      />
 
-      <div className="mt-8">
+      <div>
         <AnnounceComposer accounts={accounts} />
       </div>
 

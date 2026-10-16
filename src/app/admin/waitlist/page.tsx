@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { WaitlistInvite, WaitlistNotify } from "@/components/admin/waitlist-controls";
 import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
+import { Empty, PageHeader } from "@/components/admin/kit";
+import { Hourglass } from "lucide-react";
 import { requireAdminPage } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
 import { getWaitlist } from "@/lib/waitlist";
@@ -23,34 +25,45 @@ export default async function AdminWaitlistPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Waitlist</h1>
-      <p className="mt-1.5 text-sm text-fg-muted">
-        {rows.length} {rows.length === 1 ? "person" : "people"} waiting, oldest first. Sign-ups are{" "}
-        {open ? (
-          <span className="text-hit">open</span>
-        ) : (
+      <PageHeader
+        title="Waitlist"
+        description={
           <>
-            <span className="text-fg">closed</span> — the landing page and /signup add people here.
-            Set <code className="text-fg-muted">SIGNUP_ENABLED=1</code> in the server&apos;s .env to open them
+            {rows.length} {rows.length === 1 ? "person" : "people"} waiting, oldest first. Sign-ups are{" "}
+            {open ? (
+              <span className="text-hit">open</span>
+            ) : (
+              <>
+                <span className="text-fg">closed</span> — the landing page and /signup add people here
+              </>
+            )}
+            .
           </>
-        )}
-        .
-      </p>
+        }
+        info={
+          open
+            ? "Anyone can sign up from /signup right now. Tell the people waiting with the button — each gets one email, once."
+            : "While sign-ups are closed, let people in one at a time with Invite. Set SIGNUP_ENABLED=1 in the server's .env to open them. A row disappears when its address makes an account."
+        }
+      />
 
       {open && (
-        <div className="mt-6">
+        <div className="mb-6">
           <WaitlistNotify count={untold} />
         </div>
       )}
 
       {rows.length === 0 ? (
-        <p className="mt-8 text-sm text-fg-muted">Nobody waiting.</p>
+        <Empty icon={Hourglass} title="Nobody waiting" />
       ) : (
-        <ul className="mt-6 space-y-3">
-          {rows.map((r) => (
-            <li key={r.id} className="card-hairline flex flex-wrap items-center justify-between gap-3 p-4" data-waitlist-id={r.id}>
+        <ul className="card-hairline divide-y divide-border/60">
+          {rows.map((r, i) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-waitlist-id={r.id}>
               <div className="min-w-0 text-sm">
-                <p className="truncate font-medium text-fg">{r.email}</p>
+                <p className="truncate font-medium text-fg">
+                  <span className="num mr-2 text-xs font-normal text-fg-subtle">{i + 1}</span>
+                  {r.email}
+                </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
                   <span>
                     Joined <LocalTime at={r.createdAt} format="datetime" /> from {r.source === "signup" ? "/signup" : "the landing page"}
