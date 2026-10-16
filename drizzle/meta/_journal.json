@@ -183,6 +183,13 @@
       "when": 1792152937515,
       "tag": "0025_plain_text_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792192677910,
+      "tag": "0026_perf_presence_indexes",
+      "breakpoints": true
     }
   ]
 }

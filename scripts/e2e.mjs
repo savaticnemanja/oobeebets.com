@@ -665,6 +665,51 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
     check(res.status() === 200 && broke === 0, `second admin opens ${route}`, `${res.status()}${broke ? " but it broke" : ""}`);
   }
 
+  // Admin perf audit (2026-10-17): lists search and page in Postgres, and
+  // Follows counts every tester rather than a capped list of them.
+  const [t] = await sql`select id, username from users where email = ${TESTER_EMAIL}`;
+  await page.goto(`${APP_URL}/admin/users?q=${encodeURIComponent(t.username)}`);
+  await loaded(page);
+  check(
+    (await page.locator(`tr[data-user-id="${t.id}"]`).count()) === 1 &&
+      (await page.locator("tr[data-user-id]").count()) === 1,
+    "the users directory searches by handle",
+  );
+  // Past one page the pager's links are built on the server — this broke the
+  // whole page at 5k accounts while every small-DB check stayed green.
+  await sql`insert into users (email, password_hash, role, username)
+            select 'e2e-page-' || g || '@example.com', 'x', 'user', 'e2e_page_' || g from generate_series(1, 55) g`;
+  await page.goto(`${APP_URL}/admin/users`);
+  await loaded(page);
+  const nextLink = page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Next" });
+  check(
+    (await page.locator("tr[data-user-id]").count()) === 50 && (await nextLink.count()) === 1,
+    "the users directory pages at 50",
+  );
+  await page.goto(`${APP_URL}/admin/users?page=2`);
+  await loaded(page);
+  check(
+    (await page.locator("tr[data-user-id]").count()) > 0 &&
+      (await page.getByRole("heading", { name: "Something broke" }).count()) === 0,
+    "and its second page renders",
+  );
+  await sql`delete from users where email like 'e2e-page-%@example.com'`;
+  await page.goto(`${APP_URL}/admin/users?q=no-such-account-anywhere`);
+  await loaded(page);
+  check((await page.getByText("No one matches that.").count()) === 1, "and says when nobody matches");
+  const [{ n: testerTotal }] = await sql`select count(*)::int as n from users where role = 'user'`;
+  await page.goto(`${APP_URL}/admin/follows`);
+  await loaded(page);
+  const shown = Number((await page.content()).match(/Testers<\/dt><dd[^>]*><span[^>]*>(\d+)/)?.[1]);
+  check(shown === testerTotal, "Follows counts every tester", `shown=${shown} testers=${testerTotal}`);
+  await page.goto(`${APP_URL}/admin/follows?tab=testers`);
+  await loaded(page);
+  check((await page.getByText(`of ${testerTotal} testers`).count()) === 1, "the tester table pages through all of them");
+
+  // Signing in marks the account active for the day (user_active_days).
+  const [seen] = await sql`select 1 from user_active_days where user_id = ${t.id}`;
+  check(Boolean(seen), "a signed-in tester is recorded as active today");
+
   // Both admins are listed, and the promoted one is not a special case.
   const [{ n }] = await sql`select count(*)::int as n from users where role = 'admin'`;
   check(n === 2, "two admins coexist", `admins=${n}`);
@@ -1052,6 +1097,13 @@ console.log("\nWaitlist, change password and profile pictures");
   await admin.goto(`${APP_URL}/admin/waitlist`);
   await loaded(admin);
   check((await admin.locator("li[data-waitlist-id]", { hasText: waitEmail }).count()) === 1, "the admin waitlist lists them");
+  await admin.goto(`${APP_URL}/admin/waitlist?q=${encodeURIComponent(waitEmail)}`);
+  await loaded(admin);
+  check(
+    (await admin.locator("li[data-waitlist-id]").count()) === 1 &&
+      (await admin.locator("li[data-waitlist-id]", { hasText: waitEmail }).count()) === 1,
+    "the waitlist searches by email",
+  );
   await adminCtx.close();
 
   // The leave link asks first: opening it changes nothing.

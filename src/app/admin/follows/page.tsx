@@ -5,11 +5,10 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { slates } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
-import { getFollowAnalytics, getSlateTakeRates } from "@/lib/stats";
+import { countTesters, getFollowBreakdowns, getFollowSummary, getSlateTakeRates, getTesterRows } from "@/lib/stats";
 import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
 import { FOLLOW_STAKE_UNITS } from "@/lib/follows";
-import { Kpi, PageHeader, TabNav } from "@/components/admin/kit";
-import { Badge } from "@/components/ui/badge";
+import { Kpi, PageHeader, Pager, TabNav, pageParam } from "@/components/admin/kit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -68,12 +67,13 @@ function Units({ units, settled }: { units: number; settled: number }) {
 }
 
 const TABS = ["summary", "breakdown", "day", "testers"] as const;
+const TESTERS_PAGE = 50;
 type Tab = (typeof TABS)[number];
 
 export default async function AdminFollowsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; tab?: string }>;
+  searchParams: Promise<{ date?: string; tab?: string; page?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   // 404 rather than 403, same as the layout: a non-admin does not learn this
@@ -85,25 +85,32 @@ export default async function AdminFollowsPage({
   const date = params.date && isValidSlateDate(params.date) ? params.date : today;
   const tab: Tab = TABS.includes(params.tab as Tab) ? (params.tab as Tab) : "summary";
 
-  const [analytics, takeRates, availableDates] = await Promise.all([
-    getFollowAnalytics(),
-    getSlateTakeRates(date),
-    db
-      .select({ date: slates.date })
-      .from(slates)
-      .where(sql`${slates.publishedAt} is not null`)
-      .orderBy(sql`${slates.date} desc`)
-      .limit(30),
+  // Only what the open tab shows: each tab is its own set of queries.
+  const page = pageParam(params.page);
+  const [testerCount, summary, breakdowns, day, testers] = await Promise.all([
+    countTesters(),
+    tab === "summary" ? getFollowSummary() : null,
+    tab === "breakdown" ? getFollowBreakdowns() : null,
+    tab === "day"
+      ? Promise.all([
+          getSlateTakeRates(date),
+          db
+            .select({ date: slates.date })
+            .from(slates)
+            .where(sql`${slates.publishedAt} is not null`)
+            .orderBy(sql`${slates.date} desc`)
+            .limit(30),
+        ]).then(([rates, dates]) => ({ rates, dates }))
+      : null,
+    tab === "testers" ? getTesterRows({ page, size: TESTERS_PAGE }) : null,
   ]);
-
-  const { oobee, beta } = analytics;
 
   // The take-up denominator. Every tester is a possible taker of a pick on a
   // slate they were around for, and the cohort is small enough that quoting
   // the whole of it is more honest than quoting only the engaged part — which
   // would make a pick two of three active testers took read as 67% take-up
   // across a beta of thirty.
-  const denominator = analytics.testers;
+  const denominator = testerCount;
 
   return (
     <div>
@@ -117,7 +124,6 @@ export default async function AdminFollowsPage({
             know about their stake. Admin accounts are left out of every cohort figure.
           </>
         }
-        actions={analytics.follows > 0 ? <Badge variant="brand">{analytics.follows} followed</Badge> : undefined}
       />
 
       <TabNav
@@ -126,32 +132,32 @@ export default async function AdminFollowsPage({
           { href: "/admin/follows", label: "Summary", active: tab === "summary" },
           { href: "/admin/follows?tab=breakdown", label: "What they take", active: tab === "breakdown" },
           { href: `/admin/follows?tab=day&date=${date}`, label: "Pick by pick", active: tab === "day" },
-          { href: "/admin/follows?tab=testers", label: "Testers", count: analytics.testerRows.length, active: tab === "testers" },
+          { href: "/admin/follows?tab=testers", label: "Testers", count: testerCount, active: tab === "testers" },
         ]}
       />
 
-      {tab === "summary" && (
+      {summary && (
       <>
       {/* ------------------------------------------------------------ tiles */}
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           label="Testers"
-          value={analytics.testers}
-          sub={`${analytics.followers} have followed something`}
+          value={summary.testers}
+          sub={`${summary.followers} have followed something`}
         />
-        <Kpi label="Bets followed" value={analytics.follows} />
+        <Kpi label="Bets followed" value={summary.follows} />
         <Kpi
           label="Take-up"
           tone="brand"
-          value={analytics.takeRate === null ? "—" : formatRate(analytics.takeRate)}
+          value={summary.takeRate === null ? "—" : formatRate(summary.takeRate)}
           sub="of the chances testers had"
         />
         <Kpi
           label="Per follower"
           value={
-            analytics.avgPerFollower === null
+            summary.avgPerFollower === null
               ? "—"
-              : analytics.avgPerFollower.toFixed(1)
+              : summary.avgPerFollower.toFixed(1)
           }
           sub="bets followed, average"
         />
@@ -194,8 +200,8 @@ export default async function AdminFollowsPage({
               </TableHeader>
               <TableBody>
                 {[
-                  { label: "Oobee — every published pick", r: oobee },
-                  { label: "Testers — the picks they took", r: beta },
+                  { label: "Oobee — every published pick", r: summary.oobee },
+                  { label: "Testers — the picks they took", r: summary.beta },
                 ].map(({ label, r }) => (
                   <TableRow key={label}>
                     <TableCell className="text-fg">{label}</TableCell>
@@ -237,7 +243,7 @@ export default async function AdminFollowsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {analytics.byConsistency.length === 0 ? (
+          {summary.byConsistency.length === 0 ? (
             <p className="text-sm text-fg-muted">
               Not enough testers following yet to split the room in half — this
               appears once four of them have taken something.
@@ -266,7 +272,7 @@ export default async function AdminFollowsPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {analytics.byConsistency.map((g) => (
+                  {summary.byConsistency.map((g) => (
                     <TableRow key={g.label}>
                       <TableCell className="text-fg">{g.label}</TableCell>
                       <TableCell className="num text-right text-fg-muted">
@@ -297,7 +303,7 @@ export default async function AdminFollowsPage({
       )}
 
       {/* --------------------------------------------------- what they follow */}
-      {tab === "breakdown" && (
+      {breakdowns && (
       <>
       <section aria-labelledby="types-heading">
         <h2 id="types-heading" className="text-sm font-semibold tracking-tight">
@@ -310,9 +316,9 @@ export default async function AdminFollowsPage({
         </p>
 
         <div className="mt-4 space-y-6">
-          <FollowBreakdownTable rows={analytics.byCategory} dimension="Board" />
-          <FollowBreakdownTable rows={analytics.byMarket} dimension="Bet type" />
-          <FollowBreakdownTable rows={analytics.byLeague} dimension="League" />
+          <FollowBreakdownTable rows={breakdowns.byCategory} dimension="Board" />
+          <FollowBreakdownTable rows={breakdowns.byMarket} dimension="Bet type" />
+          <FollowBreakdownTable rows={breakdowns.byLeague} dimension="League" />
         </div>
       </section>
 
@@ -320,7 +326,7 @@ export default async function AdminFollowsPage({
       )}
 
       {/* ------------------------------------------------------ per-pick take */}
-      {tab === "day" && (
+      {day && (
       <section aria-labelledby="takeup-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -332,9 +338,9 @@ export default async function AdminFollowsPage({
               {denominator} tester{denominator === 1 ? "" : "s"}
             </p>
           </div>
-          {availableDates.length > 0 && (
+          {day.dates.length > 0 && (
             <SlateDatePicker
-              dates={availableDates.map((d) => d.date)}
+              dates={day.dates.map((d) => d.date)}
               current={date}
               today={today}
               basePath="/admin/follows"
@@ -343,7 +349,7 @@ export default async function AdminFollowsPage({
           )}
         </div>
 
-        {takeRates.length === 0 ? (
+        {day.rates.length === 0 ? (
           <p className="mt-4 text-sm text-fg-muted">Nothing on the board that day.</p>
         ) : (
           <div className="card-hairline mt-4 overflow-hidden">
@@ -362,7 +368,7 @@ export default async function AdminFollowsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {takeRates.map((p) => (
+                {day.rates.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>
                       <div className="flex items-baseline gap-2">
@@ -399,7 +405,7 @@ export default async function AdminFollowsPage({
       )}
 
       {/* -------------------------------------------------------- per tester */}
-      {tab === "testers" && (
+      {testers && (
       <section aria-labelledby="testers-heading">
         <h2 id="testers-heading" className="text-sm font-semibold tracking-tight">
           Tester by tester
@@ -411,7 +417,7 @@ export default async function AdminFollowsPage({
           bet they have taken, day by day.
         </p>
 
-        {analytics.testerRows.length === 0 ? (
+        {testers.rows.length === 0 ? (
           <p className="mt-4 text-sm text-fg-muted">No tester accounts yet.</p>
         ) : (
           <div className="card-hairline mt-4 overflow-hidden">
@@ -437,7 +443,7 @@ export default async function AdminFollowsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {analytics.testerRows.map((u) => (
+                {testers.rows.map((u) => (
                   <TableRow key={u.userId}>
                     <TableCell>
                       {/* The row is the way into one player's card — their open
@@ -471,6 +477,13 @@ export default async function AdminFollowsPage({
             </Table>
           </div>
         )}
+        <Pager
+          page={page}
+          pageSize={TESTERS_PAGE}
+          total={testers.total}
+          noun="testers"
+          href={(n) => `/admin/follows?tab=testers&page=${n}`}
+        />
       </section>
       )}
     </div>

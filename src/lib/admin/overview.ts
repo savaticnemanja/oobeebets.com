@@ -21,13 +21,17 @@ import { pickCategories, type PickCategory } from "@/lib/board";
 
 /**
  * What the admin overview reads. Every figure is a count off rows the app
- * already writes — nothing here is tracked for the dashboard's sake.
+ * already writes — nothing here is tracked for the dashboard's sake, except
+ * user_active_days, which getAuth fills once per account per day.
  *
- * "Activity" is anything an account did: a post or reply, a like, a repost,
- * a bet taken, a parlay played, a follow, a post read (post_views), or a
- * session seen (sessions.last_seen_at, which is written about once a day).
+ * "Active" is an account that was signed in on the day (user_active_days).
  * Days are slate days — the 04:00 ET boundary the board uses — so "today"
  * here is the board's today.
+ *
+ * Each figure reads one table through an index on its time column. The first
+ * version unioned every like, view, follow and session for 30 days and
+ * counted distinct accounts per day three times over: 1.9s at 3M post views,
+ * most of it a sort spilling to disk (admin perf audit, 2026-10-17).
  */
 
 // Inlined rather than bound: Postgres only matches a GROUP BY expression to the
@@ -40,22 +44,8 @@ function slateDay(col: SQL): SQL {
   return sql`((${col} at time zone '${sql.raw(ZONE)}') - interval '${sql.raw(String(SLATE_DAY_BOUNDARY_HOUR))} hours')::date`;
 }
 
-/** Every account action since `from`, as (user_id, at, kind). */
-function events(from: Date): SQL {
-  // As text: postgres-js won't take a Date inside a raw sql`` fragment.
-  const at = sql`${from.toISOString()}::timestamptz`;
-  return sql`
-    select author_id as user_id, created_at as at, 'post' as kind from posts where created_at >= ${at}
-    union all select user_id, created_at, 'like' from post_likes where created_at >= ${at}
-    union all select user_id, created_at, 'repost' from post_reposts where created_at >= ${at}
-    union all select user_id, created_at, 'take' from pick_follows where created_at >= ${at}
-    union all select user_id, created_at, 'play' from parlay_follows where created_at >= ${at}
-    union all select follower_id, created_at, 'follow' from user_follows where created_at >= ${at}
-    union all select user_id, created_at, 'view' from post_views where created_at >= ${at}
-    union all select user_id, last_seen_at, 'seen' from sessions where last_seen_at >= ${at}
-    union all select user_id, created_at, 'seen' from sessions where created_at >= ${at}
-  `;
-}
+/** As text: postgres-js won't take a Date inside a raw sql`` fragment. */
+const ts = (d: Date) => sql`${d.toISOString()}::timestamptz`;
 
 export interface DayPoint {
   day: string;
@@ -75,55 +65,49 @@ export interface Pulse {
   accounts: { total: number; admins: number };
 }
 
+type Daily = { day: string; n: number } & Record<string, unknown>;
+
 /** The last `days` slate days of activity, today last. */
 export async function getPulse(today: string, days = 30): Promise<Pulse> {
   const start = addDays(today, -(days - 1));
-  // A day of slack either side of the boundary; the day buckets do the cutting.
-  const from = new Date(slateBounds(start).from.getTime() - 24 * 3600_000);
-  const ev = events(from);
+  const from = ts(slateBounds(start).from);
+  const perDay = (table: SQL, col: SQL) => sql`
+    select ${slateDay(col)}::text as day, count(*)::int as n from ${table} where ${col} >= ${from} group by 1`;
 
-  const [series, [win], [acc]] = await Promise.all([
-    db.execute<DayPoint & Record<string, unknown>>(sql`
-      with ev as (${ev})
-      select d::date::text as day,
-        coalesce(a.active, 0)::int as active,
-        coalesce(a.posts, 0)::int as posts,
-        coalesce(a.bets, 0)::int as bets,
-        coalesce(u.joined, 0)::int as joined
-      from generate_series(${start}::date, ${today}::date, interval '1 day') d
-      left join (
-        select ${slateDay(sql`at`)} as day,
-          count(distinct user_id) as active,
-          count(*) filter (where kind = 'post') as posts,
-          count(*) filter (where kind in ('take', 'play')) as bets
-        from ev group by 1
-      ) a on a.day = d::date
-      left join (
-        select ${slateDay(sql`created_at`)} as day, count(*) as joined
-        from users where created_at >= ${from.toISOString()}::timestamptz group by 1
-      ) u on u.day = d::date
-      order by d
-    `),
+  const [active, posts, takes, plays, joined, [win], [acc]] = await Promise.all([
+    db.execute<Daily>(sql`
+      select day::text as day, count(*)::int as n from user_active_days
+      where day between ${start}::date and ${today}::date group by day`),
+    db.execute<Daily>(perDay(sql`posts`, sql`created_at`)),
+    db.execute<Daily>(perDay(sql`pick_follows`, sql`created_at`)),
+    db.execute<Daily>(perDay(sql`parlay_follows`, sql`created_at`)),
+    db.execute<Daily>(perDay(sql`users`, sql`created_at`)),
     db.execute<{ now: number; before: number } & Record<string, unknown>>(sql`
-      with ev as (${ev})
       select
-        count(distinct user_id) filter (where ${slateDay(sql`at`)} > ${today}::date - 7)::int as now,
-        count(distinct user_id) filter (
-          where ${slateDay(sql`at`)} <= ${today}::date - 7 and ${slateDay(sql`at`)} > ${today}::date - 14
-        )::int as before
-      from ev
-    `),
+        count(distinct user_id) filter (where day > ${today}::date - 7)::int as now,
+        count(distinct user_id) filter (where day <= ${today}::date - 7)::int as before
+      from user_active_days where day > ${today}::date - 14 and day <= ${today}::date`),
     db.execute<{ total: number; admins: number } & Record<string, unknown>>(sql`
-      select count(*)::int as total, count(*) filter (where role = 'admin')::int as admins from ${users}
-    `),
+      select count(*)::int as total, count(*) filter (where role = 'admin')::int as admins from ${users}`),
   ]);
 
-  const points = (series as unknown as DayPoint[]).map((p) => ({ ...p }));
+  const map = (rows: unknown) => new Map((rows as Daily[]).map((r) => [r.day, r.n]));
+  const [a, p, t, pl, j] = [map(active), map(posts), map(takes), map(plays), map(joined)];
+  const series: DayPoint[] = Array.from({ length: days }, (_, i) => {
+    const day = addDays(start, i);
+    return {
+      day,
+      active: a.get(day) ?? 0,
+      posts: p.get(day) ?? 0,
+      bets: (t.get(day) ?? 0) + (pl.get(day) ?? 0),
+      joined: j.get(day) ?? 0,
+    };
+  });
   const sum = (key: keyof Omit<DayPoint, "day">, from: number, to: number) =>
-    points.slice(Math.max(0, points.length - to), points.length - from).reduce((n, p) => n + p[key], 0);
+    series.slice(Math.max(0, series.length - to), series.length - from).reduce((n, d) => n + d[key], 0);
 
   return {
-    series: points,
+    series,
     active: { now: win.now, before: win.before },
     joined: { now: sum("joined", 0, 7), before: sum("joined", 7, 14) },
     posts: { now: sum("posts", 0, 7), before: sum("posts", 7, 14) },
@@ -145,23 +129,32 @@ export interface MemberRow {
   last: string;
 }
 
-/** Who did the most in the last 7 slate days — posts, bets, likes, follows. */
+/** Who did the most in the last 7 slate days — posts, bets, likes, reposts, follows. */
 export async function getTopMembers(today: string, limit = 5): Promise<MemberRow[]> {
-  const from = new Date(slateBounds(addDays(today, -7)).from.getTime());
+  const from = ts(slateBounds(addDays(today, -6)).from);
   const rows = await db.execute<Record<string, unknown>>(sql`
-    with ev as (${events(from)})
-    select u.id, u.username, u.display_name, u.avatar_id, u.role,
-      count(*) filter (where kind = 'post')::int as posts,
-      count(*) filter (where kind in ('take', 'play'))::int as bets,
-      count(*) filter (where kind in ('like', 'repost', 'follow'))::int as reactions,
-      count(*) filter (where kind not in ('seen', 'view'))::int as actions,
-      max(at)::text as last
-    from ev join ${users} u on u.id = ev.user_id
-    where ${slateDay(sql`at`)} > ${today}::date - 7
-    group by u.id
-    having count(*) filter (where kind not in ('seen', 'view')) > 0
-    order by actions desc, last desc
-    limit ${limit}
+    with ev as (
+      select author_id as user_id, created_at as at, 'post' as kind from posts where created_at >= ${from}
+      union all select user_id, created_at, 'like' from post_likes where created_at >= ${from}
+      union all select user_id, created_at, 'repost' from post_reposts where created_at >= ${from}
+      union all select user_id, created_at, 'take' from pick_follows where created_at >= ${from}
+      union all select user_id, created_at, 'play' from parlay_follows where created_at >= ${from}
+      union all select follower_id, created_at, 'follow' from user_follows where created_at >= ${from}
+    ),
+    top as (
+      select user_id,
+        count(*) filter (where kind = 'post')::int as posts,
+        count(*) filter (where kind in ('take', 'play'))::int as bets,
+        count(*) filter (where kind in ('like', 'repost', 'follow'))::int as reactions,
+        count(*)::int as actions,
+        max(at)::text as last
+      from ev group by user_id
+      order by actions desc, last desc
+      limit ${limit}
+    )
+    select u.id, u.username, u.display_name, u.avatar_id, u.role, top.posts, top.bets, top.reactions, top.actions, top.last
+    from top join ${users} u on u.id = top.user_id
+    order by top.actions desc, top.last desc
   `);
   return (rows as unknown as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,

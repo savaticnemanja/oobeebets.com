@@ -212,6 +212,28 @@ export const sessions = pgTable(
   ],
 );
 
+/* ------------------------------------------------------------- presence */
+
+/**
+ * One row per account per slate day it was signed in — what the admin
+ * overview counts as "active". Written by getAuth the first time an account
+ * is seen on a day (lib/presence.ts), so it costs one insert per account per
+ * day, and the overview reads a few thousand rows instead of re-scanning every
+ * like, view and follow. Sessions can't answer this: last_seen_at is only
+ * written once a session's expiry slides, at most daily, so a daily visitor
+ * can go a day unrecorded.
+ */
+export const userActiveDays = pgTable(
+  "user_active_days",
+  {
+    day: date("day").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.userId] }), index("user_active_days_user_idx").on(t.userId)],
+);
+
 /* -------------------------------------------------------------- invitations */
 
 /**
@@ -455,6 +477,8 @@ export const pickFollows = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.pickId] }),
     index("pick_follows_pick_idx").on(t.pickId),
+    // When bets were taken — the admin overview's daily counts.
+    index("pick_follows_created_idx").on(t.createdAt),
   ],
 );
 
@@ -663,6 +687,8 @@ export const postLikes = pgTable(
     primaryKey({ columns: [t.userId, t.postId] }),
     // Counting a post's likes, and the cascade when it is deleted.
     index("post_likes_post_idx").on(t.postId),
+    // The admin overview's "most active this week".
+    index("post_likes_created_idx").on(t.createdAt),
   ],
 );
 
@@ -683,7 +709,12 @@ export const parlayFollows = pgTable(
       .references(() => parlays.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.parlayId] }), index("parlay_follows_parlay_idx").on(t.parlayId)],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.parlayId] }),
+    index("parlay_follows_parlay_idx").on(t.parlayId),
+    // The admin overview's daily bet counts.
+    index("parlay_follows_created_idx").on(t.createdAt),
+  ],
 );
 
 /** Raw bytes. postgres-js reads and writes bytea as a Buffer. */
@@ -777,6 +808,8 @@ export const userFollows = pgTable(
     primaryKey({ columns: [t.followerId, t.followeeId] }),
     // "Who follows me" — follower counts and lists.
     index("user_follows_followee_idx").on(t.followeeId),
+    // The admin overview's "most active this week".
+    index("user_follows_created_idx").on(t.createdAt),
     check("user_follows_not_self", sql`${t.followerId} <> ${t.followeeId}`),
   ],
 );
@@ -1207,6 +1240,12 @@ export const auditLog = pgTable(
   (t) => [
     index("audit_log_created_idx").on(t.createdAt),
     index("audit_log_actor_idx").on(t.actorId),
+    // Activity's kind filters (action LIKE 'prefix.%') and Announce's history
+    // (action = …): text_pattern_ops is what lets a btree serve a prefix LIKE
+    // under a non-C collation.
+    index("audit_log_action_created_idx").on(t.action.op("text_pattern_ops"), t.createdAt),
+    // An account's own page: rows about them, beside the rows by them.
+    index("audit_log_user_subject_idx").on(t.entityId).where(sql`${t.entity} = 'user'`),
   ],
 );
 

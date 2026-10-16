@@ -1,11 +1,13 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Metadata } from "next";
+import { after } from "next/server";
 import { CircleCheck, Clock3, Layers } from "lucide-react";
 import { db } from "@/db";
 import { games, picks, selections } from "@/db/schema";
 import { SettleList } from "@/components/admin/settle-list";
 import { CommunityLegList } from "@/components/admin/community-leg-list";
 import { getPendingCommunityLegs } from "@/lib/odds/board";
+import { countPendingCommunityLegs } from "@/lib/admin/overview";
 import { requireAdminPage } from "@/lib/auth";
 import { refreshResults } from "@/lib/odds/sync";
 import { pickProfit } from "@/lib/settlement";
@@ -19,6 +21,8 @@ export const metadata: Metadata = { title: "Settle" };
 export const dynamic = "force-dynamic";
 
 const TABS = ["due", "community", "upcoming", "settled"] as const;
+/** Work queues show the oldest this many; settling moves the rest up. */
+const LIST_CAP = 50;
 type Tab = (typeof TABS)[number];
 
 /** Picks under the game they're on, kick-off order. */
@@ -37,21 +41,31 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
   const [, params] = await Promise.all([requireAdminPage(), searchParams]);
   const tab: Tab = TABS.includes(params.tab as Tab) ? (params.tab as Tab) : "due";
 
-  // Game lines grade themselves from the final score; fetch any that are due
-  // first, so this page only lists what genuinely needs a person.
-  await refreshResults();
+  // Game lines grade themselves from the final score, and props from the box
+  // score. Fetching those is the providers' time, not this page's: it used to
+  // be awaited here, so whoever opened Settle after the scores went stale
+  // waited on The Odds API (and on BALLDONTLIE, a player at a time). Now it
+  // runs after the response, as on every other page, and the results poller
+  // grades on its own timer regardless.
+  after(refreshResults);
 
   // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "this week" is the point
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600_000);
-  const [communityLegs, due, upcoming, recent, [week]] = await Promise.all([
-    getPendingCommunityLegs(),
+  const [communityLegs, legCount, due, [{ n: dueCount }], upcoming, recent, [week]] = await Promise.all([
+    getPendingCommunityLegs(LIST_CAP),
+    countPendingCommunityLegs(),
     // Started and still pending: needs a result. Oldest first, so the
     // longest-outstanding games get cleared first.
     db
       .select()
       .from(picks)
       .where(sql`${picks.status} = 'pending' and ${picks.startsAt} < now()`)
-      .orderBy(asc(picks.startsAt)),
+      .orderBy(asc(picks.startsAt))
+      .limit(LIST_CAP),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(picks)
+      .where(sql`${picks.status} = 'pending' and ${picks.startsAt} < now()`),
     db
       .select()
       .from(picks)
@@ -92,8 +106,8 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
     .reduce((n, p) => n + pickProfit(p), 0);
 
   const tabs = [
-    { href: "/admin/settle", label: "Needs a result", count: due.length, active: tab === "due", attention: true },
-    { href: "/admin/settle?tab=community", label: "Community legs", count: communityLegs.length, active: tab === "community", attention: true },
+    { href: "/admin/settle", label: "Needs a result", count: dueCount, active: tab === "due", attention: true },
+    { href: "/admin/settle?tab=community", label: "Community legs", count: legCount, active: tab === "community", attention: true },
     { href: "/admin/settle?tab=upcoming", label: "Not started", count: upcoming.length, active: tab === "upcoming" },
     { href: "/admin/settle?tab=settled", label: "Recently settled", active: tab === "settled" },
   ];
@@ -116,20 +130,16 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
       <KpiGrid className="mb-6">
         <Kpi
           label="Needs a result"
-          value={due.length}
-          tone={due.length > 0 ? "brand" : "neutral"}
+          value={dueCount}
+          tone={dueCount > 0 ? "brand" : "neutral"}
           sub={due[0] ? `oldest kicked off ${since(due[0].startsAt)}` : "nothing waiting"}
           href="/admin/settle"
         />
         <Kpi
           label="Community legs"
-          value={communityLegs.length}
-          tone={communityLegs.length > 0 ? "brand" : "neutral"}
-          sub={
-            communityLegs.length > 0
-              ? `${communityLegs.reduce((n, l) => n + l.parlays, 0)} parlays waiting on them`
-              : "nothing waiting"
-          }
+          value={legCount}
+          tone={legCount > 0 ? "brand" : "neutral"}
+          sub={communityLegs[0] ? `oldest kicked off ${since(communityLegs[0].commenceTime)}` : "nothing waiting"}
           href="/admin/settle?tab=community"
         />
         <Kpi
@@ -163,6 +173,11 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
           </Empty>
         ) : (
           <div className="space-y-6">
+            {dueCount > due.length && (
+              <p className="text-xs text-fg-subtle">
+                The oldest {due.length} of {dueCount}. Settle these and the rest move up.
+              </p>
+            )}
             {byGame(due).map((g) => (
               <section key={g.key} aria-label={g.event}>
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -186,7 +201,14 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
             Props in testers&apos; parlays that the box score can&apos;t grade show up here.
           </Empty>
         ) : (
-          <CommunityLegList legs={communityLegs} />
+          <>
+            {legCount > communityLegs.length && (
+              <p className="mb-3 text-xs text-fg-subtle">
+                The oldest {communityLegs.length} of {legCount}. Settle these and the rest move up.
+              </p>
+            )}
+            <CommunityLegList legs={communityLegs} />
+          </>
         ))}
 
       {tab === "upcoming" &&

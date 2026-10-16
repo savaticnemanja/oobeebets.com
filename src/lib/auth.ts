@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, gt, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { notePresence } from "@/lib/presence";
 import { sessions, users, rateLimits } from "@/db/schema";
 import type { User } from "@/db/schema";
 
@@ -131,6 +132,9 @@ export const getAuth = cache(async (): Promise<AuthContext | null> => {
       .set({ expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastSeenAt: new Date() })
       .where(eq(sessions.id, row.session.id));
   }
+
+  // "Active today", for the admin overview: one insert per account per day.
+  notePresence(row.user.id);
 
   return {
     user: row.user,

@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Layers } from "lucide-react";
 import { requireAdminPage } from "@/lib/auth";
-import { getAllUserParlays, getOobeeParlays } from "@/lib/parlay-store";
-import { summariseRecord, type TrackRecord } from "@/lib/stats";
+import { getAllUserParlays, getOobeeParlays, getUserParlayTotals } from "@/lib/parlay-store";
+import { recordFromCounts, type TrackRecord } from "@/lib/stats";
 import { MIN_SAMPLE_FOR_RATE } from "@/lib/settlement";
 import { PARLAY_STAKE_UNITS } from "@/lib/parlays";
 import { nextGameDay } from "@/lib/odds/board";
 import { slateDateString } from "@/lib/slate-date";
 import { formatOdds, formatRate, formatSlateDate, formatUnits } from "@/lib/i18n/format";
 import { t } from "@/lib/i18n";
-import { Empty, Kpi, KpiGrid, NetUnits, PageHeader, Panel, PanelLink } from "@/components/admin/kit";
+import { Empty, Kpi, KpiGrid, NetUnits, PageHeader, Pager, Panel, PanelLink, pageParam } from "@/components/admin/kit";
 import { ParlayTable } from "@/components/admin/parlay-table";
 import { Badge } from "@/components/ui/badge";
 
@@ -27,22 +27,23 @@ function rateLabel(record: TrackRecord): string {
     : `${formatRate(record.winRate)} won`;
 }
 
-export default async function AdminParlaysPage() {
-  await requireAdminPage();
+const PAGE = 25;
+
+export default async function AdminParlaysPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const [, params] = await Promise.all([requireAdminPage(), searchParams]);
+  const page = pageParam(params.page);
 
   // Oobee's own: the slate being worked on — today when it has games, else the next game day.
   const day = (await nextGameDay(new Date())) ?? slateDateString();
-  const [userParlays, oobee] = await Promise.all([getAllUserParlays(), getOobeeParlays(day)]);
-
-  // Graded once in the store, summarised here at the tester's flat stake.
-  const record = summariseRecord(
-    userParlays.map((p) => ({ price: p.price ?? 100, units: PARLAY_STAKE_UNITS, status: p.status })),
-  );
-  const builders = new Set(userParlays.map((p) => p.ownerEmail)).size;
-  const open = userParlays.filter((p) => p.status === "pending").length;
-  const shared = userParlays.filter((p) => p.shared).length;
-  const avgLegs =
-    userParlays.length > 0 ? userParlays.reduce((n, p) => n + p.legs.length, 0) / userParlays.length : null;
+  // The totals cover every tester parlay, graded in SQL; only the page's own
+  // tickets are hydrated with their legs.
+  const [totals, userParlays, oobee] = await Promise.all([
+    getUserParlayTotals(),
+    getAllUserParlays({ limit: PAGE, offset: (page - 1) * PAGE }),
+    getOobeeParlays(day),
+  ]);
+  const record = recordFromCounts(totals.counts, Number(PARLAY_STAKE_UNITS));
+  const { builders, shared, avgLegs, running: open } = totals;
 
   return (
     <div>
@@ -60,7 +61,7 @@ export default async function AdminParlaysPage() {
       />
 
       <KpiGrid>
-        <Kpi label="Parlays built" value={userParlays.length} sub={`by ${builders} tester${builders === 1 ? "" : "s"} · ${shared} shared`} />
+        <Kpi label="Parlays built" value={totals.parlays} sub={`by ${builders} tester${builders === 1 ? "" : "s"} · ${shared} shared`} />
         <Kpi label="Average legs" value={avgLegs === null ? "—" : avgLegs.toFixed(1)} sub={`${open} still running`} />
         <Kpi label="Record" value={`${record.wins}–${record.losses}`} sub={rateLabel(record)} />
         <Kpi
@@ -106,12 +107,21 @@ export default async function AdminParlaysPage() {
           </h2>
           {open > 0 && <Badge variant="pending">{open} running</Badge>}
         </div>
-        {userParlays.length === 0 ? (
+        {totals.parlays === 0 ? (
           <Empty icon={Layers} title="Nobody has built one yet">
             The builder is on <Link href="/community/new" className="text-brand hover:underline">Community</Link>.
           </Empty>
         ) : (
-          <ParlayTable parlays={userParlays} owner />
+          <>
+            <ParlayTable parlays={userParlays} owner />
+            <Pager
+              page={page}
+              pageSize={PAGE}
+              total={totals.parlays}
+              noun="parlays"
+              href={(n) => (n > 1 ? `/admin/parlays?page=${n}` : "/admin/parlays")}
+            />
+          </>
         )}
       </section>
     </div>

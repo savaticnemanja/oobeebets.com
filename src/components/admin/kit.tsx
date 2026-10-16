@@ -308,3 +308,65 @@ export function until(at: Date, now: Date = new Date()): string {
   if (h < 48) return `in ${h} ${h === 1 ? "hour" : "hours"}`;
   return `in ${Math.floor(h / 24)} days`;
 }
+
+/**
+ * Previous / next for a server-paged list. `href(page)` builds the link, so
+ * each list keeps its own other params (tab, search) across pages.
+ */
+export function Pager({
+  page,
+  pageSize,
+  total,
+  href,
+  noun = "rows",
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  href: (page: number) => string;
+  noun?: string;
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(total, page * pageSize);
+  return (
+    <nav aria-label="Pages" className="mt-4 flex items-center justify-between gap-3 text-xs text-fg-subtle">
+      <span className="num">
+        {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} of {total.toLocaleString("en-US")} {noun}
+      </span>
+      {pages > 1 && (
+        <span className="flex items-center gap-1">
+          <PagerLink href={page > 1 ? href(page - 1) : null} rel="prev">
+            Previous
+          </PagerLink>
+          <span className="num px-2">
+            {page} / {pages}
+          </span>
+          <PagerLink href={page < pages ? href(page + 1) : null} rel="next">
+            Next
+          </PagerLink>
+        </span>
+      )}
+    </nav>
+  );
+}
+
+function PagerLink({ href, rel, children }: { href: string | null; rel: "prev" | "next"; children: React.ReactNode }) {
+  const cls = "rounded-lg border border-border px-3 py-1.5 transition-colors";
+  return href ? (
+    <Link href={href} rel={rel} className={cn(cls, "text-fg-muted hover:border-border-strong hover:text-fg")}>
+      {children}
+    </Link>
+  ) : (
+    <span aria-disabled="true" className={cn(cls, "opacity-40")}>
+      {children}
+    </span>
+  );
+}
+
+/** ?page= as a positive integer, 1 when missing or junk. */
+export function pageParam(value: string | undefined): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 100_000) : 1;
+}

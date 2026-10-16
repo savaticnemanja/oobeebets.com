@@ -5,6 +5,7 @@ import { feedback, invitations, reports, sessions, subscriptions, users } from "
 import type { Role } from "@/db/schema";
 import { LIVE_STATUSES } from "@/lib/billing/access";
 import { TIERS, TIER_ORDER } from "@/lib/tiers";
+import type { UserFilter, UserSort } from "@/lib/admin/directory";
 
 /** One row of the users directory. */
 export interface DirectoryRow {
@@ -26,41 +27,114 @@ export interface DirectoryRow {
   plan: string | null;
 }
 
-/** Every account with what it has done — newest first; the page sorts and filters. */
-export async function listUsers(limit = 500): Promise<DirectoryRow[]> {
-  const rows = await db.execute<Record<string, unknown>>(sql`
-    select u.id, u.email, u.username, u.display_name, u.avatar_id, u.role, u.created_at,
-      greatest(u.last_login_at, (select max(s.last_seen_at) from sessions s where s.user_id = u.id)) as last_active,
-      (select count(*)::int from pick_follows f where f.user_id = u.id) as takes,
-      (select count(*)::int from parlay_follows f where f.user_id = u.id) as plays,
-      (select count(*)::int from posts p where p.author_id = u.id) as posts,
-      (select count(*)::int from parlays p where p.owner_id = u.id) as parlays,
-      (select count(*)::int from user_follows f where f.followee_id = u.id) as followers
-    from ${users} u
-    order by u.created_at desc
-    limit ${limit}
-  `);
-  const plans = await livePlans();
-  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
-    id: r.id as string,
-    email: r.email as string,
-    username: r.username as string,
-    displayName: (r.display_name as string | null) ?? null,
-    avatarId: (r.avatar_id as string | null) ?? null,
-    role: r.role as Role,
-    createdAt: new Date(r.created_at as string),
-    lastActive: r.last_active ? new Date(r.last_active as string) : null,
-    takes: Number(r.takes),
-    plays: Number(r.plays),
-    posts: Number(r.posts),
-    parlays: Number(r.parlays),
-    followers: Number(r.followers),
-    plan: plans.get(r.id as string) ?? null,
-  }));
+
+export interface DirectoryPage {
+  rows: DirectoryRow[];
+  /** Matching the search and the filter: what the pages count through. */
+  total: number;
+  /** Per filter, matching the search — the numbers on the filter buttons. */
+  counts: Record<UserFilter, number>;
+}
+
+/** Never posted, took a bet, played or built a parlay. Over `u`. */
+const QUIET = sql`(
+  not exists (select 1 from pick_follows x where x.user_id = u.id)
+  and not exists (select 1 from parlay_follows x where x.user_id = u.id)
+  and not exists (select 1 from posts x where x.author_id = u.id)
+  and not exists (select 1 from parlays x where x.owner_id = u.id)
+)`;
+
+const LAST_ACTIVE = sql`greatest(u.last_login_at, (select max(s.last_seen_at) from sessions s where s.user_id = u.id))`;
+const TAKES = sql`(select count(*)::int from pick_follows f where f.user_id = u.id)`;
+const PLAYS = sql`(select count(*)::int from parlay_follows f where f.user_id = u.id)`;
+const POSTS = sql`(select count(*)::int from posts p where p.author_id = u.id)`;
+
+/**
+ * One page of the directory, searched, filtered and sorted in Postgres. The
+ * per-account counts are worked out for the page's rows only, unless the sort
+ * needs them for every row.
+ */
+export async function listUsers({
+  q = "",
+  filter = "all",
+  sort = "newest",
+  page = 1,
+  size = 50,
+}: {
+  q?: string;
+  filter?: UserFilter;
+  sort?: UserSort;
+  page?: number;
+  size?: number;
+} = {}): Promise<DirectoryPage> {
+  const needle = q.trim().replace(/^@/, "").toLowerCase();
+  // LIKE's own wildcards in what was typed are literal.
+  const like = `%${needle.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const search = needle
+    ? sql`(lower(u.email) like ${like} or u.username like ${like} or lower(coalesce(u.display_name, '')) like ${like})`
+    : sql`true`;
+  const where =
+    filter === "user" ? sql`u.role = 'user'` : filter === "admin" ? sql`u.role = 'admin'` : filter === "quiet" ? QUIET : sql`true`;
+  const order =
+    sort === "active"
+      ? sql`${LAST_ACTIVE} desc nulls last, u.created_at desc`
+      : sort === "bets"
+        ? sql`${TAKES} + ${PLAYS} desc, u.created_at desc`
+        : sort === "posts"
+          ? sql`${POSTS} desc, u.created_at desc`
+          : sql`u.created_at desc`;
+
+  const [rows, [c]] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      select u.id, u.email, u.username, u.display_name, u.avatar_id, u.role, u.created_at,
+        ${LAST_ACTIVE} as last_active,
+        ${TAKES} as takes,
+        ${PLAYS} as plays,
+        ${POSTS} as posts,
+        (select count(*)::int from parlays p where p.owner_id = u.id) as parlays,
+        (select count(*)::int from user_follows f where f.followee_id = u.id) as followers
+      from ${users} u
+      where ${search} and ${where}
+      order by ${order}
+      limit ${size} offset ${(Math.max(1, page) - 1) * size}
+    `),
+    db.execute<Record<string, number>>(sql`
+      select count(*)::int as n_all,
+        count(*) filter (where u.role = 'user')::int as n_user,
+        count(*) filter (where u.role = 'admin')::int as n_admin,
+        count(*) filter (where ${QUIET})::int as n_quiet
+      from ${users} u where ${search}
+    `),
+  ]);
+  const list = rows as unknown as Record<string, unknown>[];
+  const plans = await livePlans(list.map((r) => r.id as string));
+  // `all` and `user` are SQL keywords, hence the n_ aliases.
+  const counts = { all: c.n_all, user: c.n_user, admin: c.n_admin, quiet: c.n_quiet };
+  return {
+    total: counts[filter],
+    counts,
+    rows: list.map((r) => ({
+      id: r.id as string,
+      email: r.email as string,
+      username: r.username as string,
+      displayName: (r.display_name as string | null) ?? null,
+      avatarId: (r.avatar_id as string | null) ?? null,
+      role: r.role as Role,
+      createdAt: new Date(r.created_at as string),
+      lastActive: r.last_active ? new Date(r.last_active as string) : null,
+      takes: Number(r.takes),
+      plays: Number(r.plays),
+      posts: Number(r.posts),
+      parlays: Number(r.parlays),
+      followers: Number(r.followers),
+      plan: plans.get(r.id as string) ?? null,
+    })),
+  };
 }
 
 /** Each account's best live plan, as a label. */
 async function livePlans(userIds?: string[]): Promise<Map<string, string>> {
+  if (userIds && userIds.length === 0) return new Map();
   const live = await db
     .select({ userId: subscriptions.userId, tier: subscriptions.tier, status: subscriptions.status })
     .from(subscriptions)

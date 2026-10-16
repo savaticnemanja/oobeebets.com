@@ -9,64 +9,51 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/social/identity";
 import { LocalTime } from "@/components/local-time";
 import type { DirectoryRow } from "@/lib/admin/users";
+import { directoryHref, type DirectoryQuery, type UserFilter, type UserSort } from "@/lib/admin/directory";
 import { cn } from "@/lib/utils";
 
-const FILTERS = [
+const FILTERS: { key: UserFilter; label: string }[] = [
   { key: "all", label: "Everyone" },
   { key: "user", label: "Testers" },
   { key: "admin", label: "Admins" },
   { key: "quiet", label: "Never active" },
-] as const;
-type Filter = (typeof FILTERS)[number]["key"];
+];
 
-const SORTS = [
+const SORTS: { key: UserSort; label: string }[] = [
   { key: "newest", label: "Newest" },
   { key: "active", label: "Last active" },
   { key: "bets", label: "Most bets" },
   { key: "posts", label: "Most posts" },
-] as const;
-type Sort = (typeof SORTS)[number]["key"];
+];
 
 /**
- * Every account, searchable by name, handle or email, with what each has
- * done. A row opens that person's page — their bets, parlays, sessions and
- * activity — which is where roles change too.
+ * One page of accounts, searchable by name, handle or email. Search, filter,
+ * sort and page all live in the URL and run in Postgres — the page holds only
+ * the rows it shows. A row opens that person's page, where roles change.
  */
-export function UserDirectory({ rows, currentUserId }: { rows: DirectoryRow[]; currentUserId: string }) {
+export function UserDirectory({
+  rows,
+  counts,
+  query,
+  currentUserId,
+}: {
+  rows: DirectoryRow[];
+  counts: Record<UserFilter, number>;
+  query: DirectoryQuery;
+  currentUserId: string;
+}) {
   const router = useRouter();
-  const [q, setQ] = React.useState("");
-  const [filter, setFilter] = React.useState<Filter>("all");
-  const [sort, setSort] = React.useState<Sort>("newest");
+  const [q, setQ] = React.useState(query.q);
+  const [, startNav] = React.useTransition();
 
-  const needle = q.trim().toLowerCase().replace(/^@/, "");
-  const shown = rows
-    .filter((r) =>
-      filter === "all"
-        ? true
-        : filter === "quiet"
-          ? r.takes + r.plays + r.posts + r.parlays === 0
-          : r.role === filter,
-    )
-    .filter(
-      (r) =>
-        !needle ||
-        r.email.toLowerCase().includes(needle) ||
-        r.username.includes(needle) ||
-        (r.displayName ?? "").toLowerCase().includes(needle),
-    )
-    .sort((a, b) => {
-      if (sort === "active") return (b.lastActive?.getTime() ?? 0) - (a.lastActive?.getTime() ?? 0);
-      if (sort === "bets") return b.takes + b.plays - (a.takes + a.plays);
-      if (sort === "posts") return b.posts - a.posts;
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    });
-
-  const countOf = (f: Filter) =>
-    f === "all"
-      ? rows.length
-      : f === "quiet"
-        ? rows.filter((r) => r.takes + r.plays + r.posts + r.parlays === 0).length
-        : rows.filter((r) => r.role === f).length;
+  // Typing searches after a pause, replacing the entry rather than stacking one per keystroke.
+  React.useEffect(() => {
+    if (q.trim() === query.q) return;
+    const id = setTimeout(() => {
+      startNav(() => router.replace(directoryHref({ ...query, q: q.trim() })));
+    }, 300);
+    return () => clearTimeout(id);
+  }, [q, query, router]);
 
   return (
     <div>
@@ -81,27 +68,26 @@ export function UserDirectory({ rows, currentUserId }: { rows: DirectoryRow[]; c
             className="pl-9"
           />
         </div>
-        <div role="group" aria-label="Show" className="flex flex-wrap gap-1 rounded-xl border border-border p-1">
+        <nav aria-label="Show" className="flex flex-wrap gap-1 rounded-xl border border-border p-1">
           {FILTERS.map((f) => (
-            <button
+            <Link
               key={f.key}
-              type="button"
-              aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
+              href={directoryHref({ ...query, filter: f.key })}
+              aria-current={query.filter === f.key ? "page" : undefined}
               className={cn(
                 "rounded-lg px-2.5 py-1 text-xs transition-colors",
-                filter === f.key ? "bg-surface-3 font-medium text-fg" : "text-fg-muted hover:text-fg",
+                query.filter === f.key ? "bg-surface-3 font-medium text-fg" : "text-fg-muted hover:text-fg",
               )}
             >
-              {f.label} <span className="num text-fg-subtle">{countOf(f.key)}</span>
-            </button>
+              {f.label} <span className="num text-fg-subtle">{counts[f.key]}</span>
+            </Link>
           ))}
-        </div>
+        </nav>
         <label className="ml-auto flex items-center gap-2 text-xs text-fg-muted">
           Sort
           <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
+            value={query.sort}
+            onChange={(e) => router.push(directoryHref({ ...query, sort: e.target.value as UserSort }))}
             className="h-8 rounded-lg border border-border bg-surface px-2 text-xs text-fg"
           >
             {SORTS.map((s) => (
@@ -127,7 +113,7 @@ export function UserDirectory({ rows, currentUserId }: { rows: DirectoryRow[]; c
             </tr>
           </thead>
           <tbody>
-            {shown.map((u) => {
+            {rows.map((u) => {
               const href = `/admin/users/${u.id}`;
               return (
                 <tr
@@ -173,11 +159,9 @@ export function UserDirectory({ rows, currentUserId }: { rows: DirectoryRow[]; c
             })}
           </tbody>
         </table>
-        {shown.length === 0 && <p className="px-4 py-10 text-center text-sm text-fg-muted">No one matches that.</p>}
+        {rows.length === 0 && <p className="px-4 py-10 text-center text-sm text-fg-muted">No one matches that.</p>}
       </div>
-      <p className="mt-2 text-xs text-fg-subtle">
-        Bets are picks taken plus parlays played. Showing {shown.length} of {rows.length}.
-      </p>
+      <p className="mt-2 text-xs text-fg-subtle">Bets are picks taken plus parlays played.</p>
     </div>
   );
 }

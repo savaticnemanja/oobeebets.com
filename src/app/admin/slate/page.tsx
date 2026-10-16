@@ -30,10 +30,32 @@ import { DeleteOobeeParlayButton } from "@/components/admin/parlay-delete";
 import { FeatureToggle } from "@/components/admin/feature-toggle";
 import { CalendarX2 } from "lucide-react";
 import type { Metadata } from "next";
+import { after } from "next/server";
 
 export const metadata: Metadata = { title: "Publish slate" };
 
 export const dynamic = "force-dynamic";
+
+/**
+ * How long the builder waits on the odds feed. The provider used to be
+ * awaited outright — 2–4s whenever the stored lines had gone stale, and up to
+ * 10s a call when it was down (admin perf audit, 2026-10-17). Past this the
+ * page shows the lines on file and the refresh finishes in after(); the price
+ * is checked again when a pick is added (freezeLine).
+ */
+const FEED_WAIT_MS = 1500;
+
+/** Waits up to `ms` for `work`; if it takes longer, lets it finish after the response. */
+async function within(work: Promise<unknown>, ms: number): Promise<void> {
+  const done = work.then(
+    () => false,
+    () => false,
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = await Promise.race([done, new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(true), ms)))]);
+  clearTimeout(timer);
+  if (late) after(() => done);
+}
 
 export default async function AdminSlatePage({
   searchParams,
@@ -48,7 +70,7 @@ export default async function AdminSlatePage({
   if (params.date && isValidSlateDate(params.date)) {
     date = params.date;
   } else {
-    await ensureUpcomingOdds(UPCOMING_DAYS);
+    await within(ensureUpcomingOdds(UPCOMING_DAYS), FEED_WAIT_MS);
     date = (await nextGameDay(new Date())) ?? slateDateString();
   }
   const requestedTab = tabFromParam(params.category);
@@ -94,7 +116,16 @@ export default async function AdminSlatePage({
 
   // The pick composer chooses from the odds feed. Refreshed here only when
   // the stored copy is stale, so reloading this screen does not spend credits.
-  if (!isParlayTab && !published) await ensureSlateOdds(date);
+  // A day inside the coming week is covered by the week's call — the same one
+  // the parlay builder makes, at the same cost — so it isn't fetched twice.
+  if (!isParlayTab && !published) {
+    // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "is it inside the coming week" is the point
+    const weekEnd = Date.now() + UPCOMING_DAYS * 24 * 3600_000;
+    await within(
+      slateBounds(date).to.getTime() <= weekEnd ? ensureUpcomingOdds(UPCOMING_DAYS) : ensureSlateOdds(date),
+      FEED_WAIT_MS,
+    );
+  }
   const [games, feed] =
     !isParlayTab && !published
       ? await Promise.all([getSlateGames(date), getFeedStatus()])

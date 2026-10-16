@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { asc, eq, inArray, isNull } from "drizzle-orm";
+import { asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, waitlist } from "@/db/schema";
 import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-client";
@@ -95,19 +95,46 @@ export interface WaitlistEntry {
   notifiedAt: Date | null;
 }
 
-/** Everyone still waiting, oldest first — the order they'd be let in. */
-export async function getWaitlist(): Promise<WaitlistEntry[]> {
-  return db
-    .select({
-      id: waitlist.id,
-      email: waitlist.email,
-      source: waitlist.source,
-      createdAt: waitlist.createdAt,
-      invitedAt: waitlist.invitedAt,
-      notifiedAt: waitlist.notifiedAt,
-    })
-    .from(waitlist)
-    .orderBy(asc(waitlist.createdAt));
+/** One page of the people waiting, oldest first — the order they'd be let in. */
+export async function getWaitlistPage({
+  q = "",
+  page = 1,
+  size = 50,
+}: { q?: string; page?: number; size?: number } = {}): Promise<{
+  rows: WaitlistEntry[];
+  /** Matching the search. */
+  total: number;
+  /** Everyone waiting, and those not yet told sign-ups are open. */
+  waiting: number;
+  untold: number;
+}> {
+  const needle = q.trim().toLowerCase();
+  const like = `%${needle.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const match = needle ? sql`lower(${waitlist.email}) like ${like}` : undefined;
+  const [rows, [{ total }], [{ waiting, untold }]] = await Promise.all([
+    db
+      .select({
+        id: waitlist.id,
+        email: waitlist.email,
+        source: waitlist.source,
+        createdAt: waitlist.createdAt,
+        invitedAt: waitlist.invitedAt,
+        notifiedAt: waitlist.notifiedAt,
+      })
+      .from(waitlist)
+      .where(match)
+      .orderBy(asc(waitlist.createdAt))
+      .limit(size)
+      .offset((Math.max(1, page) - 1) * size),
+    db.select({ total: sql<number>`count(*)::int` }).from(waitlist).where(match),
+    db
+      .select({
+        waiting: sql<number>`count(*)::int`,
+        untold: sql<number>`count(*) filter (where ${waitlist.notifiedAt} is null)::int`,
+      })
+      .from(waitlist),
+  ]);
+  return { rows, total, waiting, untold };
 }
 
 /** An admin let this person in: a normal invite, and the row remembers it. */

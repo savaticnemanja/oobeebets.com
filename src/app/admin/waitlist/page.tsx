@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { WaitlistInvite, WaitlistNotify } from "@/components/admin/waitlist-controls";
 import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
-import { Empty, PageHeader } from "@/components/admin/kit";
+import { Empty, PageHeader, Pager, pageParam } from "@/components/admin/kit";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Hourglass } from "lucide-react";
 import { requireAdminPage } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
-import { getWaitlist } from "@/lib/waitlist";
+import { getWaitlistPage } from "@/lib/waitlist";
 
 export const metadata: Metadata = { title: "Waitlist" };
 
@@ -18,10 +20,21 @@ export const dynamic = "force-dynamic";
  * people in one at a time with an invite; once they're open, one button
  * tells everyone at once. A row goes when its address makes an account.
  */
-export default async function AdminWaitlistPage() {
-  await requireAdminPage();
-  const [rows, open] = [await getWaitlist(), signupEnabled()];
-  const untold = rows.filter((r) => r.notifiedAt === null).length;
+const PAGE = 50;
+
+export default async function AdminWaitlistPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+  const [, params] = await Promise.all([requireAdminPage(), searchParams]);
+  const q = (params.q ?? "").slice(0, 100).trim();
+  const page = pageParam(params.page);
+  const open = signupEnabled();
+  const { rows, total, waiting, untold } = await getWaitlistPage({ q, page, size: PAGE });
+  const href = (n: number) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (n > 1) p.set("page", String(n));
+    const s = p.toString();
+    return `/admin/waitlist${s ? `?${s}` : ""}`;
+  };
 
   return (
     <div>
@@ -29,7 +42,7 @@ export default async function AdminWaitlistPage() {
         title="Waitlist"
         description={
           <>
-            {rows.length} {rows.length === 1 ? "person" : "people"} waiting, oldest first. Sign-ups are{" "}
+            {waiting} {waiting === 1 ? "person" : "people"} waiting, oldest first. Sign-ups are{" "}
             {open ? (
               <span className="text-hit">open</span>
             ) : (
@@ -53,15 +66,24 @@ export default async function AdminWaitlistPage() {
         </div>
       )}
 
+      {waiting > 0 && (
+        <form action="/admin/waitlist" className="mb-4 flex max-w-sm gap-2" role="search">
+          <Input name="q" defaultValue={q} placeholder="Search email" aria-label="Search the waitlist" />
+          <Button type="submit" variant="outline">
+            Search
+          </Button>
+        </form>
+      )}
+
       {rows.length === 0 ? (
-        <Empty icon={Hourglass} title="Nobody waiting" />
+        <Empty icon={Hourglass} title={q ? "No one matches that" : "Nobody waiting"} />
       ) : (
         <ul className="card-hairline divide-y divide-border/60">
           {rows.map((r, i) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-waitlist-id={r.id}>
               <div className="min-w-0 text-sm">
                 <p className="truncate font-medium text-fg">
-                  <span className="num mr-2 text-xs font-normal text-fg-subtle">{i + 1}</span>
+                  {!q && <span className="num mr-2 text-xs font-normal text-fg-subtle">{(page - 1) * PAGE + i + 1}</span>}
                   {r.email}
                 </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
@@ -77,6 +99,7 @@ export default async function AdminWaitlistPage() {
           ))}
         </ul>
       )}
+      <Pager page={page} pageSize={PAGE} total={total} noun="people" href={href} />
     </div>
   );
 }

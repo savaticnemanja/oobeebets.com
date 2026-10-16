@@ -282,15 +282,93 @@ export async function getUserParlays(userId: string): Promise<ParlayView[]> {
  * people running the beta tick boxes while testing the thing, and their
  * tickets are not evidence about testers.
  */
-export async function getAllUserParlays(limit = 200): Promise<ParlayView[]> {
+export async function getAllUserParlays({ limit = 25, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ParlayView[]> {
   const rows = await db
     .select({ ...PARLAY_COLUMNS, ownerEmail: users.email })
     .from(parlays)
     .innerJoin(users, and(eq(users.id, parlays.ownerId), eq(users.role, "user")))
-    .orderBy(desc(parlays.createdAt))
-    .limit(limit);
+    .orderBy(desc(parlays.createdAt), desc(parlays.id))
+    .limit(limit)
+    .offset(offset);
 
   return hydrate(rows);
+}
+
+export interface UserParlayTotals {
+  parlays: number;
+  builders: number;
+  shared: number;
+  avgLegs: number | null;
+  /** Still pending. */
+  running: number;
+  /** For recordFromCounts, at PARLAY_STAKE_UNITS. */
+  counts: { wins: number; losses: number; pushes: number; voids: number; pending: number; net: number };
+}
+
+/**
+ * The admin inspector's totals over every tester parlay, graded in SQL by the
+ * rules in lib/parlays.ts — parlayStatus (a lost leg loses it; pushes and
+ * voids drop out; nothing left is a void) and parlayPrice (the surviving legs
+ * combined, rounded as decimalToAmerican rounds) — so a total over fifty
+ * thousand tickets doesn't mean hydrating fifty thousand tickets in Node.
+ */
+export async function getUserParlayTotals(): Promise<UserParlayTotals> {
+  const [r] = await db.execute<Record<string, number>>(sql`
+    with legs as (
+      select l.parlay_id, p.price, p.status from parlay_legs l join picks p on p.id = l.pick_id
+      union all
+      select l.parlay_id, s.price, s.status from parlay_selection_legs l join selections s on s.id = l.selection_id
+    ),
+    per as (
+      select x.id, x.owner_id, x.price as book_price, x.shared,
+        count(lg.parlay_id) as n_legs,
+        coalesce(bool_or(lg.status = 'lost'), false) as any_lost,
+        count(*) filter (where lg.status in ('won', 'lost', 'pending')) as n_live,
+        count(*) filter (where lg.status = 'won') as n_won,
+        -- float8, not numeric: ln/exp on numeric cost a second over 50k tickets
+        exp(sum(ln(case when lg.price > 0 then 1 + lg.price / 100.0::float8 else 1 + 100.0::float8 / abs(lg.price) end))
+          filter (where lg.status in ('won', 'lost', 'pending'))) as dec
+      from parlays x
+      join users u on u.id = x.owner_id and u.role = 'user'
+      left join legs lg on lg.parlay_id = x.id
+      group by x.id
+    ),
+    graded as (
+      select per.*,
+        case when n_legs = 0 or (not any_lost and n_live = 0) then 'void'
+             when any_lost then 'lost'
+             when n_won = n_live then 'won'
+             else 'pending' end as status,
+        case when n_live = 0 then null
+             when book_price is not null and n_live = n_legs then book_price
+             -- Math.round, which rounds .5 up, not away from zero
+             when dec >= 2 then floor((dec - 1) * 100 + 0.5)
+             else floor(-100 / (dec - 1) + 0.5) end as am
+      from per
+    )
+    select
+      count(*)::int as parlays,
+      count(distinct owner_id)::int as builders,
+      count(*) filter (where shared)::int as shared,
+      avg(n_legs)::float8 as avg_legs,
+      count(*) filter (where status = 'won')::int as wins,
+      count(*) filter (where status = 'lost')::int as losses,
+      count(*) filter (where status = 'void')::int as voids,
+      count(*) filter (where status = 'pending')::int as pending,
+      coalesce(sum(case
+        when status = 'won' then case when am > 0 then am / 100.0 else 100.0 / abs(am) end
+        when status = 'lost' then -1
+        else 0 end), 0)::float8 as net
+    from graded
+  `);
+  return {
+    parlays: r.parlays,
+    builders: r.builders,
+    shared: r.shared,
+    avgLegs: r.parlays > 0 ? r.avg_legs : null,
+    running: r.pending,
+    counts: { wins: r.wins, losses: r.losses, pushes: 0, voids: r.voids, pending: r.pending, net: r.net },
+  };
 }
 
 /**

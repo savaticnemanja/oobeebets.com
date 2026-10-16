@@ -9,7 +9,7 @@ import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { requireAdminPage } from "@/lib/auth";
 import { FEEDBACK_KIND_LABELS } from "@/lib/validation";
-import { Empty, PageHeader, TabNav } from "@/components/admin/kit";
+import { Empty, PageHeader, Pager, TabNav, pageParam } from "@/components/admin/kit";
 import { MessageSquareText } from "lucide-react";
 
 export const metadata: Metadata = { title: "Feedback" };
@@ -18,16 +18,25 @@ export const dynamic = "force-dynamic";
 
 const KIND_BADGE = { bug: "miss", idea: "brand", other: "default" } as const;
 
-/** The newest this many per list; resolve the old ones to see further back. */
-const LIMIT = 200;
+/** Per page. */
+const LIMIT = 25;
+
+function listHref(resolved: boolean, page: number): string {
+  const p = new URLSearchParams();
+  if (resolved) p.set("show", "resolved");
+  if (page > 1) p.set("page", String(page));
+  const q = p.toString();
+  return `/admin/feedback${q ? `?${q}` : ""}`;
+}
 
 export default async function AdminFeedbackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string }>;
+  searchParams: Promise<{ show?: string; page?: string }>;
 }) {
   const [, params] = await Promise.all([requireAdminPage(), searchParams]);
   const showResolved = params.show === "resolved";
+  const page = pageParam(params.page);
 
   const resolver = alias(users, "resolver");
   const [rows, [{ open }], [{ resolved }]] = await Promise.all([
@@ -50,7 +59,8 @@ export default async function AdminFeedbackPage({
       .leftJoin(resolver, eq(resolver.id, feedback.resolvedBy))
       .where(showResolved ? isNotNull(feedback.resolvedAt) : isNull(feedback.resolvedAt))
       .orderBy(desc(showResolved ? feedback.resolvedAt : feedback.createdAt))
-      .limit(LIMIT),
+      .limit(LIMIT)
+      .offset((page - 1) * LIMIT),
     db.select({ open: count() }).from(feedback).where(isNull(feedback.resolvedAt)),
     db.select({ resolved: count() }).from(feedback).where(isNotNull(feedback.resolvedAt)),
   ]);
@@ -119,6 +129,13 @@ export default async function AdminFeedbackPage({
           ))}
         </ul>
       )}
+      <Pager
+        page={page}
+        pageSize={LIMIT}
+        total={showResolved ? resolved : open}
+        noun="items"
+        href={(n) => listHref(showResolved, n)}
+      />
     </div>
   );
 }

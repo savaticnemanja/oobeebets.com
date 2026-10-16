@@ -134,18 +134,6 @@ export async function getTrackRecord(): Promise<TrackRecord> {
  */
 const TESTER = eq(users.role, "user");
 
-/** A tester follow, joined to the pick it points at. One row per tap. */
-interface FollowRow {
-  userId: string;
-  email: string;
-  takenAt: Date;
-  category: PickCategory;
-  market: Market;
-  league: string;
-  price: number;
-  status: PickStatus;
-}
-
 /**
  * How a slice of the board was followed. `lift` is the figure that answers
  * "which types of bets do users follow most": raw follow counts only say which
@@ -182,7 +170,7 @@ export interface TesterFollowRow {
   lastFollowAt: Date | null;
 }
 
-export interface FollowAnalytics {
+export interface FollowSummary {
   /** Non-admin accounts. */
   testers: number;
   /** Testers who have taken at least one pick. */
@@ -197,13 +185,14 @@ export interface FollowAnalytics {
   oobee: TrackRecord;
   /** The followed picks only, flat-staked. */
   beta: TrackRecord;
+  /** Two halves of the cohort, or empty when there are too few to halve. */
+  byConsistency: ConsistencySplit[];
+}
+
+export interface FollowBreakdowns {
   byCategory: FollowBreakdown[];
   byMarket: FollowBreakdown[];
   byLeague: FollowBreakdown[];
-  /** Per tester, most engaged first. Capped — beta is a small room. */
-  testerRows: TesterFollowRow[];
-  /** Two halves of the cohort, or empty when there are too few to halve. */
-  byConsistency: ConsistencySplit[];
 }
 
 /** One half of the cohort, split at its median follow consistency. */
@@ -217,59 +206,292 @@ export interface ConsistencySplit {
 }
 
 /**
- * "Do testers who follow Oobee more consistently perform differently?" — the
- * cohort halved at its median consistency, each half summarised.
+ * The beta dataset is summed in Postgres, not in Node. It used to fetch every
+ * tester follow (300k rows at the load-test scale) and group them in
+ * JavaScript, which took 1.7s and — being synchronous work in the one Node
+ * process — stalled every other request while it ran (admin perf audit,
+ * 2026-10-17). Each query below returns at most one row per tester.
  *
- * Only testers who have followed something are in the split. Accounts that
- * have never ticked a box are the answer to a different question ("how many
- * testers engaged at all", which the `followers` figure covers); leaving them
- * in would drag the median to zero and turn this into "followed anything vs
- * followed a lot".
- *
- * Returns nothing below MIN_SPLIT followers. A two-against-two comparison of
- * win rates is not a finding, and printing one as though it were is exactly
- * what MIN_SAMPLE_FOR_RATE exists to prevent elsewhere.
+ * The cohort is the same as before: non-admin accounts (TESTER), on published
+ * slates only, flat-staked at FOLLOW_STAKE_UNITS.
  */
-const MIN_SPLIT = 4;
 
-function splitByConsistency(
-  perTester: TesterFollowRow[],
-  byUser: Map<string, FollowRow[]>,
-): ConsistencySplit[] {
-  const ranked = perTester
-    .filter((u) => u.follows > 0 && u.consistency !== null)
-    .sort((a, b) => a.consistency! - b.consistency!);
-
-  if (ranked.length < MIN_SPLIT) return [];
-
-  const mid = Math.floor(ranked.length / 2);
-  const halves: [string, TesterFollowRow[]][] = [
-    ["Follows less often", ranked.slice(0, mid)],
-    ["Follows more often", ranked.slice(mid)],
-  ];
-
-  return halves.map(([label, group]) => {
-    const rows = group.flatMap((u) => byUser.get(u.userId) ?? []);
-    return {
-      label,
-      testers: group.length,
-      follows: rows.length,
-      // The group's own mean consistency, which is what the label is about.
-      consistency:
-        group.length > 0
-          ? group.reduce((n, u) => n + (u.consistency ?? 0), 0) / group.length
-          : null,
-      record: summarise(asBetaRows(rows)),
-    };
-  });
+/** A record's counts as SQL sums them: everything summarise() reads. */
+export interface RecordCounts {
+  wins: number;
+  losses: number;
+  pushes: number;
+  voids: number;
+  pending: number;
+  /** Net units at a one-unit stake. */
+  net: number;
 }
 
-const TESTER_ROWS_LIMIT = 200;
+/** What summarise() works out, from counts summed in SQL, at a flat stake. */
+export function recordFromCounts(c: RecordCounts, stake = Number(FOLLOW_STAKE_UNITS)): TrackRecord {
+  const settled = c.wins + c.losses + c.pushes;
+  const rateable = c.wins + c.losses;
+  const netUnits = c.net * stake;
+  return {
+    wins: c.wins,
+    losses: c.losses,
+    pushes: c.pushes,
+    voids: c.voids,
+    pending: c.pending,
+    settled,
+    netUnits,
+    winRate: rateable > 0 ? c.wins / rateable : null,
+    sampleTooSmall: rateable < MIN_SAMPLE_FOR_RATE,
+    roi: settled > 0 ? netUnits / (settled * stake) : null,
+  };
+}
+
+const ZERO: RecordCounts = { wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, net: 0 };
+const addCounts = (a: RecordCounts, b: RecordCounts): RecordCounts => ({
+  wins: a.wins + b.wins,
+  losses: a.losses + b.losses,
+  pushes: a.pushes + b.pushes,
+  voids: a.voids + b.voids,
+  pending: a.pending + b.pending,
+  net: a.net + b.net,
+});
+const countsOf = (r: Record<string, unknown>): RecordCounts => ({
+  wins: Number(r.wins ?? 0),
+  losses: Number(r.losses ?? 0),
+  pushes: Number(r.pushes ?? 0),
+  voids: Number(r.voids ?? 0),
+  pending: Number(r.pending ?? 0),
+  net: Number(r.net ?? 0),
+});
+
+/** Tester follows on published slates, joined to the pick: `f`, `u`, `p`. */
+const FOLLOWS = sql`
+  pick_follows f
+  join users u on u.id = f.user_id and u.role = 'user'
+  join picks p on p.id = f.pick_id
+  join slates s on s.date = p.slate_date and s.published_at is not null`;
+
+/** The counts behind a record, over `p` — profitUnits at one unit, in SQL. */
+const RECORD = sql`
+  count(*) filter (where p.status = 'won')::int as wins,
+  count(*) filter (where p.status = 'lost')::int as losses,
+  count(*) filter (where p.status = 'push')::int as pushes,
+  count(*) filter (where p.status = 'void')::int as voids,
+  count(*) filter (where p.status = 'pending')::int as pending,
+  coalesce(sum(case
+    when p.status = 'won' then case when p.price > 0 then p.price / 100.0 else 100.0 / abs(p.price) end
+    when p.status = 'lost' then -1
+    else 0 end), 0)::float8 as net`;
+
+/**
+ * Picks a tester could have taken: published, and still ahead of kick-off
+ * when their account was made. Someone who joined on Tuesday is not measured
+ * against Monday's board.
+ *
+ * Counted here rather than per tester in SQL: a correlated count over the
+ * published picks for every tester was testers × picks rows (18M at the load
+ * test's 5,000 testers) and took 1.7s. The published kick-offs are a few
+ * thousand numbers a season; sorted once, each tester is a binary search.
+ */
+async function publishedKickoffs(): Promise<number[]> {
+  const rows = await db.select({ at: picks.startsAt }).from(picks).where(publishedSlate);
+  return rows.map((r) => r.at.getTime()).sort((a, b) => a - b);
+}
+
+/** How many of the sorted kick-offs are after `joined`. */
+function opportunitiesAfter(joined: Date, kickoffs: number[]): number {
+  const t = joined.getTime();
+  let lo = 0;
+  let hi = kickoffs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (kickoffs[mid] > t) hi = mid;
+    else lo = mid + 1;
+  }
+  return kickoffs.length - lo;
+}
+
+const at = (v: unknown) => (v instanceof Date ? v : new Date(v as string));
+
+type Row = Record<string, unknown>;
+
+/** Fewer followers than this and the consistency split is left empty. */
+const MIN_SPLIT = 4;
+
+/** How many testers there are — Pick by pick's denominator. */
+export async function countTesters(): Promise<number> {
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(users).where(TESTER);
+  return n;
+}
+
+/**
+ * Summary: the cohort's totals, both records, and the consistency split.
+ *
+ * The split is "do testers who follow Oobee more consistently perform
+ * differently?" — followers halved at their median consistency. Only testers
+ * who have followed something are in it: accounts that never ticked a box
+ * answer a different question (`followers` covers it), and would drag the
+ * median to zero. Nothing below MIN_SPLIT followers — a two-against-two
+ * comparison of win rates is not a finding.
+ */
+export async function getFollowSummary(): Promise<FollowSummary> {
+  const [oobee, kickoffs, joined, perFollower] = await Promise.all([
+    getTrackRecord(),
+    publishedKickoffs(),
+    db.select({ createdAt: users.createdAt }).from(users).where(TESTER),
+    db.execute<Row>(sql`
+      select f.user_id, u.created_at, count(*)::int as follows, ${RECORD}
+      from ${FOLLOWS}
+      group by f.user_id, u.created_at`),
+  ]);
+  const cohort = {
+    testers: joined.length,
+    opportunities: joined.reduce((n, u) => n + opportunitiesAfter(u.createdAt, kickoffs), 0),
+  };
+
+  const followers = (perFollower as unknown as Row[]).map((r) => ({
+    follows: Number(r.follows),
+    opportunities: opportunitiesAfter(at(r.created_at), kickoffs),
+    counts: countsOf(r),
+  }));
+  const follows = followers.reduce((n, r) => n + r.follows, 0);
+  const opportunities = cohort.opportunities;
+
+  const ranked = followers
+    .filter((r) => r.opportunities > 0)
+    .map((r) => ({ ...r, consistency: r.follows / r.opportunities }))
+    .sort((a, b) => a.consistency - b.consistency);
+  const mid = Math.floor(ranked.length / 2);
+  const byConsistency: ConsistencySplit[] =
+    ranked.length < MIN_SPLIT
+      ? []
+      : ([
+          ["Follows less often", ranked.slice(0, mid)],
+          ["Follows more often", ranked.slice(mid)],
+        ] as const).map(([label, group]) => ({
+          label,
+          testers: group.length,
+          follows: group.reduce((n, r) => n + r.follows, 0),
+          // The group's own mean consistency, which is what the label is about.
+          consistency: group.length > 0 ? group.reduce((n, r) => n + r.consistency, 0) / group.length : null,
+          record: recordFromCounts(group.reduce((c, r) => addCounts(c, r.counts), ZERO)),
+        }));
+
+  return {
+    testers: cohort.testers,
+    followers: followers.length,
+    follows,
+    opportunities,
+    takeRate: opportunities > 0 ? follows / opportunities : null,
+    avgPerFollower: followers.length > 0 ? follows / followers.length : null,
+    oobee,
+    beta: recordFromCounts(followers.reduce((c, r) => addCounts(c, r.counts), ZERO)),
+    byConsistency,
+  };
+}
+
+/**
+ * What testers follow, by board, bet type and league. `lift` is each slice's
+ * share of the follows over its share of the published picks — see
+ * FollowBreakdown. One group-by each side covers all three dimensions; they
+ * are summed apart here.
+ */
+export async function getFollowBreakdowns(): Promise<FollowBreakdowns> {
+  const [followed, offered] = await Promise.all([
+    db.execute<Row>(sql`
+      select p.category, p.market, p.league, count(*)::int as follows, ${RECORD}
+      from ${FOLLOWS}
+      group by 1, 2, 3`),
+    db
+      .select({ category: picks.category, market: picks.market, league: picks.league, n: sql<number>`count(*)::int` })
+      .from(picks)
+      .where(publishedSlate)
+      .groupBy(picks.category, picks.market, picks.league),
+  ]);
+  const rows = followed as unknown as Row[];
+  const totalFollows = rows.reduce((n, r) => n + Number(r.follows), 0);
+  const totalPicks = offered.reduce((n, r) => n + r.n, 0);
+
+  const slice = <K extends string>(keyOf: (r: { category: string; market: string; league: string }) => K, label: (k: K) => string) => {
+    const picksBy = new Map<K, number>();
+    for (const r of offered) picksBy.set(keyOf(r), (picksBy.get(keyOf(r)) ?? 0) + r.n);
+    const followsBy = new Map<K, { follows: number; counts: RecordCounts }>();
+    for (const r of rows) {
+      const k = keyOf(r as { category: string; market: string; league: string });
+      const had = followsBy.get(k) ?? { follows: 0, counts: ZERO };
+      followsBy.set(k, { follows: had.follows + Number(r.follows), counts: addCounts(had.counts, countsOf(r)) });
+    }
+    return [...new Set([...picksBy.keys(), ...followsBy.keys()])]
+      .map((k): FollowBreakdown => {
+        const f = followsBy.get(k) ?? { follows: 0, counts: ZERO };
+        const n = picksBy.get(k) ?? 0;
+        const pickShare = totalPicks > 0 ? n / totalPicks : 0;
+        return {
+          key: k,
+          label: label(k),
+          picks: n,
+          follows: f.follows,
+          lift: totalFollows > 0 && pickShare > 0 ? f.follows / totalFollows / pickShare : null,
+          record: recordFromCounts(f.counts),
+        };
+      })
+      .sort((a, b) => b.follows - a.follows || b.picks - a.picks);
+  };
+
+  return {
+    byCategory: slice((r) => r.category as PickCategory, (k) => CATEGORY_LABELS[k]),
+    byMarket: slice((r) => r.market as Market, (k) => t().market[k]),
+    byLeague: slice((r) => r.league, (k) => k),
+  };
+}
+
+/**
+ * One page of the per-tester table, most engaged first. Every tester is
+ * counted in `total` — the table pages, the totals above it never did.
+ */
+export async function getTesterRows({ page = 1, size = 50 }: { page?: number; size?: number } = {}): Promise<{
+  rows: TesterFollowRow[];
+  total: number;
+}> {
+  const offset = (Math.max(1, page) - 1) * size;
+  const [rows, total, kickoffs] = await Promise.all([
+    db.execute<Row>(sql`
+      with agg as (
+        select f.user_id, count(*)::int as follows, max(f.created_at) as last, ${RECORD}
+        from ${FOLLOWS}
+        group by f.user_id
+      )
+      select u.id, u.email, u.created_at, coalesce(a.follows, 0) as follows, a.last,
+        a.wins, a.losses, a.pushes, a.voids, a.pending, a.net
+      from users u left join agg a on a.user_id = u.id
+      where u.role = 'user'
+      order by coalesce(a.follows, 0) desc, u.email asc
+      limit ${size} offset ${offset}`),
+    countTesters(),
+    publishedKickoffs(),
+  ]);
+  return {
+    total,
+    rows: (rows as unknown as Row[]).map((r) => {
+      const follows = Number(r.follows);
+      const opportunities = opportunitiesAfter(at(r.created_at), kickoffs);
+      return {
+        userId: r.id as string,
+        email: r.email as string,
+        follows,
+        opportunities,
+        consistency: opportunities > 0 ? follows / opportunities : null,
+        record: recordFromCounts(countsOf(r)),
+        lastFollowAt: r.last ? at(r.last) : null,
+      };
+    }),
+  };
+}
 
 /**
  * Flat-staked view of a follow, in the shape the unit maths takes.
  *
- * Typed by the two columns it reads rather than by FollowRow, so the per-player
+ * Typed by the two columns it reads rather than by a row shape, so the per-player
  * detail below can hand it its own wider row without either shape having to
  * know about the other — the same reason pickProfit is typed that way.
  */
@@ -290,174 +512,6 @@ function bucket<K extends string, T>(rows: T[], keyOf: (r: T) => K): Map<K, T[]>
     list.push(r);
   }
   return out;
-}
-
-/**
- * Builds one breakdown table. `pickCounts` is what was published per slice —
- * it has to come from the picks table rather than from the follows, or a slice
- * nobody followed would vanish instead of showing a zero.
- */
-function breakdown<K extends string>(
-  follows: FollowRow[],
-  pickCounts: Map<K, number>,
-  keyOf: (r: FollowRow) => K,
-  label: (k: K) => string,
-): FollowBreakdown[] {
-  const grouped = bucket(follows, keyOf);
-  const totalPicks = [...pickCounts.values()].reduce((n, v) => n + v, 0);
-  const totalFollows = follows.length;
-
-  return [...new Set([...pickCounts.keys(), ...grouped.keys()])]
-    .map((k) => {
-      const rows = grouped.get(k) ?? [];
-      const picks = pickCounts.get(k) ?? 0;
-      const pickShare = totalPicks > 0 ? picks / totalPicks : 0;
-      return {
-        key: k,
-        label: label(k),
-        picks,
-        follows: rows.length,
-        lift:
-          totalFollows > 0 && pickShare > 0
-            ? rows.length / totalFollows / pickShare
-            : null,
-        record: summarise(asBetaRows(rows)),
-      };
-    })
-    .sort((a, b) => b.follows - a.follows || b.picks - a.picks);
-}
-
-/**
- * Everything /admin/follows renders, from four queries.
- *
- * The follow rows are fetched once and sliced in memory rather than asked for
- * per breakdown, for the same reason getTrackRecord sums in memory: every
- * figure on the page then comes off one consistent snapshot, and at the stated
- * ceiling — thirty picks a day against a closed beta's worth of accounts —
- * one narrow scan is cheaper than six group-bys. The escape hatch is the same
- * one: if this table outgrows the approach, a materialised view keyed by
- * (slate_date, user_id) slots in behind this signature unchanged.
- */
-export async function getFollowAnalytics(): Promise<FollowAnalytics> {
-  const [oobee, followRows, pickCounts, testerRows] = await Promise.all([
-    getTrackRecord(),
-
-    db
-      .select({
-        userId: pickFollows.userId,
-        email: users.email,
-        takenAt: pickFollows.createdAt,
-        category: picks.category,
-        market: picks.market,
-        league: picks.league,
-        price: picks.price,
-        status: picks.status,
-      })
-      .from(pickFollows)
-      .innerJoin(users, and(eq(users.id, pickFollows.userId), TESTER))
-      .innerJoin(picks, eq(picks.id, pickFollows.pickId))
-      .where(publishedSlate),
-
-    // What was on offer, by every slice the page breaks down. One group-by
-    // covers all three dimensions; they are summed apart below.
-    db
-      .select({
-        category: picks.category,
-        market: picks.market,
-        league: picks.league,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(picks)
-      .where(publishedSlate)
-      .groupBy(picks.category, picks.market, picks.league),
-
-    // Per-tester opportunity count, correlated so a tester is only measured
-    // against the picks that were still takeable once they had an account.
-    //
-    // The outer column is written as `${users}.created_at`, not as the column
-    // object. Drizzle drops the table qualifier from a select on a single
-    // unjoined table, and bare `created_at` inside this subquery is ambiguous
-    // three ways — picks, slates and users all have one — which Postgres
-    // rejects outright (42702). Naming the table keeps the reference pointing
-    // at the row being measured.
-    db
-      .select({
-        userId: users.id,
-        email: users.email,
-        opportunities: sql<number>`(
-          select count(*)::int from picks p
-          join slates s on s.date = p.slate_date and s.published_at is not null
-          where p.starts_at > ${users}.created_at
-        )`,
-      })
-      .from(users)
-      .where(TESTER)
-      .orderBy(users.email)
-      .limit(TESTER_ROWS_LIMIT),
-  ]);
-
-  const sumBy = <K extends string>(keyOf: (r: (typeof pickCounts)[number]) => K) => {
-    const out = new Map<K, number>();
-    for (const r of pickCounts) {
-      const k = keyOf(r);
-      out.set(k, (out.get(k) ?? 0) + r.n);
-    }
-    return out;
-  };
-
-  const byUser = bucket(followRows, (r) => r.userId);
-
-  // `t` is the i18n catalogue in this file, so the per-tester row is `u`.
-  const perTester = testerRows.map((u): TesterFollowRow => {
-    const rows = byUser.get(u.userId) ?? [];
-    return {
-      userId: u.userId,
-      email: u.email,
-      follows: rows.length,
-      opportunities: u.opportunities,
-      consistency: u.opportunities > 0 ? rows.length / u.opportunities : null,
-      record: summarise(asBetaRows(rows)),
-      lastFollowAt: rows.reduce<Date | null>(
-        (latest, r) => (latest === null || r.takenAt > latest ? r.takenAt : latest),
-        null,
-      ),
-    };
-  });
-
-  const opportunities = testerRows.reduce((n, u) => n + u.opportunities, 0);
-
-  return {
-    testers: testerRows.length,
-    followers: byUser.size,
-    follows: followRows.length,
-    opportunities,
-    takeRate: opportunities > 0 ? followRows.length / opportunities : null,
-    avgPerFollower: byUser.size > 0 ? followRows.length / byUser.size : null,
-    oobee,
-    beta: summarise(asBetaRows(followRows)),
-    byCategory: breakdown(
-      followRows,
-      sumBy((r) => r.category),
-      (r) => r.category,
-      (k) => CATEGORY_LABELS[k],
-    ),
-    byMarket: breakdown(
-      followRows,
-      sumBy((r) => r.market),
-      (r) => r.market,
-      (k) => t().market[k],
-    ),
-    byLeague: breakdown(
-      followRows,
-      sumBy((r) => r.league),
-      (r) => r.league,
-      (k) => k,
-    ),
-    byConsistency: splitByConsistency(perTester, byUser),
-    testerRows: perTester.sort(
-      (a, b) => b.follows - a.follows || a.email.localeCompare(b.email),
-    ),
-  };
 }
 
 /** One pick, with how many testers said they took it. */

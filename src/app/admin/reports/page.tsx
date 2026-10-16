@@ -9,23 +9,33 @@ import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { requireAdminPage } from "@/lib/auth";
 import { REPORT_REASON_LABEL } from "@/lib/report-reasons";
-import { Empty, PageHeader, TabNav } from "@/components/admin/kit";
+import { Empty, PageHeader, Pager, TabNav, pageParam } from "@/components/admin/kit";
 import { Flag } from "lucide-react";
 
 export const metadata: Metadata = { title: "Reports" };
 
 export const dynamic = "force-dynamic";
 
-const LIMIT = 200;
+/** Per page. */
+const LIMIT = 25;
+
+function listHref(resolved: boolean, page: number): string {
+  const p = new URLSearchParams();
+  if (resolved) p.set("show", "resolved");
+  if (page > 1) p.set("page", String(page));
+  const q = p.toString();
+  return `/admin/reports${q ? `?${q}` : ""}`;
+}
 
 /**
  * What testers reported from a post's or a profile's ⋯ menu. Each shows who
  * was reported and why, the post as it was when reported (kept even once
  * it's removed), and the two answers: remove the post, or dismiss.
  */
-export default async function AdminReportsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+export default async function AdminReportsPage({ searchParams }: { searchParams: Promise<{ show?: string; page?: string }> }) {
   const [, params] = await Promise.all([requireAdminPage(), searchParams]);
   const showResolved = params.show === "resolved";
+  const page = pageParam(params.page);
 
   const reporter = alias(users, "reporter");
   const target = alias(users, "target");
@@ -48,7 +58,8 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
       .leftJoin(target, eq(target.id, reports.targetUserId))
       .where(showResolved ? isNotNull(reports.resolvedAt) : isNull(reports.resolvedAt))
       .orderBy(desc(showResolved ? reports.resolvedAt : reports.createdAt))
-      .limit(LIMIT),
+      .limit(LIMIT)
+      .offset((page - 1) * LIMIT),
     db.select({ open: count() }).from(reports).where(isNull(reports.resolvedAt)),
     db.select({ resolved: count() }).from(reports).where(isNotNull(reports.resolvedAt)),
   ]);
@@ -114,6 +125,13 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
           ))}
         </ul>
       )}
+      <Pager
+        page={page}
+        pageSize={LIMIT}
+        total={showResolved ? resolved : open}
+        noun="reports"
+        href={(n) => listHref(showResolved, n)}
+      />
     </div>
   );
 }

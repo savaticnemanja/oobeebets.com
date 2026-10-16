@@ -181,7 +181,7 @@ export default async function AdminOverviewPage() {
             before
           </>
         }
-        info="A slate day runs from 4:00 AM to 4:00 AM Eastern, the same as the board, so a late game counts on the day it was picked for. Active means any account that posted, liked, reposted, followed, took a pick, played a parlay, read a post or opened the site that day."
+        info="A slate day runs from 4:00 AM to 4:00 AM Eastern, the same as the board, so a late game counts on the day it was picked for. Active means the account was signed in and used the site that day. Days before 17 Oct 2026 are rebuilt from what accounts did then — posts, likes, reads, bets, follows and sign-ins."
         actions={
           <Button size="sm" asChild>
             <Link href={`/admin/slate?date=${day}`}>

@@ -287,7 +287,7 @@ export interface PendingLeg {
  * main list). In practice these are player props, which the feed cannot
  * grade, plus any game line whose score never arrived (a postponement).
  */
-export async function getPendingCommunityLegs(): Promise<PendingLeg[]> {
+export async function getPendingCommunityLegs(limit = 50): Promise<PendingLeg[]> {
   const rows = await db
     .select({
       sel: selections,
@@ -304,7 +304,8 @@ export async function getPendingCommunityLegs(): Promise<PendingLeg[]> {
         sql`exists (select 1 from ${parlaySelectionLegs} where ${parlaySelectionLegs.selectionId} = ${selections.id})`,
       ),
     )
-    .orderBy(asc(games.commenceTime));
+    .orderBy(asc(games.commenceTime))
+    .limit(limit);
   return rows.map(({ sel, game, parlays }) => ({
     selectionId: sel.id,
     label: lineLabel(sel),
