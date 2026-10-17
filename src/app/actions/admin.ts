@@ -592,6 +592,59 @@ export async function setUserRoleAction(
 }
 
 
+/**
+ * Suspends an account, or lifts it. Suspended, it can't sign in, every session
+ * it holds is revoked here, and what it posted disappears from every feed,
+ * profile and notification until it's lifted (lib/moderation.ts, lib/social.ts).
+ * Nothing is deleted. Nobody suspends themselves.
+ */
+export async function setUserSuspendedAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireAdmin();
+  const parsed = z
+    .object({
+      userId: z.string().uuid(),
+      suspend: z.enum(["yes", "no"]),
+      reason: z.string().trim().max(300, "At most 300 characters").optional().or(z.literal("")),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, error: "Bad request" };
+  const { userId, suspend, reason } = parsed.data;
+  if (suspend === "yes" && !reason) {
+    return { ok: false, error: "Say why — it goes in the audit log and on their admin page." };
+  }
+
+  const [target] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!target) return { ok: false, error: "User not found" };
+  if (target.id === actor.user.id) return { ok: false, error: "You can't suspend your own account." };
+
+  if (suspend === "yes") {
+    if (target.suspendedAt) return { ok: true, message: `@${target.username} is already suspended.` };
+    await db
+      .update(users)
+      .set({ suspendedAt: new Date(), suspendedReason: reason || null, suspendedBy: actor.user.id, updatedAt: new Date() })
+      .where(eq(users.id, target.id));
+    await revokeAllSessions(target.id);
+    await audit(actor, "user.suspended", "user", target.id, { email: target.email, reason });
+  } else {
+    if (!target.suspendedAt) return { ok: true, message: `@${target.username} isn't suspended.` };
+    await db
+      .update(users)
+      .set({ suspendedAt: null, suspendedReason: null, suspendedBy: null, updatedAt: new Date() })
+      .where(eq(users.id, target.id));
+    await audit(actor, "user.unsuspended", "user", target.id, { email: target.email });
+  }
+
+  revalidatePath("/admin/users", "layout");
+  revalidatePath(`/u/${target.username}`);
+  return {
+    ok: true,
+    message: suspend === "yes" ? `@${target.username} is suspended and signed out everywhere.` : `@${target.username} can sign in again.`,
+  };
+}
+
 /* ----------------------------------------------- community legs (selections) */
 
 /**

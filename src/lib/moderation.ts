@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { userBlocks, userMutes } from "@/db/schema";
+import { userBlocks, userMutes, users } from "@/db/schema";
 
 /**
  * Mute and block — who a viewer sees, and who may act on whom.
@@ -20,17 +20,23 @@ import { userBlocks, userMutes } from "@/db/schema";
  * SQL: `author` is someone `viewerId` should see — not muted by them, and
  * no block either way. Signed out, everyone is visible.
  */
+/** The account isn't suspended — a suspended one's posts, parlays and notifications show nowhere. */
+export function activeAccount(account: AnyColumn | SQL): SQL {
+  return sql`not exists (select 1 from ${users} where ${users.id} = ${account} and ${users.suspendedAt} is not null)`;
+}
+
 export function visibleTo(viewerId: string | null, author: AnyColumn | SQL): SQL {
-  if (!viewerId) return sql`true`;
-  return sql`(not exists (select 1 from ${userMutes} where ${userMutes.userId} = ${viewerId} and ${userMutes.mutedId} = ${author})
+  if (!viewerId) return activeAccount(author);
+  return sql`(${activeAccount(author)}
+    and not exists (select 1 from ${userMutes} where ${userMutes.userId} = ${viewerId} and ${userMutes.mutedId} = ${author})
     and not exists (select 1 from ${userBlocks} where (${userBlocks.blockerId} = ${viewerId} and ${userBlocks.blockedId} = ${author})
       or (${userBlocks.blockedId} = ${viewerId} and ${userBlocks.blockerId} = ${author})))`;
 }
 
 /** SQL: no block either way between `viewerId` and `other` — for lists where a mute shouldn't hide (mention suggestions). */
 export function notBlocked(viewerId: string, other: AnyColumn | SQL): SQL {
-  return sql`not exists (select 1 from ${userBlocks} where (${userBlocks.blockerId} = ${viewerId} and ${userBlocks.blockedId} = ${other})
-    or (${userBlocks.blockedId} = ${viewerId} and ${userBlocks.blockerId} = ${other}))`;
+  return sql`(${activeAccount(other)} and not exists (select 1 from ${userBlocks} where (${userBlocks.blockerId} = ${viewerId} and ${userBlocks.blockedId} = ${other})
+    or (${userBlocks.blockedId} = ${viewerId} and ${userBlocks.blockerId} = ${other})))`;
 }
 
 /** Whether `a` and `b` may follow, reply to, quote, like, repost or play each other: no block either way. */

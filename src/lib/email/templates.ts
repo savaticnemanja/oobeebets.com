@@ -457,6 +457,19 @@ export function welcomeEmail({ name, homeUrl, accountUrl }: { name: string; home
  * Security notice after a password change or reset. Sent to the address on
  * the account, so whoever really owns it hears about a change they didn't make.
  */
+export function accountDeletedEmail(): Email {
+  return actionEmail({
+    subject: "Your oobee bets account was deleted",
+    preheader: "Your account and everything on it are gone.",
+    heading: "Your account was deleted",
+    paragraphs: [
+      "Your oobee bets account was deleted just now, as you asked: your profile, posts, replies, likes, follows, parlays, the picks you marked and your sign-up answers. You've been signed out everywhere.",
+      "Copies in our nightly backups age out within 7 days. If you didn't do this, reply to this email straight away.",
+    ],
+    footerNote: "This is the last email we'll send to this address unless you sign up again.",
+  });
+}
+
 export function passwordChangedEmail({ at, resetUrl }: { at: Date; resetUrl: string }): Email {
   const when = `${formatDate(at)} at ${at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" })}`;
   return actionEmail({

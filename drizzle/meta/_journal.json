@@ -225,6 +225,13 @@
       "when": 1792264416070,
       "tag": "0031_survey_sportsbooks",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792270060227,
+      "tag": "0032_user_suspension",
+      "breakpoints": true
     }
   ]
 }

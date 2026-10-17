@@ -135,6 +135,7 @@ export function UserDirectory({
                             {u.displayName || `@${u.username}`}
                           </Link>
                           {u.role === "admin" && <Badge variant="brand">admin</Badge>}
+                          {u.suspended && <Badge variant="miss">suspended</Badge>}
                           {u.plan && <Badge>{u.plan}</Badge>}
                           {u.id === currentUserId && <span className="text-xs text-fg-subtle">(you)</span>}
                         </div>

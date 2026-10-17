@@ -37,7 +37,8 @@ export async function resolveAudience(
     .select({ email: users.email })
     .from(users)
     // "Testers" is everyone the beta is *for* — admins are the ones running it.
-    .where(audience === "testers" ? sql`${users.role} = 'user'` : sql`true`)
+    // A suspended account gets no announcements.
+    .where(audience === "testers" ? sql`${users.role} = 'user' and ${users.suspendedAt} is null` : sql`${users.suspendedAt} is null`)
     .orderBy(asc(users.email));
 
   return { recipients: rows.map((r) => r.email), invalid: [] };

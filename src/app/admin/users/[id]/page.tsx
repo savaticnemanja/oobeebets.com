@@ -18,6 +18,10 @@ import { Empty, Kpi, KpiGrid, Panel, PanelLink, TabNav, since } from "@/componen
 import { ParlayTable } from "@/components/admin/parlay-table";
 import { PlayerBets } from "@/components/admin/player-bets";
 import { RoleControl } from "@/components/admin/role-control";
+import { SuspendControl } from "@/components/admin/suspend-control";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { Avatar } from "@/components/social/identity";
 import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +50,12 @@ export default async function AdminUserPage({
   const [detail, bets] = await Promise.all([getUserDetail(id), getPlayerFollows(id)]);
   if (!detail || !bets) notFound();
   const { user, counts } = detail;
-  const survey = await getSignupSurvey(user.email);
+  const [survey, suspendedBy] = await Promise.all([
+    getSignupSurvey(user.email),
+    user.suspendedBy
+      ? db.select({ username: users.username }).from(users).where(eq(users.id, user.suspendedBy)).limit(1).then(([r]) => r?.username ?? null)
+      : Promise.resolve(null),
+  ]);
   const name = user.displayName?.trim() || user.username;
   const lastActive = [user.lastLoginAt, detail.sessions[0]?.lastSeenAt]
     .filter((d): d is Date => Boolean(d))
@@ -77,6 +86,7 @@ export default async function AdminUserPage({
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-2xl font-semibold tracking-tight">{name}</h1>
               {user.role === "admin" && <Badge variant="brand">admin</Badge>}
+              {user.suspendedAt && <Badge variant="miss">suspended</Badge>}
               {detail.plan && <Badge>{detail.plan}</Badge>}
             </div>
             <p className="mt-0.5 truncate text-sm text-fg-muted">
@@ -98,10 +108,22 @@ export default async function AdminUserPage({
           {user.id === auth.user.id ? (
             <Badge variant="outline">{user.role} · you</Badge>
           ) : (
-            <RoleControl userId={user.id} email={user.email} role={user.role} />
+            <>
+              <SuspendControl userId={user.id} username={user.username} suspended={Boolean(user.suspendedAt)} />
+              <RoleControl userId={user.id} email={user.email} role={user.role} />
+            </>
           )}
         </div>
       </div>
+
+      {user.suspendedAt && (
+        <p role="status" className="mb-6 rounded-lg border border-miss/30 bg-miss-dim px-4 py-3 text-sm text-fg">
+          <span className="font-medium text-miss">Suspended</span> <LocalTime at={user.suspendedAt} format="datetime" />
+          {suspendedBy ? ` by @${suspendedBy}` : ""}
+          {user.suspendedReason ? <> — {user.suspendedReason}</> : null}. They can&apos;t sign in, and nothing they posted
+          shows anywhere until it&apos;s lifted.
+        </p>
+      )}
 
       <TabNav label="Account sections" tabs={tabs} />
 

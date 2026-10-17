@@ -139,6 +139,15 @@ export const users = pgTable(
      * serve each one as immutable.
      */
     avatarId: uuid("avatar_id").references((): AnyPgColumn => avatars.id, { onDelete: "set null" }),
+    /**
+     * Set by an admin (/admin/users/[id]): a suspended account can't sign in,
+     * every session it had is revoked, and what it posted stops showing
+     * anywhere (lib/moderation.ts visibleTo, lib/social.ts selectPosts). Null
+     * again on unsuspend; the reason is for the admins, never shown to others.
+     */
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspendedReason: text("suspended_reason"),
+    suspendedBy: uuid("suspended_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

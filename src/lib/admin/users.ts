@@ -25,6 +25,7 @@ export interface DirectoryRow {
   followers: number;
   /** "Pro", "Base · past due"; null on the free board. */
   plan: string | null;
+  suspended: boolean;
 }
 
 
@@ -87,6 +88,7 @@ export async function listUsers({
   const [rows, [c]] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select u.id, u.email, u.username, u.display_name, u.avatar_id, u.role, u.created_at,
+        u.suspended_at is not null as suspended,
         ${LAST_ACTIVE} as last_active,
         ${TAKES} as takes,
         ${PLAYS} as plays,
@@ -128,6 +130,7 @@ export async function listUsers({
       parlays: Number(r.parlays),
       followers: Number(r.followers),
       plan: plans.get(r.id as string) ?? null,
+      suspended: Boolean(r.suspended),
     })),
   };
 }

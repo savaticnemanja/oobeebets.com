@@ -9,6 +9,7 @@ import { DocPage, DocSection } from "@/components/doc-page";
 import { ProfileForm } from "@/components/social/profile-form";
 import { AvatarPicker } from "@/components/social/avatar-picker";
 import { ChangePasswordForm } from "@/components/password-reset-forms";
+import { DeleteAccountForm } from "@/components/delete-account-form";
 import { displayNameOf } from "@/components/social/identity";
 import { ManagePlanButton } from "@/components/billing/plan-button";
 import { PlanList } from "@/components/billing/plan-list";
@@ -98,8 +99,8 @@ export default async function AccountPage() {
           </>
         ) : (
           <p>
-            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A plan opens up to all 15
-            of each. Every plan is monthly and can be cancelled any time.
+            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A plan opens up the
+            whole board. Every plan is monthly and can be cancelled any time.
           </p>
         )}
       </DocSection>
@@ -120,6 +121,17 @@ export default async function AccountPage() {
         </p>
         <div className="pt-1 text-fg">
           <ChangePasswordForm email={auth.user.email} />
+        </div>
+      </DocSection>
+
+      <DocSection id="delete" title="Delete account">
+        <p>
+          Deletes your profile and everything on it — posts, replies, likes, follows, your parlays, the picks
+          you marked and your sign-up answers — and signs you out everywhere. It can&apos;t be undone.
+          Oobee&apos;s own picks and their results stay on the record; they never held anything about you.
+        </p>
+        <div className="pt-1 text-fg">
+          <DeleteAccountForm email={auth.user.email} />
         </div>
       </DocSection>
     </DocPage>

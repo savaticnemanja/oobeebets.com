@@ -123,17 +123,15 @@ const browser = await chromium.launch();
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
 
 /**
- * The beta application's answer cards are visually hidden inputs named
- * q-<question>. Clicked by event, not by position: a 1px input under a card
- * is easy for an overlay (Next's dev badge, a toast) to sit on top of.
+ * The beta application's answer cards: a visually hidden input named
+ * q-<question> inside each card. Clicked as a person would — on the card —
+ * then waited on until the input reads checked.
  */
 async function pickAnswer(page, field, value) {
   const input = page.locator(`input[name="q-${field}"][value="${value}"]`);
   if (await input.isChecked()) return;
-  await input.dispatchEvent("click");
-  // Rendered state, not just the DOM's: React re-renders the card after the click.
+  await page.locator("label").filter({ has: input }).click();
   for (let i = 0; i < 40 && !(await input.isChecked().catch(() => true)); i++) await page.waitForTimeout(50);
-  await page.waitForTimeout(50);
 }
 
 /** "How you bet", answered as a regular bettor. */
@@ -1173,10 +1171,8 @@ console.log("\nWaitlist, change password and profile pictures");
   await hydrated(page, 'input[name="q-is21"]');
   // Age comes first, and a no ends it before anything is typed.
   await pickAnswer(page, "is21", "no");
-  check(
-    (await page.getByText("only for people 21 and older").isVisible()) && (await page.locator('input[name="q-email"]').count()) === 0,
-    "a no on 21+ stops the application",
-  );
+  const stopped = await page.getByText("only for people 21 and older").waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check(stopped && (await page.locator('input[name="q-email"]').count()) === 0, "a no on 21+ stops the application");
   await pickAnswer(page, "is21", "yes");
   // Submitting it empty is caught in the browser, at the first unanswered question.
   await page.getByRole("button", { name: "Join waitlist" }).click();
@@ -1803,11 +1799,123 @@ const feedbackNote = `e2e feedback ${Date.now()}`;
 }
 await sql`delete from feedback where body = ${feedbackNote}`;
 
+/* ------------------------------------- suspension, and deleting your account */
+
+console.log("\nSuspending an account, and deleting your own");
+const goneEmail = `e2e-suspend-${Date.now()}@example.com`;
+{
+  const password = "a-real-password-1";
+  const [acct] = await sql`
+    insert into users (email, password_hash, role, email_verified_at, username)
+    values (${goneEmail}, ${await bcrypt.hash(password, 10)}, 'user', now(), ${"sus_" + randomBytes(4).toString("hex")})
+    returning id, username`;
+  const [post] = await sql`insert into posts (author_id, body) values (${acct.id}, 'Posted before the suspension') returning id`;
+  const theirs = await browser.newContext();
+  await theirs.addCookies([await sessionCookie(goneEmail)]);
+  const them = await theirs.newPage();
+
+  // An admin suspends them; a reason is asked for first.
+  const adminCtx = await browser.newContext();
+  await adminCtx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
+  const admin = await adminCtx.newPage();
+  await admin.goto(`${APP_URL}/admin/users/${acct.id}`);
+  await loaded(admin);
+  await hydrated(admin, "button");
+  await admin.getByRole("button", { name: "Suspend", exact: true }).first().click();
+  const dialog = admin.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "Suspend", exact: true }).click();
+  check(await dialog.getByText("Say why").isVisible(), "suspending asks for a reason first");
+  await dialog.locator("#suspend-reason").fill("e2e: spam");
+  await dialog.getByRole("button", { name: "Suspend", exact: true }).click();
+  let row;
+  for (let i = 0; i < 40 && !row?.suspended_at; i++) {
+    await admin.waitForTimeout(250);
+    [row] = await sql`select suspended_at, suspended_reason, suspended_by from users where id = ${acct.id}`;
+  }
+  check(Boolean(row?.suspended_at) && row.suspended_reason === "e2e: spam" && row.suspended_by === seedAdmin.id, "the suspension is recorded with its reason");
+  const [{ n: live }] = await sql`select count(*)::int as n from sessions where user_id = ${acct.id}`;
+  check(live === 0, "suspending signs them out everywhere", `sessions=${live}`);
+
+  // They're out, and the right password says why.
+  await them.goto(`${APP_URL}/home`);
+  check(them.url().includes("/login"), "a suspended account's old cookie reads as signed out", them.url());
+  await hydrated(them, 'form input[name="email"]');
+  await them.fill('input[name="email"]', goneEmail);
+  await them.fill('input[name="password"]', password);
+  await them.click('button[type="submit"]');
+  check(
+    await them.getByText("This account is suspended").waitFor({ timeout: 10000 }).then(() => true, () => false),
+    "signing in with the right password says the account is suspended",
+  );
+
+  // Nobody else sees what they posted.
+  const other = await browser.newContext();
+  await other.addCookies([await sessionCookie(TESTER_EMAIL)]);
+  const viewer = await other.newPage();
+  // /p has a loading skeleton, so a missing post streams a not-found page with
+  // a 200 — what counts is that the post itself isn't there.
+  await viewer.goto(`${APP_URL}/p/${post.id}`);
+  await loaded(viewer);
+  check(!(await viewer.content()).includes("Posted before the suspension"), "their post is gone while suspended");
+  await viewer.goto(`${APP_URL}/u/${acct.username}`);
+  await loaded(viewer);
+  check(await viewer.getByText("This account is suspended").isVisible(), "their profile says it's suspended");
+
+  // Lifted, everything comes back.
+  await admin.reload();
+  await loaded(admin);
+  await hydrated(admin, "button");
+  await admin.getByRole("button", { name: "Unsuspend", exact: true }).first().click();
+  await admin.getByRole("alertdialog").getByRole("button", { name: "Unsuspend", exact: true }).click();
+  for (let i = 0; i < 40 && row?.suspended_at; i++) {
+    await admin.waitForTimeout(250);
+    [row] = await sql`select suspended_at from users where id = ${acct.id}`;
+  }
+  check(row?.suspended_at === null, "unsuspending lifts it");
+  await viewer.goto(`${APP_URL}/p/${post.id}`);
+  await loaded(viewer);
+  check(
+    await viewer.getByText("Posted before the suspension").first().waitFor({ timeout: 10000 }).then(() => true, () => false),
+    "and their post shows again",
+  );
+  await other.close();
+  await adminCtx.close();
+
+  // Then they delete their own account: the password again, and a ticked box.
+  await theirs.addCookies([await sessionCookie(goneEmail)]);
+  await them.goto(`${APP_URL}/account`);
+  await loaded(them);
+  await hydrated(them, "#delete-password");
+  await them.fill("#delete-password", "not-my-password");
+  await them.locator('input[type="checkbox"][name="confirm"]').check();
+  await them.getByRole("button", { name: "Delete my account" }).click();
+  check(
+    await them.getByText("That isn't your password").waitFor({ timeout: 10000 }).then(() => true, () => false),
+    "deleting refuses the wrong password",
+  );
+  const [{ n: still }] = await sql`select count(*)::int as n from users where id = ${acct.id}`;
+  check(still === 1, "and keeps the account");
+  await them.fill("#delete-password", password);
+  const box = them.locator('input[type="checkbox"][name="confirm"]');
+  if (!(await box.isChecked())) await box.check();
+  await them.getByRole("button", { name: "Delete my account" }).click();
+  await them.waitForURL("**/account-deleted", { timeout: 15000 }).catch(() => {});
+  check(them.url().includes("/account-deleted"), "deleting lands on the goodbye page", them.url());
+  const [{ n: users }] = await sql`select count(*)::int as n from users where id = ${acct.id}`;
+  const [{ n: postsLeft }] = await sql`select count(*)::int as n from posts where author_id = ${acct.id}`;
+  check(users === 0 && postsLeft === 0, "the account and its posts are gone", `users=${users} posts=${postsLeft}`);
+  const [logged] = await sql`select actor_email from audit_log where action = 'user.deleted' and entity_id = ${acct.id}`;
+  check(Boolean(logged) && logged.actor_email === null, "the deletion is logged without the email");
+  await them.goto(`${APP_URL}/home`);
+  check(them.url().includes("/login"), "and they're signed out", them.url());
+  await theirs.close();
+}
+
 /* ------------------------------------------------------------- teardown */
 
 // The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
-await sql`delete from users where email in (${testEmail}, ${quietEmail}, ${secondAdmin})`;
+await sql`delete from users where email in (${testEmail}, ${quietEmail}, ${secondAdmin}, ${goneEmail})`;
 await sql`delete from signup_surveys where email in (${testEmail}, ${quietEmail})`;
 await dropTester(sql, TESTER_EMAIL);
 await sql`delete from invitations where email in (${testEmail}, ${quietEmail})`;

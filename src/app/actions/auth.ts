@@ -59,6 +59,10 @@ export async function loginAction(
   if (!(await verifyPassword(password, user.passwordHash))) {
     return { ok: false, error: BAD_CREDENTIALS };
   }
+  // Only said after the right password, so it never tells a stranger anything.
+  if (user.suspendedAt) {
+    return { ok: false, error: "This account is suspended. If you think that's a mistake, reply to any email we've sent you." };
+  }
 
   await db
     .update(users)

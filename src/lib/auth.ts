@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { and, eq, gt, lt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notePresence } from "@/lib/presence";
 import { sessions, users, rateLimits } from "@/db/schema";
@@ -117,7 +117,8 @@ export const getAuth = cache(async (): Promise<AuthContext | null> => {
     .select({ user: users, session: sessions })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
+    // A suspended account reads as signed out, whatever cookie it still holds.
+    .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date()), isNull(users.suspendedAt)))
     .limit(1);
 
   const row = rows[0];

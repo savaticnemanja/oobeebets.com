@@ -131,7 +131,9 @@ function selectPosts(viewerId: string | null) {
       quoteId: posts.quoteId,
     })
     .from(posts)
-    .innerJoin(users, eq(users.id, posts.authorId))
+    // On the join, not a where: every caller adds its own where, and a
+    // suspended author's posts must drop out of all of them.
+    .innerJoin(users, and(eq(users.id, posts.authorId), isNull(users.suspendedAt)))
     .leftJoin(parentPost, eq(parentPost.id, posts.parentId))
     .leftJoin(parentAuthor, eq(parentAuthor.id, parentPost.authorId))
     .$dynamic();
@@ -524,6 +526,8 @@ export interface Profile {
   viewerFollows: boolean;
   /** This profile follows the viewer — the "Follows you" badge. */
   followsViewer: boolean;
+  /** Suspended by an admin: the profile shows that, and nothing it posted. */
+  suspended: boolean;
 }
 
 export async function getProfile(username: string, viewerId: string | null): Promise<Profile | null> {
@@ -536,6 +540,7 @@ export async function getProfile(username: string, viewerId: string | null): Pro
       role: users.role,
       avatarId: users.avatarId,
       createdAt: users.createdAt,
+      suspended: sql<boolean>`${users.suspendedAt} is not null`,
       followers: sql<number>`(select count(*)::int from ${userFollows} where ${userFollows.followeeId} = ${users.id})`,
       following: sql<number>`(select count(*)::int from ${userFollows} where ${userFollows.followerId} = ${users.id})`,
       posts: sql<number>`(select count(*)::int from ${posts} where ${posts.authorId} = ${users.id} and ${posts.parentId} is null)`,
@@ -557,6 +562,7 @@ export async function getProfile(username: string, viewerId: string | null): Pro
     posts: Number(row.posts),
     viewerFollows: Boolean(row.viewerFollows),
     followsViewer: Boolean(row.followsViewer),
+    suspended: Boolean(row.suspended),
   };
 }
 
@@ -614,6 +620,7 @@ export async function listConnections(
     .select(userListColumns(viewerId))
     .from(users)
     .innerJoin(userFollows, joinOn)
+    .where(isNull(users.suspendedAt))
     .orderBy(desc(userFollows.createdAt))
     .limit(500);
   return rows.map(toListItem);

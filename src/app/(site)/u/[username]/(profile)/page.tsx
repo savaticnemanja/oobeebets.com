@@ -68,7 +68,8 @@ export default async function ProfilePage({
   const self = viewerId === profile.id;
   const rel = self ? { muted: false, blocked: false, blockedBy: false } : await relationship(viewerId, profile.id);
   // A block either way and the posts are off: yours to them, theirs to you.
-  const walledOff = rel.blocked || rel.blockedBy;
+  // A suspended account shows nothing it posted, to anyone.
+  const walledOff = rel.blocked || rel.blockedBy || profile.suspended;
   // Stats is yours alone; on anyone else's profile the tab doesn't exist.
   const tab: Tab = self && query.tab === "stats" ? "stats" : "posts";
   const before = query.before && /^[0-9a-f-]{36}$/i.test(query.before) ? query.before : undefined;
@@ -158,7 +159,19 @@ export default async function ProfilePage({
         </p>
       )}
 
-      {walledOff ? (
+      {profile.suspended ? (
+        <div className="px-6 py-14 text-center">
+          <h2 className="text-xl font-semibold tracking-tight">This account is suspended</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-fg-muted">
+            Its posts and parlays aren&apos;t shown while it&apos;s suspended.
+          </p>
+          {auth.isAdmin && (
+            <Link href={`/admin/users/${profile.id}`} className="mt-4 inline-block text-sm text-brand hover:underline">
+              Open it in the admin panel
+            </Link>
+          )}
+        </div>
+      ) : walledOff ? (
         <div className="px-6 py-14 text-center">
           <h2 className="text-xl font-semibold tracking-tight">
             {rel.blocked ? `You blocked @${profile.username}` : `@${profile.username} blocked you`}

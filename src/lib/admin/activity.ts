@@ -239,6 +239,13 @@ async function describe(rows: Row[]): Promise<ActivityItem[]> {
       text = meta.to === "admin" ? `Made ${who} an admin` : `Removed admin access from ${who}`;
       href = row.entityId ? `/admin/users/${row.entityId}` : null;
       tone = "brand";
+    } else if (a === "user.suspended" || a === "user.unsuspended") {
+      const who = target ? `@${target.username}` : (str(meta.email) ?? "an account");
+      text = a === "user.suspended" ? `Suspended ${who}` : `Lifted ${who}'s suspension`;
+      href = row.entityId ? `/admin/users/${row.entityId}` : null;
+      tone = a === "user.suspended" ? "miss" : "brand";
+    } else if (a === "user.deleted") {
+      text = "Deleted their account";
     } else if (a === "user.onboarded") {
       text = "Joined";
       detail = meta.selfServe ? "signed up themselves" : "from an invite";

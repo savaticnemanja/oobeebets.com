@@ -128,10 +128,11 @@ export default function PrivacyPage() {
 
       <DocSection title="Your rights">
         <p>
-          Email us to get a copy of your data or to delete your account. During the beta we do
-          this by hand, within 30 days. Deleting your account removes your profile and
-          everything in it — posts, profile picture, likes, follows, ticks and parlays — and signs you
-          out everywhere. Oobee&apos;s own picks and their results stay on the record; they never
+          Delete your account yourself at any time, from the bottom of your account page. It
+          removes your profile and everything in it — posts, profile picture, likes, follows, ticks,
+          parlays and your sign-up answers — and signs you out everywhere; feedback and reports you
+          sent stay, without your name on them. Email us for a copy of your data; during the beta we
+          do that by hand, within 30 days. Oobee&apos;s own picks and their results stay on the record; they never
           contained anything about you.
         </p>
       </DocSection>
