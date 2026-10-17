@@ -59,6 +59,18 @@ export const SPEND_BAND_LABELS: Record<(typeof spendBandValues)[number], string>
 };
 
 /**
+ * A stake in units: 0.1 up to `max`, to the cent — 1.01 is fine, 1.015 is
+ * refused rather than quietly rounded by the numeric(5,2) column.
+ */
+export function unitsSchema(max: number) {
+  return z.coerce
+    .number()
+    .min(0.1, "At least 0.1 units")
+    .max(max, `At most ${max} units`)
+    .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, "Two decimal places at most");
+}
+
+/**
  * Posted once, at the end of the invite-accept wizard. `token` and `email`
  * come back as hidden fields mirroring what the server already resolved from
  * the invite link — the action re-derives the real values from the token

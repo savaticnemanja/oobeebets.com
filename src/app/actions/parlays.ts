@@ -27,7 +27,7 @@ import {
 } from "@/lib/parlays";
 import { PARLAYS_PER_SLATE } from "@/lib/board";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
-import { fieldErrorsFrom, optionalNumber, type ActionState } from "@/lib/validation";
+import { fieldErrorsFrom, optionalNumber, unitsSchema, type ActionState } from "@/lib/validation";
 import { violates } from "@/lib/db-errors";
 
 /**
@@ -247,7 +247,7 @@ const oobeeParlaySchema = z.object({
       (n) => n === "" || n === undefined || n >= 100 || n <= -100,
       "American odds: >= +100 or <= -100",
     ),
-  units: z.coerce.number().min(0.1).max(10).default(1),
+  units: unitsSchema(10).default(1),
   confidence: optionalNumber(z.coerce.number().int().min(0).max(100)),
   evPct: optionalNumber(z.coerce.number().min(-100).max(100)),
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),

@@ -43,6 +43,7 @@ import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/safe-next.ts";
 import { signupSurveySchema } from "../src/lib/signup-survey.ts";
+import { unitsSchema } from "../src/lib/validation.ts";
 import { NFL_TEAM_ABBR, gradeProp, playerKey } from "../src/lib/odds/props.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
@@ -516,6 +517,13 @@ console.log("\nBeta application rules (lib/signup-survey.ts)");
   check(failsOn({ ...base, sportsbooks: ["Don't use one", "FanDuel"] }).includes("sportsbooks"), '"Don\'t use one" can\'t go with a sportsbook');
   check(failsOn({ ...base, sports: ["Other"] }).includes("sportsOther"), "Other needs its text");
   check(failsOn({ ...base, willDoSurvey: "" }).includes("willDoSurvey"), "the end-of-beta survey is agreed to");
+}
+
+console.log("\nStake in units (unitsSchema)");
+{
+  const units = unitsSchema(100);
+  for (const v of ["1.01", "0.1", "1.25", "100", "37.33"]) check(units.safeParse(v).success, `takes ${v}`);
+  for (const v of ["1.015", "0.05", "100.01", ""]) check(!units.safeParse(v).success, `refuses ${JSON.stringify(v)}`);
 }
 
 console.log("\nPlayer props graded from box scores");

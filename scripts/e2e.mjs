@@ -397,6 +397,24 @@ console.log("\nSettling a pick");
       `settled pick appears on the ${target.category} board`,
     );
 
+    // Reopening asks first, then really puts it back to pending (it used to
+    // close the dialog before its form posted, and nothing happened).
+    await page.goto(`${APP_URL}/admin/settle?tab=settled`);
+    await loaded(page);
+    await hydrated(page, `[data-pick-id="${target.id}"] button`);
+    await page.locator(`[data-pick-id="${target.id}"]`).getByRole("button", { name: "Reopen" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Reopen" }).click();
+    let reopened;
+    for (let i = 0; i < 20 && reopened?.status !== "pending"; i++) {
+      await page.waitForTimeout(250);
+      [reopened] = await sql`select status, final_score from picks where id = ${target.id}`;
+    }
+    check(reopened?.status === "pending" && reopened.final_score === null, "Reopen puts a settled pick back to pending", `status=${reopened?.status}`);
+    const [reopenAudit] = await sql`
+      select action from audit_log where entity_id = ${target.id} order by created_at desc limit 1
+    `;
+    check(reopenAudit?.action === "pick.unsettled", "and the reopen is logged", `action=${reopenAudit?.action}`);
+
     // Restore.
     await sql`update picks set status='pending', final_score=null, settled_at=null,
               settled_by=null where id = ${target.id}`;

@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { auditLog, games, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { canManageRole, requireAdmin, revokeAllSessions } from "@/lib/auth";
-import { fieldErrorsFrom, optionalNumber, settleSchema, type ActionState } from "@/lib/validation";
+import { fieldErrorsFrom, optionalNumber, settleSchema, unitsSchema, type ActionState } from "@/lib/validation";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { freezeLine } from "@/lib/odds/board";
 import { settleSelection, unsettleSelection } from "@/lib/odds/settle";
@@ -69,7 +69,7 @@ const createPickSchema = z.object({
   lineId: z.string().uuid("Choose a line from the feed"),
   /** The price the admin was looking at; a moved price is refused, not taken. */
   expectedPrice: z.coerce.number().int(),
-  units: z.coerce.number().min(0.1).max(MAX_UNITS.game).default(1),
+  units: unitsSchema(MAX_UNITS.game).default(1),
   confidence: optionalNumber(z.coerce.number().int().min(0).max(100)),
   evPct: optionalNumber(z.coerce.number().min(-100).max(100)),
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),

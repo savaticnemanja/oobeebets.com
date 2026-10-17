@@ -161,12 +161,24 @@ export function SettleList({
             <AlertDialogCancel asChild>
               <Button type="button" variant="outline">Keep it settled</Button>
             </AlertDialogCancel>
-            <form action={unsetAction} onSubmit={() => setReopen(null)}>
-              <input type="hidden" name="pickId" value={reopen?.id ?? ""} />
-              <AlertDialogAction asChild>
-                <Button type="submit" variant="danger">Reopen</Button>
-              </AlertDialogAction>
-            </form>
+            {/* Not a form submit: AlertDialogAction closes the dialog on
+                click, which cleared `reopen` (and with it the hidden pick id)
+                before the form posted — so Reopen did nothing. The id is taken
+                from this render instead. */}
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  if (!reopen) return;
+                  const data = new FormData();
+                  data.set("pickId", reopen.id);
+                  React.startTransition(() => unsetAction(data));
+                }}
+              >
+                Reopen
+              </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

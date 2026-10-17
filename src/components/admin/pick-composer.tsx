@@ -166,7 +166,7 @@ export function PickComposer({
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label htmlFor="units">Units</Label>
-                <Input id="units" name="units" type="number" step="0.25" min="0.25" max={MAX_UNITS[category]} defaultValue="1" className="mt-1.5 num" />
+                <Input id="units" name="units" type="number" step="0.01" min="0.1" max={MAX_UNITS[category]} defaultValue="1" className="mt-1.5 num" />
               </div>
               <div>
                 <Label htmlFor="confidence">Conf %</Label>
