@@ -16,9 +16,12 @@ export const metadata: Metadata = {
 /** SIGNUP_ENABLED is read at run time. */
 export const dynamic = "force-dynamic";
 
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ email?: string }> }) {
   if (await getAuth()) redirect("/home");
   const open = signupEnabled();
+  // Prefilled from the waitlist confirm page; only ever a starting value.
+  const raw = (await searchParams).email ?? "";
+  const initialEmail = raw.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(raw) ? raw : "";
 
   return (
     <div data-wide>
@@ -41,7 +44,7 @@ export default async function SignupPage() {
       </p>
 
       <div className="mt-8">
-        <GetStartedForm open={open} source="signup" formToken={issueFormToken()} />
+        <GetStartedForm open={open} source="signup" formToken={issueFormToken()} initialEmail={initialEmail} />
       </div>
 
     </div>

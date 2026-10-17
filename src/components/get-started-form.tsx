@@ -32,14 +32,17 @@ export function GetStartedForm({
   open,
   source,
   formToken,
+  initialEmail = "",
 }: {
   open: boolean;
   source: "landing" | "signup";
   /** From the page (issueFormToken) — see lib/spam-guard.ts. */
   formToken: string;
+  /** /signup?email=… — the confirm page's "answer the questions" link. */
+  initialEmail?: string;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(getStartedAction, null);
-  const survey = useSurvey();
+  const survey = useSurvey({ email: initialEmail });
   const { values, setErrors } = survey;
 
   // The server runs the same rules; anything it still refuses lands on the
@@ -53,7 +56,7 @@ export function GetStartedForm({
     if (state && !state.ok && state.fieldErrors) focusFirstError(surveyErrorsFrom(state.fieldErrors));
   }, [state]);
 
-  if (state?.ok) return <Done email={values.email} open={open} message={state.message} />;
+  if (state?.ok) return <Done email={values.email} message={state.message} />;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -119,7 +122,7 @@ export function GetStartedForm({
             <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
               {open
                 ? "We'll email you a link to finish creating your account."
-                : "One email the day sign-ups open, and nothing before it. No picks, no spam, leave any time."}
+                : "We'll ask you to confirm by email, then write once — the day sign-ups open. No picks, no spam, leave any time."}
             </p>
           </div>
         </>
@@ -133,7 +136,7 @@ export function GetStartedForm({
  * below "done" invites a second submission. Focus moves here so a screen
  * reader isn't left on a button that no longer exists.
  */
-function Done({ email, open, message }: { email: string; open: boolean; message?: string }) {
+function Done({ email, message }: { email: string; message?: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     ref.current?.focus();
@@ -152,7 +155,7 @@ function Done({ email, open, message }: { email: string; open: boolean; message?
       </span>
       <div className="min-w-0">
         <h2 className="text-base font-semibold tracking-tight text-fg">
-          {open ? "Check your inbox" : "You're on the list"}
+          Check your inbox
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
           {email && (

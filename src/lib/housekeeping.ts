@@ -3,6 +3,7 @@ import { lt } from "drizzle-orm";
 import { db } from "@/db";
 import { passwordResets, sessions } from "@/db/schema";
 import { claim } from "@/lib/sync-claim";
+import { purgeUnconfirmed } from "@/lib/waitlist";
 
 /**
  * Deletes sign-ins and reset links that have expired. Nothing reads them —
@@ -16,4 +17,7 @@ export async function sweepExpired(): Promise<void> {
   const gone = await db.delete(sessions).where(lt(sessions.expiresAt, now)).returning({ id: sessions.id });
   await db.delete(passwordResets).where(lt(passwordResets.expiresAt, now));
   if (gone.length > 0) console.log(`[sweep] removed ${gone.length} expired session${gone.length === 1 ? "" : "s"}`);
+  // Waitlist addresses nobody confirmed within the week, with their answers.
+  const unconfirmed = await purgeUnconfirmed();
+  if (unconfirmed > 0) console.log(`[sweep] forgot ${unconfirmed} unconfirmed waitlist address${unconfirmed === 1 ? "" : "es"}`);
 }

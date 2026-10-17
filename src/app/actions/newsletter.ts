@@ -1,13 +1,10 @@
 "use server";
 
+import { after } from "next/server";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "@/lib/auth";
-import {
-  InvalidUnsubscribeLink,
-  subscribe,
-  unsubscribeByEmail,
-  unsubscribeById,
-} from "@/lib/newsletter";
+import { InvalidUnsubscribeLink, unsubscribeByEmail, unsubscribeById } from "@/lib/newsletter";
+import { joinWaitlist } from "@/lib/waitlist";
 import { z } from "zod";
 import { emailSchema, type ActionState } from "@/lib/validation";
 import { BAD_DOMAIN, GUARD_MESSAGES, emailDomainAccepts, guardForm, takeSignupMailBudget } from "@/lib/spam-guard";
@@ -56,13 +53,22 @@ export async function subscribeAction(
       return { ok: false, error: BAD_DOMAIN };
     }
 
-    // The outcome is intentionally discarded. "Already subscribed" and "just
-    // subscribed" have to be indistinguishable from the outside, or the form
-    // becomes an oracle for whether a given address is on the list.
-    // Over the site-wide hour's budget, they still join — just without the welcome.
-    await subscribe(parsed.data.email, { welcome: await takeSignupMailBudget() });
+    // Since 18 Oct 2026 the homepage box joins the waitlist (the launch list
+    // was merged into it): unconfirmed, with a confirmation email. After the
+    // response, like /signup, so the reply takes the same time whatever the
+    // address — "already on it" and "just joined" can't be told apart. Over
+    // the site-wide hour's budget the row is kept and no email goes.
+    const email = parsed.data.email;
+    const mail = await takeSignupMailBudget();
+    after(async () => {
+      try {
+        await joinWaitlist(email, "landing", { mail });
+      } catch (err) {
+        console.error("[launch list] waitlist join failed:", err);
+      }
+    });
   } catch (err) {
-    console.error("[newsletter] subscribe failed:", err);
+    console.error("[launch list] sign-up failed:", err);
     return { ok: false, error: "Something went wrong. Try again in a moment." };
   }
 

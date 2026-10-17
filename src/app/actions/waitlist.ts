@@ -6,7 +6,7 @@ import { clientIp, rateLimit } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 import { signupSurveySchema, surveyFromForm } from "@/lib/signup-survey";
-import { joinWaitlist, leaveWaitlist, saveSignupSurvey, startSignup } from "@/lib/waitlist";
+import { confirmWaitlist, joinWaitlist, leaveWaitlist, saveSignupSurvey, startSignup } from "@/lib/waitlist";
 import { BAD_DOMAIN, GUARD_MESSAGES, emailDomainAccepts, guardForm, takeSignupMailBudget } from "@/lib/spam-guard";
 
 /**
@@ -29,7 +29,7 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
     ok: true,
     message: open
       ? "We've sent a link to finish creating your account. It works for 48 hours."
-      : "We've sent a confirmation, and we'll email you the day sign-ups open.",
+      : "Check your inbox and press the button in our email to confirm your place — until you do, you're not on the list. Already confirmed? Then there's nothing more to do.",
   };
 
   // Bots (lib/spam-guard.ts): nobody fills the application in three seconds.
@@ -71,6 +71,37 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
   });
 
   return done;
+}
+
+export type ConfirmState =
+  | { ok: true; email: string; answered: boolean }
+  | { ok: false; error: string }
+  | null;
+
+/**
+ * The button on /waitlist/confirm. A POST, like leaving: opening the link
+ * alone does nothing, so a mail scanner that follows every link can't put a
+ * stranger on the list.
+ */
+export async function confirmWaitlistAction(_prev: ConfirmState, formData: FormData): Promise<ConfirmState> {
+  const token = formData.get("token");
+  if (typeof token !== "string" || token.length < 10 || token.length > 100) {
+    return { ok: false, error: "That link is incomplete — open it from the email again." };
+  }
+  try {
+    const ip = clientIp(await headers());
+    if (!(await rateLimit("waitlist:confirm", ip, 20, 15 * 60 * 1000))) {
+      return { ok: false, error: "Too many tries. Give it a few minutes." };
+    }
+    const done = await confirmWaitlist(token);
+    if (!done) {
+      return { ok: false, error: "That link has been used or has expired. Join again from the home page to get a new one." };
+    }
+    return { ok: true, email: done.email, answered: done.answered };
+  } catch (err) {
+    console.error("[waitlist] confirm failed:", err);
+    return { ok: false, error: "Something went wrong. Try again in a moment." };
+  }
 }
 
 /** The confirm button on /waitlist/leave — a POST, so a link prefetcher can't take anyone off. */

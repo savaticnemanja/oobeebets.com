@@ -62,8 +62,8 @@ export function SubscribeForm({ formToken }: { formToken: string }) {
       )}
 
       <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-        One email when we launch, and the occasional note before then. No picks, no
-        spam, unsubscribe in one click.
+        We&rsquo;ll ask you to confirm, then email you once &mdash; the day there&rsquo;s a place
+        for you. No picks, no spam, leave any time.
       </p>
     </form>
   );
@@ -89,8 +89,8 @@ function Subscribed({ email }: { email: string }) {
 
   React.useEffect(() => {
     ref.current?.focus();
-    toast.success("You're on the list", {
-      description: "Check your inbox for the welcome note.",
+    toast.success("Check your inbox", {
+      description: "Press the button in our email to confirm your place.",
     });
   }, []);
 
@@ -110,23 +110,23 @@ function Subscribed({ email }: { email: string }) {
           id="newsletter-subscribed"
           className="text-base font-semibold tracking-tight text-fg"
         >
-          You&rsquo;re on the list
+          Check your inbox
         </h2>
 
         <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
           {email ? (
             <>
-              A welcome note is on its way to{" "}
+              We&rsquo;ve sent a link to{" "}
               {/* Breaks only when an address genuinely will not fit, rather
                   than mid-word on every wrap. */}
-              <span className="break-words font-medium text-fg">{email}</span>.
-              We&rsquo;ll
-              email you the day the board opens.
+              <span className="break-words font-medium text-fg">{email}</span>. Press the
+              button in it to confirm your place &mdash; until you do, you&rsquo;re not on the
+              list.
             </>
           ) : (
             <>
-              A welcome note is on its way. We&rsquo;ll email you the day the board
-              opens.
+              We&rsquo;ve sent you a link. Press the button in it to confirm your place
+              &mdash; until you do, you&rsquo;re not on the list.
             </>
           )}
         </p>

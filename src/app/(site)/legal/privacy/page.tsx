@@ -47,19 +47,16 @@ export default function PrivacyPage() {
           to them.
         </p>
         <p>
-          <strong className="text-fg">The launch list.</strong> If you leave your email on the
-          homepage, the address and when you joined, kept by our email provider (Resend). We use it
-          only to tell you about the launch. Every email has an unsubscribe link, and the
-          Unsubscribe page in the footer works without one.
-        </p>
-        <p>
-          <strong className="text-fg">The waitlist.</strong> If you join it, your email address,
-          which form you used and when, plus your answers to the sign-up questions (your name,
-          whether you&apos;re 21+, how and where you bet, and what you&apos;d want from us). We use the
-          address only to tell you when sign-ups open, and the answers to understand who&apos;s
-          testing. Every waitlist email has a link to leave, and leaving deletes the address and
-          the answers. Making an account takes you off the waitlist; the answers stay with your
-          account.
+          <strong className="text-fg">The waitlist.</strong> If you join it — from the homepage or
+          the sign-up page — your email address, which form you used and when, plus your answers to the
+          sign-up questions if you gave them (your name, whether you&apos;re 21+, how and where you bet,
+          and what you&apos;d want from us). We email you once to confirm the address is yours; if you
+          don&apos;t, the address and any answers are deleted after 7 days. Once confirmed, we use the
+          address only to tell you when there&apos;s a place for you, and the answers to understand
+          who&apos;s testing. Every waitlist email has a link to leave, and leaving deletes the address
+          and the answers. Making an account takes you off the waitlist; the answers stay with your
+          account. If you joined our earlier launch list, your address was moved here, and our email
+          provider (Resend) also kept a copy from then.
         </p>
         <p>
           <strong className="text-fg">Signing in and security.</strong> For each device you sign

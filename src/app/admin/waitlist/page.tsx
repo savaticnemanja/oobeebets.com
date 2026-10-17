@@ -28,7 +28,7 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
   const q = (params.q ?? "").slice(0, 100).trim();
   const page = pageParam(params.page);
   const open = signupEnabled();
-  const { rows, total, waiting, untold } = await getWaitlistPage({ q, page, size: PAGE });
+  const { rows, total, waiting, untold, unconfirmed } = await getWaitlistPage({ q, page, size: PAGE });
   const href = (n: number) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
@@ -43,7 +43,8 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
         title="Waitlist"
         description={
           <>
-            {waiting} {waiting === 1 ? "person" : "people"} waiting, oldest first. Sign-ups are{" "}
+            {waiting} confirmed and waiting
+            {unconfirmed > 0 ? `, ${unconfirmed} yet to confirm` : ""}, oldest first. Sign-ups are{" "}
             {open ? (
               <span className="text-hit">open</span>
             ) : (
@@ -57,7 +58,7 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
         info={
           open
             ? "Anyone can sign up from /signup right now. Tell the people waiting with the button — each gets one email, once."
-            : "While sign-ups are closed, let people in one at a time with Invite. Set SIGNUP_ENABLED=1 in the server's .env to open them. A row disappears when its address makes an account."
+            : "While sign-ups are closed, let people in one at a time with Invite. Set SIGNUP_ENABLED=1 in the server's .env to open them. Only confirmed addresses can be invited or told; unconfirmed ones are forgotten after 7 days. A row disappears when its address makes an account."
         }
       />
 
@@ -89,8 +90,10 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
                 </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
                   <span>
-                    Joined <LocalTime at={r.createdAt} format="datetime" /> from {r.source === "signup" ? "/signup" : "the landing page"}
+                    Joined <LocalTime at={r.createdAt} format="datetime" /> from{" "}
+                    {r.source === "signup" ? "/signup" : r.source === "launch-list" ? "the old launch list" : "the homepage"}
                   </span>
+                  {!r.confirmedAt && <Badge variant="pending">Not confirmed</Badge>}
                   {r.invitedAt && <Badge variant="brand">Invited</Badge>}
                   {r.notifiedAt && <Badge>Told sign-ups are open</Badge>}
                 </p>
@@ -103,7 +106,7 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
                   </details>
                 )}
               </div>
-              <WaitlistInvite id={r.id} invited={r.invitedAt !== null} />
+              <WaitlistInvite id={r.id} invited={r.invitedAt !== null} confirmed={r.confirmedAt !== null} />
             </li>
           ))}
         </ul>

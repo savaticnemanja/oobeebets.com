@@ -18,14 +18,16 @@ import {
 import { tryAction } from "@/lib/try-action";
 
 /** Sends one waiting person a normal invite. "Invite again" mints a fresh link. */
-export function WaitlistInvite({ id, invited }: { id: string; invited: boolean }) {
+/** Confirmed rows only: an unconfirmed address may be one a bot typed in. */
+export function WaitlistInvite({ id, invited, confirmed }: { id: string; invited: boolean; confirmed: boolean }) {
   const [pending, start] = useTransition();
   return (
     <Button
       type="button"
       size="sm"
       variant="outline"
-      disabled={pending}
+      disabled={pending || !confirmed}
+      title={confirmed ? undefined : "They haven't confirmed their address yet"}
       onClick={() =>
         start(async () => {
           const result = await tryAction(() => inviteFromWaitlistAction(id));

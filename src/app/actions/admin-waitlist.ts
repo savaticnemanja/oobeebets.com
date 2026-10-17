@@ -21,7 +21,7 @@ export async function inviteFromWaitlistAction(id: string): Promise<ActionState>
     console.error("[waitlist] invite failed:", err);
     return { ok: false, error: "The invite couldn't be sent — try again." };
   }
-  if (!email) return { ok: false, error: "They've left the waitlist." };
+  if (!email) return { ok: false, error: "They've left the waitlist, or haven't confirmed their address yet." };
 
   await db.insert(auditLog).values({
     actorId: actor.user.id,

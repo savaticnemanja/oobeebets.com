@@ -1221,7 +1221,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.locator('input[name="q-sportsOther"]').fill("Darts");
   await answerBeta(page);
   await submitApplication(page);
-  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
   let row;
   for (let i = 0; i < 40 && !row; i++) {
     [row] = await sql`select leave_token, source from waitlist where email = ${waitEmail}`;
@@ -1252,10 +1252,52 @@ console.log("\nWaitlist, change password and profile pictures");
   await answerBetting(page);
   await answerBeta(page);
   await submitApplication(page);
-  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   const [{ n: accountRows }] = await sql`select count(*)::int as n from waitlist where email = ${testEmail}`;
   check(accountRows === 0, "an existing account isn't put on it, and the reply doesn't say so");
+
+  // The homepage box joins the waitlist too — unconfirmed — and only the
+  // confirm page's button (not the link alone) puts the address on the list.
+  {
+    const homeEmail = `e2e-home-${Date.now()}@example.com`;
+    await page.goto(`${APP_URL}/`);
+    await hydrated(page, 'form input[type="email"]');
+    await page.fill('form input[type="email"]', homeEmail);
+    await page.waitForTimeout(1700);
+    await page.getByRole("button", { name: /Notify me/ }).click();
+    await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
+    let joined;
+    for (let i = 0; i < 40 && !joined; i++) {
+      [joined] = await sql`select source, confirmed_at from waitlist where email = ${homeEmail}`;
+      if (!joined) await page.waitForTimeout(250);
+    }
+    check(joined?.source === "landing" && joined.confirmed_at === null, "the homepage box joins the waitlist, unconfirmed", JSON.stringify(joined));
+    // The real token only travels in the email; plant a known one.
+    const confirmToken = randomBytes(24).toString("base64url");
+    await sql`update waitlist set confirm_token_hash = ${createHash("sha256").update(confirmToken).digest("hex")}, confirm_sent_at = now()
+              where email = ${homeEmail}`;
+    await page.goto(`${APP_URL}/waitlist/confirm?token=${confirmToken}`);
+    await hydrated(page, "form button");
+    const [{ confirmed_at: afterOpen }] = await sql`select confirmed_at from waitlist where email = ${homeEmail}`;
+    check(afterOpen === null, "opening the confirm link alone confirms nothing");
+    await page.getByRole("button", { name: "Confirm my place" }).click();
+    await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+    const [{ confirmed_at: afterClick }] = await sql`select confirmed_at from waitlist where email = ${homeEmail}`;
+    check(afterClick !== null, "the button confirms it");
+    await page.getByRole("link", { name: "Answer the questions" }).click();
+    await page.waitForURL("**/signup**", { timeout: 10000 });
+    await hydrated(page, 'input[name="q-email"]');
+    check((await page.inputValue('input[name="q-email"]')) === homeEmail, "and the application opens with their address filled in");
+    await page.goto(`${APP_URL}/waitlist/confirm?token=${confirmToken}`);
+    await hydrated(page, "form button");
+    await page.getByRole("button", { name: "Confirm my place" }).click();
+    check(
+      await page.getByText("That link has been used").waitFor({ timeout: 10000 }).then(() => true, () => false),
+      "a confirm link works once",
+    );
+    await sql`delete from waitlist where email = ${homeEmail}`;
+  }
 
   // Bots: the decoy field, filled, gets the ordinary reply and nothing else —
   // on the homepage box (whose real path needs Resend, so a success here can
@@ -1267,7 +1309,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.waitForTimeout(1700);
   await page.getByRole("button", { name: /Notify me/ }).click();
   check(
-    await page.getByText(/You.re on the list/).first().waitFor({ timeout: 10000 }).then(() => true, () => false),
+    await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 }).then(() => true, () => false),
     "a bot filling the homepage decoy is told it worked",
   );
   const botEmail = `e2e-bot-${Date.now()}@example.com`;
@@ -1280,7 +1322,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await answerBeta(page);
   await page.locator('input[name="website"]').evaluate((el) => (el.value = "http://spam.example"));
   await submitApplication(page);
-  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
   const [{ n: botRows }] = await sql`
     select (select count(*) from waitlist where email = ${botEmail}) + (select count(*) from signup_surveys where email = ${botEmail}) as n`;
   check(Number(botRows) === 0, "and a bot filling the application's decoy is stored nowhere", `rows=${botRows}`);
@@ -1295,6 +1337,13 @@ console.log("\nWaitlist, change password and profile pictures");
   await admin.goto(`${APP_URL}/admin/waitlist`);
   await loaded(admin);
   check((await admin.locator("li[data-waitlist-id]", { hasText: waitEmail }).count()) === 1, "the admin waitlist lists them");
+  {
+    const entry = admin.locator("li[data-waitlist-id]", { hasText: waitEmail });
+    check(
+      (await entry.getByText("Not confirmed").count()) === 1 && (await entry.getByRole("button", { name: /Invite/ }).isDisabled()),
+      "until they confirm, they're marked so and can't be invited",
+    );
+  }
   await admin.goto(`${APP_URL}/admin/waitlist?q=${encodeURIComponent(waitEmail)}`);
   await loaded(admin);
   check(

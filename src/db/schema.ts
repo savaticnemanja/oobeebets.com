@@ -298,11 +298,23 @@ export const waitlist = pgTable(
     invitedAt: timestamp("invited_at", { withTimezone: true }),
     /** When they were told sign-ups are open. */
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    /**
+     * Double opt-in: a row counts only once its address clicked through the
+     * confirmation email. Until then nobody invites or mails it, and the
+     * daily sweep deletes it (with any answers) after 7 days — a stranger
+     * whose address a bot typed gets one email and is never on the list.
+     */
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    /** sha256 of the confirmation link's token; cleared once used. */
+    confirmTokenHash: text("confirm_token_hash"),
+    /** The last confirmation email — at most one a day per address. */
+    confirmSentAt: timestamp("confirm_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("waitlist_email_unique").on(t.email),
     uniqueIndex("waitlist_leave_token_unique").on(t.leaveToken),
+    uniqueIndex("waitlist_confirm_token_unique").on(t.confirmTokenHash),
   ],
 );
 

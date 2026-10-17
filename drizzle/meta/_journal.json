@@ -232,6 +232,13 @@
       "when": 1792270060227,
       "tag": "0032_user_suspension",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792276684083,
+      "tag": "0033_waitlist_double_opt_in",
+      "breakpoints": true
     }
   ]
 }

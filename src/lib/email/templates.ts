@@ -370,18 +370,35 @@ function actionEmail({
 }
 
 /** "You're on the list" — the one mail a waitlist sign-up gets until we open. */
-export function waitlistJoinedEmail({ leaveUrl }: { leaveUrl: string }): Email {
+/**
+ * The one email a new waitlist address gets: confirm, or hear nothing more.
+ * Sent for both the homepage box and the /signup application; `answered` says
+ * which, so the homepage's quick sign-ups are pointed at the application.
+ */
+export function waitlistConfirmEmail({
+  confirmUrl,
+  leaveUrl,
+  answered,
+}: {
+  confirmUrl: string;
+  leaveUrl: string;
+  answered: boolean;
+}): Email {
   return actionEmail({
-    subject: "You're on the oobee bets waitlist",
-    preheader: "We'll email you once, the day sign-ups open. Nothing before that.",
+    subject: "Confirm your place on the oobee bets waitlist",
+    preheader: "One click and you're on the list. Nothing happens until you do.",
     kicker: "Waitlist",
-    heading: "You're on the list",
+    heading: "Confirm your place",
     paragraphs: [
-      "Thanks for signing up. We're letting people in a few at a time while the board is in beta, and we'll email you the day there's a place for you.",
-      "That's the only mail you'll get from this list — no picks, no promotions. Every pick we publish is graded against the real final score and stays on the record, wins and losses alike, so you'll be able to check our results before you decide anything.",
+      "Someone — hopefully you — asked to join the oobee bets waitlist with this address. Press the button below to confirm, and we'll email you once, the day there's a place for you.",
+      answered
+        ? "We have your answers to the sign-up questions, so there's nothing else to do."
+        : "Once you've confirmed, you can answer a few quick questions about how you bet — testers who do are let in first.",
       { text: "Changed your mind?", link: { label: "Leave the waitlist", url: leaveUrl } },
     ],
-    footerNote: `You're getting this because this address was entered on ${SITE.name}. If that wasn't you, ignore it — or use the link above and we'll forget it.`,
+    cta: { label: "Confirm my place", url: confirmUrl },
+    linkNote: "This link works for 7 days.",
+    footerNote: `If you didn't ask for this, ignore it — you won't hear from ${SITE.name} again, and the address is deleted in 7 days.`,
   });
 }
 
