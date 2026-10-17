@@ -170,11 +170,16 @@ function GameCard({
       aria-label={`${game.awayTeam} at ${game.homeTeam}`}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-fg-subtle">
-        <span className="flex items-center gap-1.5 font-medium text-fg-muted">
+        <span className="flex min-w-0 items-center gap-1.5 font-medium text-fg-muted">
           <span aria-hidden="true">{SPORT_EMOJI[LEAGUE_CONFIG[game.league as FeedLeague]?.sport ?? "football"]}</span>
           {game.league}
+          {/* The teams, beside the league: with game lines hidden (props only)
+              nothing else on the card says which game it is. */}
+          <span className="truncate font-normal text-fg-subtle">
+            · {game.awayTeam} vs {game.homeTeam}
+          </span>
         </span>
-        <LocalTime at={game.commenceTime} format="kickoff" className="num" />
+        <LocalTime at={game.commenceTime} format="kickoff" className="num shrink-0" />
       </div>
 
       {show.lines && (

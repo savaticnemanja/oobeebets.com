@@ -520,8 +520,9 @@ export async function selectableLegs(slateDate: string) {
     .innerJoin(slates, eq(slates.date, picks.slateDate))
     .where(
       and(
+        // The draft's picks: Oobee's parlays are built before the slate goes
+        // out and are published with it (the composer locks once it has).
         eq(picks.slateDate, slateDate),
-        sql`${slates.publishedAt} is not null`,
         eq(picks.status, "pending"),
         sql`${picks.startsAt} > now()`,
       ),

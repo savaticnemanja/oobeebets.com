@@ -78,8 +78,10 @@ async function validateLegs(
   if (rows.length !== ids.length) {
     return { ok: false, error: "One of those picks no longer exists." };
   }
-  if (rows.some((r) => !r.publishedAt)) {
-    return { ok: false, error: "A parlay can only use picks that are live on the board." };
+  // Built on the draft and published with it, so legs come off an
+  // unpublished slate; the action itself refuses once the slate is out.
+  if (rows.some((r) => r.status !== "pending")) {
+    return { ok: false, error: "A parlay can only use picks that are still pending." };
   }
 
   // One slate per parlay. The row carries a single slate_date, and a ticket
@@ -366,6 +368,14 @@ export async function createOobeeParlayAction(
   if (!checked.ok) return { ok: false, error: checked.error };
   if (checked.legs.slateDate !== d.slateDate) {
     return { ok: false, error: "Those legs are not on that day's board." };
+  }
+  const [slate] = await db
+    .select({ publishedAt: slates.publishedAt })
+    .from(slates)
+    .where(eq(slates.date, d.slateDate))
+    .limit(1);
+  if (slate?.publishedAt) {
+    return { ok: false, error: "That slate is published — unpublish it to add a parlay." };
   }
 
   let rank = 0;
