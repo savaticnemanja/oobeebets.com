@@ -1,7 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { cache } from "react";
-import { and, desc, asc, eq, gte, inArray, isNull, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
+import { and, desc, asc, eq, gt, gte, inArray, isNull, isNotNull, lt, lte, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { postLikes, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
@@ -72,10 +72,10 @@ export interface QuotedPost {
 const parentPost = alias(posts, "parent_post");
 const parentAuthor = alias(users, "parent_author");
 
-const LIKE_COUNT = sql<number>`(select count(*)::int from ${postLikes} where ${postLikes.postId} = ${posts.id})`;
-const REPLY_COUNT = sql<number>`(select count(*)::int from "posts" as "r" where "r"."parent_id" = ${posts.id})`;
-
-const REPOST_COUNT = sql<number>`(select count(*)::int from ${postReposts} where ${postReposts.postId} = ${posts.id})`;
+// Kept on the post by triggers (migration 0027) rather than counted per row.
+const LIKE_COUNT = posts.likeCount;
+const REPLY_COUNT = posts.replyCount;
+const REPOST_COUNT = posts.repostCount;
 const VIEW_COUNT = sql<number>`(select count(*)::int from ${postViews} where ${postViews.postId} = ${posts.id})`;
 
 function likedBy(viewerId: string | null): SQL<boolean> {
@@ -220,15 +220,75 @@ export async function getForYouFeed(
   pageIndex = 0,
   asOf: Date = new Date(),
 ): Promise<FeedPage & { nextPage: number | null }> {
-  // Shared parlays take turns with these instead of competing on the score —
-  // see getRecentParlayPosts and lib/home-feed.ts.
-  const rows = await selectPosts(viewerId)
-    .where(and(inWindow(asOf, 30), isNull(posts.parlayId), visibleTo(viewerId, posts.authorId)))
-    .orderBy(desc(hotScore(asOf)), desc(posts.createdAt), desc(posts.id))
-    .limit(FEED_PAGE_SIZE + 1)
-    .offset(pageIndex * FEED_PAGE_SIZE);
+  // Ranked as of the minute, so every viewer in that minute shares one
+  // ranking; posts since that minute (a handful) are scored live and slotted
+  // in, so a post shows up the moment it's made, as it always did.
+  const at = new Date(Math.floor(asOf.getTime() / 60_000) * 60_000);
+  const [pool, fresh] = await Promise.all([
+    forYouRanking(at),
+    db
+      .select({ id: posts.id, score: hotScore(at), created: posts.createdAt })
+      .from(posts)
+      .where(and(gt(posts.createdAt, at), lte(posts.createdAt, asOf), isNull(posts.parlayId))),
+  ]);
+  const ranked = [...pool, ...fresh.map((r) => ({ id: r.id, score: Number(r.score), created: r.created.getTime() }))]
+    .sort((a, b) => b.score - a.score || b.created - a.created || (a.id < b.id ? 1 : -1))
+    .map((r) => r.id);
+  const start = pageIndex * FEED_PAGE_SIZE;
+
+  // The shared ranking, minus whoever this viewer can't see.
+  const seen = await db
+    .select({ id: posts.id })
+    .from(posts)
+    .where(and(inArray(posts.id, ranked), visibleTo(viewerId, posts.authorId)));
+  const visible = new Set(seen.map((r) => r.id));
+  const ordered = ranked.filter((id) => visible.has(id));
+  const ids = ordered.slice(start, start + FEED_PAGE_SIZE + 1);
+
+  // Scrolled past the shared pool (only a full pool can run out early): rank live.
+  if (pool.length === FOR_YOU_POOL && ids.length <= FEED_PAGE_SIZE) {
+    const rows = await selectPosts(viewerId)
+      .where(and(inWindow(at, 30), isNull(posts.parlayId), visibleTo(viewerId, posts.authorId)))
+      .orderBy(desc(hotScore(at)), desc(posts.createdAt), desc(posts.id))
+      .limit(FEED_PAGE_SIZE + 1)
+      .offset(start);
+    const result = page(rows, FEED_PAGE_SIZE);
+    return { ...result, nextPage: result.nextCursor ? pageIndex + 1 : null };
+  }
+
+  const rows = ids.length ? await selectPosts(viewerId).where(inArray(posts.id, ids)) : [];
+  const position = new Map(ids.map((id, i) => [id, i]));
+  rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
   const result = page(rows, FEED_PAGE_SIZE);
   return { ...result, nextPage: result.nextCursor ? pageIndex + 1 : null };
+}
+
+/**
+ * For you's order, which is the same for every viewer: the top FOR_YOU_POOL
+ * posts of the 30 days before `at`, by hotScore. Worked out once per minute
+ * per process and shared — sorting every recent post on each visit was the
+ * slowest thing a tester could load (stress test, 2026-10-17). The last few
+ * minutes are kept, so a scroll that started a minute ago keeps its order.
+ */
+const FOR_YOU_POOL = 1000;
+type Ranked = { id: string; score: number; created: number };
+const forYouRankings = new Map<number, Promise<Ranked[]>>();
+
+function forYouRanking(at: Date): Promise<Ranked[]> {
+  const key = at.getTime();
+  const hit = forYouRankings.get(key);
+  if (hit) return hit;
+  const ids = db
+    .select({ id: posts.id, score: hotScore(at), created: posts.createdAt })
+    .from(posts)
+    .where(and(inWindow(at, 30), isNull(posts.parlayId)))
+    .orderBy(desc(hotScore(at)), desc(posts.createdAt), desc(posts.id))
+    .limit(FOR_YOU_POOL)
+    .then((rows) => rows.map((r) => ({ id: r.id, score: Number(r.score), created: r.created.getTime() })));
+  forYouRankings.set(key, ids);
+  ids.catch(() => forYouRankings.delete(key));
+  while (forYouRankings.size > 5) forYouRankings.delete(forYouRankings.keys().next().value!);
+  return ids;
 }
 
 /**
@@ -560,35 +620,68 @@ export async function listConnections(
 }
 
 /**
- * Accounts worth following, for the side rail and the empty Following tab:
- * everyone the viewer doesn't follow yet, most-followed first, then whoever
- * has been posting. Admins rise to the top — on a beta this small, the house
- * account is the one with something to say on day one.
+ * The order Who to follow suggests accounts in, which is the same for every
+ * viewer: admins first — on a beta this small the house account is the one
+ * with something to say on day one — then most-followed, then whoever has
+ * been posting. Worked out at most every few minutes per process, not on
+ * every page: it counted every account's followers and latest post for each
+ * signed-in page view, ~60ms of database time each (stress test, 2026-10-17).
  */
-export const getWhoToFollow = cache(async function getWhoToFollow(
-  viewerId: string | null,
-  limit = 5,
-): Promise<UserListItem[]> {
-  const rows = await db
-    .select(userListColumns(viewerId))
+const SUGGEST_POOL = 200;
+const SUGGEST_TTL_MS = 5 * 60_000;
+let suggestRanking: { at: number; ids: Promise<string[]> } | null = null;
+
+function rankedSuggestions(): Promise<string[]> {
+  if (suggestRanking && Date.now() - suggestRanking.at < SUGGEST_TTL_MS) return suggestRanking.ids;
+  const ids = db
+    .select({ id: users.id })
     .from(users)
-    .where(
-      viewerId
-        ? and(
-            ne(users.id, viewerId),
-            sql`not exists(select 1 from ${userFollows} where ${userFollows.followerId} = ${viewerId} and ${userFollows.followeeId} = ${users.id})`,
-            visibleTo(viewerId, users.id),
-          )
-        : undefined,
-    )
     .orderBy(
       sql`(${users.role} = 'admin') desc`,
       sql`(select count(*) from ${userFollows} where ${userFollows.followeeId} = ${users.id}) desc`,
       sql`(select max(${posts.createdAt}) from ${posts} where ${posts.authorId} = ${users.id}) desc nulls last`,
       desc(users.createdAt),
     )
-    .limit(limit);
-  return rows.map(toListItem);
+    .limit(SUGGEST_POOL)
+    .then((rows) => rows.map((r) => r.id));
+  // One refresh at a time; a failed one is retried on the next view.
+  suggestRanking = { at: Date.now(), ids };
+  ids.catch(() => {
+    suggestRanking = null;
+  });
+  return ids;
+}
+
+/**
+ * Accounts worth following, for the side rail and the empty Following tab:
+ * the shared ranking above, minus the viewer, whoever they already follow,
+ * and anyone a mute or block hides. Follows apply at once — only the
+ * ranking is cached, never this filter.
+ */
+export const getWhoToFollow = cache(async function getWhoToFollow(
+  viewerId: string | null,
+  limit = 5,
+): Promise<UserListItem[]> {
+  const ranked = await rankedSuggestions();
+  if (ranked.length === 0) return [];
+  const rows = await db
+    .select(userListColumns(viewerId))
+    .from(users)
+    .where(
+      viewerId
+        ? and(
+            inArray(users.id, ranked),
+            ne(users.id, viewerId),
+            sql`not exists(select 1 from ${userFollows} where ${userFollows.followerId} = ${viewerId} and ${userFollows.followeeId} = ${users.id})`,
+            visibleTo(viewerId, users.id),
+          )
+        : inArray(users.id, ranked),
+    );
+  const order = new Map(ranked.map((id, i) => [id, i]));
+  return rows
+    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+    .slice(0, limit)
+    .map(toListItem);
 });
 // cache(): the shell's side rail and Home's inline "Start here" ask for the
 // same list in the same request; this makes that one query.

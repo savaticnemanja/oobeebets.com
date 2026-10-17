@@ -912,6 +912,43 @@ console.log("\nPlayers");
   await dropStatsFixture(sql);
 }
 
+/* --------------------------------------------------------- 8. post counters */
+
+console.log("\nPost counters");
+
+{
+  // Likes, replies and reposts are kept on the post by triggers (migration
+  // 0027); For you ranks by them, so they must never drift from the rows.
+  const [tester] = await sql`select id from users where email = ${TESTER_EMAIL}`;
+  const [admin] = await sql`select id from users where email = ${ADMIN_EMAIL}`;
+  const [post] = await sql`insert into posts (author_id, body) values (${admin.id}, 'verify counters') returning id`;
+  const counts = async () => (await sql`select like_count, reply_count, repost_count from posts where id = ${post.id}`)[0];
+
+  await sql`insert into post_likes (user_id, post_id) values (${tester.id}, ${post.id})`;
+  await sql`insert into post_likes (user_id, post_id) values (${tester.id}, ${post.id}) on conflict do nothing`;
+  await sql`insert into post_reposts (user_id, post_id) values (${tester.id}, ${post.id})`;
+  const [reply] = await sql`insert into posts (author_id, parent_id, body) values (${tester.id}, ${post.id}, 'a reply') returning id`;
+  let c = await counts();
+  check(c.like_count === 1 && c.reply_count === 1 && c.repost_count === 1, "a like, a reply and a repost are counted once each", JSON.stringify(c));
+
+  await sql`delete from post_likes where post_id = ${post.id}`;
+  await sql`delete from post_reposts where post_id = ${post.id}`;
+  await sql`delete from posts where id = ${reply.id}`;
+  c = await counts();
+  check(c.like_count === 0 && c.reply_count === 0 && c.repost_count === 0, "taking them back counts back down", JSON.stringify(c));
+
+  // A reply whose author's account goes: the cascade moves the count too.
+  const [gone] = await sql`insert into users (email, password_hash, role, username)
+    values ('verify-counter@oobeebets.test', 'x', 'user', 't_' || substr(md5(random()::text), 1, 12)) returning id`;
+  await sql`insert into posts (author_id, parent_id, body) values (${gone.id}, ${post.id}, 'leaving')`;
+  await sql`insert into post_likes (user_id, post_id) values (${gone.id}, ${post.id})`;
+  await sql`delete from users where id = ${gone.id}`;
+  c = await counts();
+  check(c.like_count === 0 && c.reply_count === 0, "a deleted account's likes and replies come off the counts", JSON.stringify(c));
+
+  await sql`delete from posts where id = ${post.id}`;
+}
+
 /* ---------------------------------------------------------------- teardown */
 
 // The fixture slate is removed whether the run passed or failed — leaving a

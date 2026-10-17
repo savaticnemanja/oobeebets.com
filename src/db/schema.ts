@@ -651,6 +651,16 @@ export const posts = pgTable(
      * on X. If the quoted post is deleted the quote stays, without the embed.
      */
     quoteId: uuid("quote_id").references((): AnyPgColumn => posts.id, { onDelete: "set null" }),
+    /**
+     * Likes, replies and reposts, kept by triggers on post_likes,
+     * post_reposts and posts (migration 0027) — never written by the app.
+     * For you ranks every post of the last 30 days by these; counting them
+     * per post per request was 90% of the database's time under load
+     * (tester stress test, 2026-10-17).
+     */
+    likeCount: integer("like_count").notNull().default(0),
+    replyCount: integer("reply_count").notNull().default(0),
+    repostCount: integer("repost_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
