@@ -48,8 +48,11 @@ export default function PrivacyPage() {
         </p>
         <p>
           <strong className="text-fg">The waitlist.</strong> If you join it, your email address,
-          which form you used and when. We use it only to tell you when sign-ups open. Every
-          waitlist email has a link to leave, and leaving deletes the address; so does making an
+          which form you used and when, plus your answers to the sign-up questions (your name,
+          whether you&apos;re 21+, how and where you bet, and what you&apos;d want from us). We use the
+          address only to tell you when sign-ups open, and the answers to understand who&apos;s
+          testing. Every waitlist email has a link to leave, and leaving deletes the address and
+          the answers. Making an account takes you off the waitlist; the answers stay with your
           account.
         </p>
         <p>

@@ -1072,23 +1072,56 @@ console.log("\nWaitlist, change password and profile pictures");
   const waitEmail = `e2e-wait-${Date.now()}@example.com`;
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
+  // The signup application: every required question, one "Other" filled in.
+  const fillSurvey = async (email, { is21 = "yes" } = {}) => {
+    await hydrated(page, 'form input[name="email"]');
+    await page.locator('input[name="fullName"]').fill("E2E Tester");
+    await page.locator('input[name="email"]').fill(email);
+    const pick = (name, value) => page.locator(`input[name="${name}"][value="${value}"]`).check({ force: true });
+    await pick("is21", is21);
+    await pick("betFrequency", "A few times per week");
+    await pick("experience", "Intermediate");
+    await pick("sports", "NFL");
+    await pick("sports", "Other");
+    await page.locator('input[name="sportsOther"]').fill("Darts");
+    await pick("sportsbook", "FanDuel");
+    await page.locator('input[name="betSize"]').fill("$20");
+    await pick("decisionTools", "Stats");
+    await page.locator('textarea[name="wants"]').fill("Honest records.");
+    await pick("willGiveFeedback", "yes");
+    await pick("willDoSurvey", "yes");
+    await page.getByRole("button", { name: "Join waitlist" }).click();
+  };
+
+  // The landing page now points at /signup instead of taking an address.
   await page.goto(`${APP_URL}/`);
-  await hydrated(page, 'form input[name="email"]');
-  await page.locator('form input[name="email"]').first().fill(waitEmail);
-  await page.getByRole("button", { name: "Join waitlist" }).first().click();
+  check((await page.locator('a[href="/signup"]', { hasText: "Join the waitlist" }).count()) >= 1, "the landing page links to the signup application");
+
+  await page.goto(`${APP_URL}/signup`);
+  await fillSurvey(waitEmail, { is21: "no" });
+  await page.getByText("oobee bets is 21+ only.").waitFor({ timeout: 10000 });
+  const [{ n: under21 }] = await sql`select count(*)::int as n from signup_surveys where email = ${waitEmail}`;
+  check(under21 === 0, "a no on 21+ is refused and nothing is stored");
+
+  await page.locator('input[name="is21"][value="yes"]').check({ force: true });
+  await page.getByRole("button", { name: "Join waitlist" }).click();
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   let row;
   for (let i = 0; i < 40 && !row; i++) {
     [row] = await sql`select leave_token, source from waitlist where email = ${waitEmail}`;
     if (!row) await page.waitForTimeout(250);
   }
-  check(row?.source === "landing", "the landing form puts you on the waitlist", `${row?.source}`);
+  check(row?.source === "signup", "the signup application puts you on the waitlist", `${row?.source}`);
+  const [survey] = await sql`select full_name, sports, sports_other, will_do_survey from signup_surveys where email = ${waitEmail}`;
+  check(
+    survey?.full_name === "E2E Tester" && survey.sports.join() === "NFL,Other" && survey.sports_other === "Darts" && survey.will_do_survey,
+    "the answers are kept",
+    JSON.stringify(survey),
+  );
 
   // An address that already has an account gets the very same reply, and no row.
   await page.goto(`${APP_URL}/signup`);
-  await hydrated(page, 'form input[name="email"]');
-  await page.locator('form input[name="email"]').fill(testEmail);
-  await page.getByRole("button", { name: "Join waitlist" }).click();
+  await fillSurvey(testEmail);
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   const [{ n: accountRows }] = await sql`select count(*)::int as n from waitlist where email = ${testEmail}`;
@@ -1121,6 +1154,8 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.getByRole("button", { name: "Yes, take me off the waitlist" }).click();
   await page.getByText("You're off the waitlist").waitFor({ timeout: 10000 });
   const [{ n: gone }] = await sql`select count(*)::int as n from waitlist where email = ${waitEmail}`;
+  const [{ n: answersGone }] = await sql`select count(*)::int as n from signup_surveys where email = ${waitEmail}`;
+  check(answersGone === 0, "leaving the waitlist forgets the answers too");
   check(gone === 0, "leaving deletes the address");
 
   // A mailbox's one-click unsubscribe (RFC 8058) is a bare POST.
@@ -1668,6 +1703,7 @@ await sql`delete from feedback where body = ${feedbackNote}`;
 // The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
 await sql`delete from users where email in (${testEmail}, ${quietEmail}, ${secondAdmin})`;
+await sql`delete from signup_surveys where email = ${testEmail}`;
 await dropTester(sql, TESTER_EMAIL);
 await sql`delete from invitations where email in (${testEmail}, ${quietEmail})`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;

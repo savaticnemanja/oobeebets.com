@@ -4,8 +4,9 @@ import { after } from "next/server";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
-import { emailSchema, type ActionState } from "@/lib/validation";
-import { joinWaitlist, leaveWaitlist, startSignup } from "@/lib/waitlist";
+import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
+import { signupSurveySchema, surveyFromForm } from "@/lib/signup-survey";
+import { joinWaitlist, leaveWaitlist, saveSignupSurvey, startSignup } from "@/lib/waitlist";
 
 /**
  * The landing page's form and /signup's: the waitlist while sign-ups are
@@ -16,9 +17,11 @@ import { joinWaitlist, leaveWaitlist, startSignup } from "@/lib/waitlist";
  * too. Whether an address has an account is only ever told to its inbox.
  */
 export async function getStartedAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = emailSchema.safeParse(formData.get("email"));
-  if (!parsed.success) return { ok: false, error: "That doesn't look like an email" };
-  const email = parsed.data;
+  const parsed = signupSurveySchema.safeParse(surveyFromForm(formData));
+  if (!parsed.success) {
+    return { ok: false, error: "Some answers need another look.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+  const email = parsed.data.email;
   const source = formData.get("source") === "signup" ? "signup" : "landing";
   const open = signupEnabled();
 
@@ -28,8 +31,10 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
     const ipOk = await rateLimit("get-started:ip", ip, 8, 15 * 60 * 1000);
     const emailOk = await rateLimit("get-started:email", email, 3, 60 * 60 * 1000);
     if (!ipOk || !emailOk) return { ok: false, error: "Too many tries. Give it a few minutes." };
+    // Saved before the reply: the answers are the point of the form.
+    await saveSignupSurvey(parsed.data, source);
   } catch (err) {
-    console.error("[get-started] rate limit failed:", err);
+    console.error("[get-started] rate limit or survey save failed:", err);
     return { ok: false, error: "Something went wrong. Try again in a moment." };
   }
 

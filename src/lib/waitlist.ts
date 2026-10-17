@@ -2,11 +2,12 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users, waitlist } from "@/db/schema";
+import { signupSurveys, users, waitlist } from "@/db/schema";
 import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-client";
 import { accountExistsEmail, signupsOpenEmail, waitlistJoinedEmail } from "@/lib/email/templates";
 import { issueInvite } from "@/lib/invitations";
 import { appUrl } from "@/lib/site";
+import { OTHER, type SignupSurvey } from "@/lib/signup-survey";
 
 /**
  * The waitlist, and the sign-up that replaces it when SIGNUP_ENABLED is on.
@@ -77,9 +78,42 @@ export async function startSignup(email: string): Promise<void> {
 
 /** Off the list, and forgotten, by the token in their link. False if the link matches no one. */
 export async function leaveWaitlist(token: string): Promise<boolean> {
-  const [row] = await db.delete(waitlist).where(eq(waitlist.leaveToken, token)).returning({ id: waitlist.id });
+  const [row] = await db
+    .delete(waitlist)
+    .where(eq(waitlist.leaveToken, token))
+    .returning({ id: waitlist.id, email: waitlist.email });
+  if (row) await db.delete(signupSurveys).where(eq(signupSurveys.email, row.email));
   return Boolean(row);
 }
+
+/** Stores /signup's answers, replacing any earlier ones for the address. */
+export async function saveSignupSurvey(v: SignupSurvey, source: "landing" | "signup"): Promise<void> {
+  const values = {
+    email: v.email,
+    fullName: v.fullName,
+    is21: v.is21 === "yes",
+    betFrequency: v.betFrequency,
+    experience: v.experience,
+    sports: v.sports,
+    sportsOther: v.sports.includes(OTHER) ? v.sportsOther : null,
+    sportsbook: v.sportsbook,
+    sportsbookOther: v.sportsbook === OTHER ? v.sportsbookOther : null,
+    betSize: v.betSize,
+    decisionTools: v.decisionTools,
+    decisionToolsOther: v.decisionTools.includes(OTHER) ? v.decisionToolsOther : null,
+    wants: v.wants,
+    willGiveFeedback: v.willGiveFeedback === "yes",
+    willDoSurvey: v.willDoSurvey === "yes",
+    source,
+  };
+  const { email: _email, ...update } = values;
+  await db
+    .insert(signupSurveys)
+    .values(values)
+    .onConflictDoUpdate({ target: signupSurveys.email, set: { ...update, updatedAt: new Date() } });
+}
+
+export type SignupSurveyRow = typeof signupSurveys.$inferSelect;
 
 /** An account was made for this address: it's no longer waiting for anything. */
 export async function removeFromWaitlist(email: string): Promise<void> {
@@ -93,6 +127,7 @@ export interface WaitlistEntry {
   createdAt: Date;
   invitedAt: Date | null;
   notifiedAt: Date | null;
+  survey: SignupSurveyRow | null;
 }
 
 /** One page of the people waiting, oldest first — the order they'd be let in. */
@@ -120,8 +155,10 @@ export async function getWaitlistPage({
         createdAt: waitlist.createdAt,
         invitedAt: waitlist.invitedAt,
         notifiedAt: waitlist.notifiedAt,
+        survey: signupSurveys,
       })
       .from(waitlist)
+      .leftJoin(signupSurveys, eq(signupSurveys.email, waitlist.email))
       .where(match)
       .orderBy(asc(waitlist.createdAt))
       .limit(size)

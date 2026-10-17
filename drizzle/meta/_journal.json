@@ -204,6 +204,13 @@
       "when": 1792260751390,
       "tag": "0028_hundred_picks_per_slate",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792261936650,
+      "tag": "0029_signup_surveys",
+      "breakpoints": true
     }
   ]
 }

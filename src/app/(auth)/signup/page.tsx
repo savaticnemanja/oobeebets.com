@@ -28,8 +28,8 @@ export default async function SignupPage() {
       </h1>
       <p className="mt-2 text-sm text-fg-muted">
         {open
-          ? "Enter your email and we'll send a link to choose a password and set up your profile."
-          : "We're letting people in a few at a time. Leave your email and we'll write the day there's a place for you."}
+          ? "Tell us a bit about how you bet, and we'll email a link to choose a password and set up your profile."
+          : "We're letting people in a few at a time. Tell us a bit about how you bet and we'll write the day there's a place for you."}
       </p>
 
       <div className="mt-8">

@@ -8,7 +8,6 @@ import { getAuth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { billingEnabled } from "@/lib/billing/stripe";
 import { signupEnabled } from "@/lib/signup";
-import { GetStartedForm } from "@/components/get-started-form";
 
 // No `title`: the root layout's default is this page's title, and a title
 // here would go through its "%s · oobee bets" template — the brand twice.
@@ -73,7 +72,12 @@ export default async function HomePage() {
 
         <Reveal delay={0.15}>
           <div className="mt-8 max-w-lg">
-            <GetStartedForm open={open} source="landing" />
+            <Button asChild size="lg" className="h-12">
+              <Link href="/signup">
+                {open ? "Sign up" : "Join the waitlist"}
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
             <p className="mt-4 text-sm text-fg-muted">
               Already have an account?{" "}
               <Link href="/login" className="text-brand hover:underline">

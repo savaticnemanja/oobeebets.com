@@ -297,6 +297,43 @@ export const waitlist = pgTable(
   ],
 );
 
+/* -------------------------------------------------------- signup surveys */
+
+/**
+ * The beta application /signup asks before it takes an address. One row per
+ * email — asking again replaces the answers. Unlike the waitlist row it
+ * outlives account creation (it's what we know about the tester); leaving the
+ * waitlist deletes it, as the leave page promises.
+ *
+ * Multi-select answers are the option labels as shown; "Other" sits in the
+ * array with its text in the matching *_other column.
+ */
+export const signupSurveys = pgTable(
+  "signup_surveys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    fullName: text("full_name").notNull(),
+    is21: boolean("is_21").notNull(),
+    betFrequency: text("bet_frequency").notNull(),
+    experience: text("experience").notNull(),
+    sports: text("sports").array().notNull(),
+    sportsOther: text("sports_other"),
+    sportsbook: text("sportsbook").notNull(),
+    sportsbookOther: text("sportsbook_other"),
+    betSize: text("bet_size").notNull(),
+    decisionTools: text("decision_tools").array().notNull(),
+    decisionToolsOther: text("decision_tools_other"),
+    wants: text("wants").notNull(),
+    willGiveFeedback: boolean("will_give_feedback").notNull(),
+    willDoSurvey: boolean("will_do_survey").notNull(),
+    source: text("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("signup_surveys_email_unique").on(t.email)],
+);
+
 /* -------------------------------------------------------- password resets */
 
 /**
