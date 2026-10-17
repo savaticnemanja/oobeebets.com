@@ -228,7 +228,7 @@ export async function loadBoardDays({
       const list = (oobeeOn.get(d) ?? []).filter(ticketMatches);
       if (narrowed && list.length === 0) return null;
       return (
-        <DaySection key={d} date={d} today={today} draft={draft}>
+        <DaySection key={d} date={d} today={today} draft={draft} count={countLabel(list.length, "parlay")}>
           {list.length === 0 ? (
             <Empty>
               {isLead && !isToday
@@ -261,7 +261,15 @@ export async function loadBoardDays({
     const locked = lockedOn(d);
     if (narrowed && dayPicks.length === 0 && locked === 0) return null;
     return (
-      <DaySection key={d} date={d} today={today} draft={draft} picks={dayPicks}>
+      <DaySection
+        key={d}
+        date={d}
+        today={today}
+        draft={draft}
+        picks={dayPicks}
+        // Held-back picks count too: the row under the list names them.
+        count={countLabel(dayPicks.length + locked, CATEGORY_NOUN[category])}
+      >
         {dayPicks.length === 0 && locked === 0 ? (
           <Empty>
             {isLead && !isToday
@@ -313,12 +321,14 @@ function DaySection({
   today,
   draft,
   picks,
+  count,
   children,
 }: {
   date: string;
   today: string;
   draft?: boolean;
   picks?: Pick[];
+  count?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -328,6 +338,7 @@ function DaySection({
         today={today}
         draft={draft}
         picks={picks}
+        count={count}
         className="top-[calc(3.5rem+1px+3.0625rem+3.5rem+var(--spacing-safe-top)-var(--chrome-hide,0px)-var(--chrome-p,0)*6.5625rem)] bg-black/80 backdrop-blur-xl sm:top-[6.5625rem]"
       />
       {children}
@@ -345,12 +356,15 @@ export function DayHeading({
   today,
   draft,
   picks,
+  count,
   className,
 }: {
   date: string;
   today: string;
   draft?: boolean;
   picks?: Pick[];
+  /** "12 game bets" — how much is on this day, beside its date. */
+  count?: string;
   className: string;
 }) {
   const diff = dayDiff(today, date);
@@ -372,6 +386,12 @@ export function DayHeading({
       <h2 id={`day-${date}-heading`} className="flex items-baseline gap-2 text-base font-semibold tracking-tight">
         {name && <span>{name}</span>}
         <span className={cn("num", name ? "text-sm font-normal text-fg-muted" : "")}>{formatSlateDate(date)}</span>
+        {count && (
+          <span className="num text-sm font-normal text-fg-subtle">
+            <span className="mr-2" aria-hidden="true">·</span>
+            {count}
+          </span>
+        )}
         {draft && <Badge variant="pending">Draft — admin preview</Badge>}
       </h2>
       {settled.length > 0 && (
@@ -387,6 +407,11 @@ export function DayHeading({
       )}
     </div>
   );
+}
+
+/** "1 game bet", "12 player props" — nothing on an empty day, whose empty state already says so. */
+function countLabel(n: number, noun: string): string | undefined {
+  return n > 0 ? `${n} ${noun}${n === 1 ? "" : "s"}` : undefined;
 }
 
 /** A day's list with its featured items moved to the front, order otherwise kept (kick-off). */

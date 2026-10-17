@@ -454,6 +454,15 @@ console.log("\nFollowing a pick");
     `buttons=${await circles.count()} takeable=${takeable}`,
   );
 
+  // The tab counts today's game bets, and the day's heading says the same.
+  const [{ n: gameBets }] = await sql`
+    select count(*)::int as n from picks where slate_date = ${latestSlate} and category = 'game'
+  `;
+  const tabLabel = await page.locator('nav[aria-label="Board"] a[aria-current="page"]').getAttribute("aria-label");
+  check(tabLabel === `Game bets, ${gameBets}`, "the board's tab counts today's game bets", `${tabLabel}`);
+  const heading = await page.locator(`#day-${latestSlate}-heading`).innerText();
+  check(heading.includes(`${gameBets} game bet`), "today's heading counts them too", heading);
+
   const first = circles.first();
   check(
     (await first.getAttribute("aria-checked")) === "false",

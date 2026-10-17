@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Circle } from "lucide-react";
 import { db } from "@/db";
-import { picks as picksTable, slates } from "@/db/schema";
+import { parlays as parlaysTable, picks as picksTable, slates } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
 import {
   PICKS_PER_SLATE,
   TAB_LABELS,
   pickTabs,
   categoryFromParam,
+  matchesSportFilter,
   sportFilterFromParam,
   tabFromParam,
 } from "@/lib/board";
@@ -23,12 +24,20 @@ import { after } from "next/server";
 import { ensureUpcomingOdds, refreshResults } from "@/lib/odds/sync";
 import { UPCOMING_DAYS, leadGameDay } from "@/lib/odds/board";
 import { slateDateString } from "@/lib/slate-date";
+import { formatSlateWeekday } from "@/lib/i18n/format";
+import { getOobeeParlays } from "@/lib/parlay-store";
 import { loadBoardAction } from "@/app/actions/feeds";
 import { loadBoardDays } from "./board-days";
 import { cn } from "@/lib/utils";
 import { viewerAccess } from "@/lib/billing/access";
 import { SubscribedBanner } from "@/components/billing/subscribed-banner";
 import { TIERS } from "@/lib/tiers";
+
+const TAB_SHORT_LABELS: Record<(typeof pickTabs)[number], string> = {
+  game: "Game bets",
+  prop: "Props",
+  parlay: "Parlays",
+};
 
 export const metadata: Metadata = {
   title: "Picks",
@@ -93,10 +102,12 @@ export default async function PicksPage({
   const plan = justSubscribed?.access && justSubscribed.access !== "free" ? TIERS[justSubscribed.access].name : null;
 
   // Counts for the tab labels — the alternative is a tab that claims nothing
-  // is there until you click it.
-  const tallies =
-    publishedLead || auth.isAdmin
-      ? await db
+  // is there until you click it. Only for a board the viewer can see: a
+  // tester counting a draft would learn what's coming.
+  const showCounts = publishedLead || auth.isAdmin;
+  const [tallies, parlayCount] = showCounts
+    ? await Promise.all([
+        db
           .select({ category: picksTable.category, n: sql<number>`count(*)::int` })
           .from(picksTable)
           .where(
@@ -106,9 +117,19 @@ export default async function PicksPage({
               sportFilter?.league ? eq(picksTable.league, sportFilter.league) : undefined,
             ),
           )
-          .groupBy(picksTable.category)
-      : [];
-  const countFor = new Map(tallies.map((t) => [t.category, t.n]));
+          .groupBy(picksTable.category),
+        // A parlay matches a pill when any leg does — the board's own rule —
+        // so under one it is counted from its legs.
+        sportFilter
+          ? getOobeeParlays(lead).then((list) => list.filter((pl) => pl.legs.some((l) => matchesSportFilter(sportFilter, l))).length)
+          : db
+              .select({ n: sql<number>`count(*)::int` })
+              .from(parlaysTable)
+              .where(and(eq(parlaysTable.slateDate, lead), isNull(parlaysTable.ownerId)))
+              .then(([r]) => r?.n ?? 0),
+      ])
+    : [[], 0];
+  const countFor = new Map<string, number>([...tallies.map((t) => [t.category, t.n] as const), ["parlay", parlayCount]]);
 
   // Tabs keep the pill and pills keep the tab, so the two combine.
   const sportQuery = sportFilter ? `&sport=${sportFilter.key}` : "";
@@ -135,21 +156,34 @@ export default async function PicksPage({
         >
           {pickTabs.map((c) => {
             const isActive = c === tab;
-            // The lead day's count; the parlay tab counts its own table.
-            const n = c === "parlay" ? 0 : (countFor.get(c) ?? 0);
+            // The lead day's count, zero included: an empty tab says so.
+            const n = countFor.get(c) ?? 0;
             return (
               <Link
                 key={c}
                 href={tabHref(c)}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={showCounts ? `${TAB_LABELS[c]}, ${n}` : undefined}
                 className={cn(
-                  "flex flex-1 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm transition-colors hover:bg-surface/60",
+                  "flex flex-1 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm transition-colors hover:bg-surface/60 sm:px-4",
                   isActive ? "font-semibold text-fg" : "text-fg-muted",
                 )}
               >
                 <span className="relative inline-flex items-center gap-1.5">
-                  {TAB_LABELS[c]}
-                  {n > 0 && <span className="num text-xs font-normal text-fg-subtle">{n}</span>}
+                  {/* With the counts, three full labels overflow a phone. */}
+                  <span className="sm:hidden">{TAB_SHORT_LABELS[c]}</span>
+                  <span className="hidden sm:inline">{TAB_LABELS[c]}</span>
+                  {showCounts && (
+                    <span
+                      className={cn(
+                        "num rounded-full px-1.5 py-px text-xs font-medium",
+                        isActive ? "bg-brand/15 text-brand" : "bg-surface-2 text-fg-muted",
+                      )}
+                      aria-hidden="true"
+                    >
+                      {n}
+                    </span>
+                  )}
                   {isActive && (
                     <span className="absolute -bottom-[0.875rem] left-0 right-0 h-1 rounded-full bg-brand" aria-hidden="true" />
                   )}
@@ -167,6 +201,10 @@ export default async function PicksPage({
             <p>
               Every game day&apos;s picks, newest first, graded against the final score. All free during
               our beta.
+            </p>
+            <p>
+              The number on each tab counts {lead === today ? "today's" : `${formatSlateWeekday(lead)}'s`} board;
+              each day&apos;s heading has its own.
             </p>
             {(tab === "game" || tab === "prop") && (
               <p className="flex items-start gap-2">
