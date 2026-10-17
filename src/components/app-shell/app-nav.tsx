@@ -1,0 +1,182 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Bell, House, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { FeedbackDialog } from "@/components/feedback-dialog";
+import { UnreadBadge, useUnread } from "@/components/app-shell/unread";
+import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+/**
+ * The signed-in navigation, as on X: every destination is an icon plus a
+ * label. The current one is semibold with a heavier, brand-coloured icon; the
+ * rest are muted and brighten on hover over a soft pill.
+ *
+ * The sidebar carries everything but About, which sits in the right rail's
+ * footer on desktop. The phone's bottom bar has room for the
+ * five places people actually go back and forth between; the rest (Players,
+ * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
+ * aren't a destination of their own: they're "Edit profile", on your profile.
+ */
+function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
+  const home = { href: "/home", label: t().nav.home, icon: House };
+  // Carries the unread badge (unread.tsx).
+  const notifications = { href: NOTIFICATIONS_HREF, label: "Notifications", icon: Bell };
+  const picks = { href: "/picks", label: t().nav.picks, icon: Target };
+  // Testers' shared parlays — their own page, apart from Oobee's picks.
+  const community = { href: "/community", label: "Community", icon: Users };
+  // Everyone else's numbers — league tables and player pages.
+  const players = { href: "/players", label: "Players", icon: Shirt };
+  const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
+  return {
+    sidebar: [
+      home,
+      notifications,
+      picks,
+      community,
+      players,
+      profile,
+      ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
+    ],
+    // Your record lives on your profile now (its Stats tab).
+    bottom: [home, picks, community, notifications, profile],
+  };
+}
+
+const NOTIFICATIONS_HREF = "/notifications";
+
+/** ", 3 unread" after a label, for screen readers — the badge itself is hidden from them. */
+function unreadSuffix(href: string, unread: number) {
+  return href === NOTIFICATIONS_HREF && unread > 0 ? `, ${unread} unread` : "";
+}
+
+function isActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Send feedback: in the sidebar here, in the phone drawer (account-controls.tsx). */
+export const FEEDBACK_LABEL = "Send feedback";
+export const FeedbackIcon = MessageSquareText;
+
+/** One sidebar entry's pill: the icon, and the label from `xl`. */
+function SidebarItem({
+  label,
+  icon: Icon,
+  active = false,
+  badge = 0,
+}: {
+  label: string;
+  icon: LucideIcon;
+  active?: boolean;
+  badge?: number;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-4 rounded-full px-3 py-2.5 text-[1.0625rem] leading-6 transition-colors duration-150",
+        "group-hover:bg-white/[0.07] group-active:bg-white/[0.11] group-focus-visible:ring-2 group-focus-visible:ring-brand/60 xl:pr-5",
+        active ? "font-semibold text-fg" : "text-fg-muted group-hover:text-fg",
+      )}
+    >
+      <span className="relative">
+        <Icon
+          className={cn(
+            "size-6 shrink-0 transition-transform duration-150 group-hover:scale-105",
+            active && "text-brand",
+          )}
+          strokeWidth={active ? 2.25 : 1.75}
+          aria-hidden="true"
+        />
+        <UnreadBadge count={badge} />
+      </span>
+      <span className="hidden xl:inline">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Icon-only from `sm`, icon and label from `xl` — X's own breakpoints. Send
+ * feedback closes the list: a button that opens a dialog, not a destination.
+ */
+export function SidebarNav({ username, isAdmin }: { username: string; isAdmin: boolean }) {
+  const pathname = usePathname();
+  const unread = useUnread();
+  return (
+    <nav aria-label={t().nav.mainNav} className="flex flex-col items-center gap-1 xl:items-stretch">
+      {items(username, isAdmin).sidebar.map(({ href, label, icon }) => {
+        const active = isActive(pathname, href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            aria-label={label + unreadSuffix(href, unread)}
+            title={label}
+            className="group flex rounded-full outline-none"
+          >
+            <SidebarItem label={label} icon={icon} active={active} badge={href === NOTIFICATIONS_HREF ? unread : 0} />
+          </Link>
+        );
+      })}
+      <FeedbackDialog>
+        <button type="button" title={FEEDBACK_LABEL} className="group flex rounded-full text-left outline-none">
+          <SidebarItem label={FEEDBACK_LABEL} icon={FeedbackIcon} />
+        </button>
+      </FeedbackDialog>
+    </nav>
+  );
+}
+
+/** The phone's tab bar. Labels are kept for screen readers only, as on X. */
+export function BottomNav({ username, isAdmin }: { username: string; isAdmin: boolean }) {
+  const pathname = usePathname();
+  const unread = useUnread();
+  return (
+    <nav
+      aria-label={t().nav.mobileNav}
+      // Slides down as the top bar slides up (scroll-chrome.tsx).
+      className="fixed inset-x-0 bottom-0 z-40 translate-y-[calc(var(--chrome-p,0)*100%)] border-t border-border bg-black/85 pb-safe-bottom backdrop-blur-xl sm:hidden"
+    >
+      <ul className="flex h-14 items-stretch justify-around">
+        {items(username, isAdmin).bottom.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          return (
+            <li key={href} className="flex flex-1">
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex flex-1 items-center justify-center transition-colors active:bg-white/[0.07]",
+                  active ? "text-brand" : "text-fg-muted",
+                )}
+              >
+                <span className="relative">
+                  <Icon className="size-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+                  {href === NOTIFICATIONS_HREF && <UnreadBadge count={unread} />}
+                </span>
+                <span className="sr-only">{label + unreadSuffix(href, unread)}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/** The drawer's links on a phone: what the bottom bar has no room for. */
+export function drawerItems(username: string, isAdmin: boolean): NavItem[] {
+  const { sidebar, bottom } = items(username, isAdmin);
+  const inBar = new Set(bottom.map((i) => i.href));
+  return [
+    sidebar.find((i) => i.href === `/u/${username}`)!,
+    ...sidebar.filter((i) => !inBar.has(i.href)),
+  ];
+}

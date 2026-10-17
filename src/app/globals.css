@@ -13,6 +13,19 @@
    from everyone permanently — see the note on `viewport` in app/layout.tsx. */
 @custom-variant touch (@media (pointer: coarse));
 
+/* The one page width. Header, footer and every page body sit in it, so the
+   left edge stays put as you move around; narrower reading or form columns
+   go inside it (left-aligned) rather than re-centring at their own width. */
+@utility shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--container-6xl);
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    oobee bets design tokens
    Brand rules from the product brief, non-negotiable:
@@ -51,8 +64,8 @@
   --color-void: #7b8290;
 
   /* Text tones. Every one of these has to clear 4.5:1 on all four backgrounds
-     it can land on — black, surface, surface-2, and the brightest frame of the
-     aurora — because none of it is large text. fg-subtle was #5b6462, which
+     it can land on — black, surface and surface-2 — because none of it is
+     large text. fg-subtle was #5b6462, which
      measured 3.44:1 on black and failed at every size it was used; it accounts
      for the bulk of the small print, so it was also the single biggest source
      of contrast failures in the app. */
@@ -97,49 +110,9 @@
   70% { transform: scale(1.6); opacity: 0; }
   100% { transform: scale(1.6); opacity: 0; }
 }
-/* Rings travel out from the dot and fade as they go. The ceiling is 3x rather
-   than anything larger because the dot sits one gap-width from the label beside
-   it, and a wider ring would wash across the text. The two grew together when
-   the badge was enlarged, so the ratio still holds. */
-@keyframes ripple {
-  0% { transform: scale(1); opacity: 0.55; }
-  100% { transform: scale(3); opacity: 0; }
-}
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* Ambient drift. Translations are percentages of each bloom's own size, so the
-   amplitude scales with the element and stays proportionate on every viewport.
-   Only transform and opacity animate — both are compositor properties, so this
-   costs no layout and no paint; animating filter or background-position would
-   repaint a full-screen layer every frame. Three-stop paths (0/33/66%) keep the
-   drift from reading as a straight back-and-forth.
-
-   Amplitudes are deliberately small and the periods long: at rest the page
-   should read as still, and the motion should only be apparent if you look for
-   it. The scale range does most of the work — a bloom breathing between 1.0 and
-   1.06 changes the light without anything appearing to travel. */
-@keyframes drift-a {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.88; }
-  33%      { transform: translate3d(6%, 4%, 0) scale(1.06);   opacity: 1; }
-  66%      { transform: translate3d(2%, 7%, 0) scale(1.02);   opacity: 0.93; }
-}
-@keyframes drift-b {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05);     opacity: 1; }
-  33%      { transform: translate3d(-7%, 5%, 0) scale(1);     opacity: 0.86; }
-  66%      { transform: translate3d(-3%, 9%, 0) scale(1.06);  opacity: 0.95; }
-}
-@keyframes drift-c {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.9; }
-  33%      { transform: translate3d(5%, -6%, 0) scale(1.07);  opacity: 1; }
-  66%      { transform: translate3d(-4%, -2%, 0) scale(1.03); opacity: 0.87; }
-}
-@keyframes drift-d {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1.04);     opacity: 0.86; }
-  33%      { transform: translate3d(-6%, -7%, 0) scale(1);    opacity: 1; }
-  66%      { transform: translate3d(-2%, 4%, 0) scale(1.07);  opacity: 0.92; }
 }
 
 @layer base {
@@ -227,6 +200,74 @@
     }
   }
 }
+
+@layer components {
+  /* Hairline card. Borders do the work shadows would. */
+  .card-hairline {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+  }
+
+  .brand-glow {
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28), 0 0 40px -12px var(--color-brand-glow);
+  }
+
+  /* Locked pick content. The blur is cosmetic only — locked picks never reach
+     the client (see lib/gating.ts); this styles the redacted placeholder. */
+  .redacted {
+    filter: blur(7px);
+    user-select: none;
+    pointer-events: none;
+  }
+}
+
+/* ------------------------------------------------------------ launch page
+   The homepage is main's pre-launch page ((launch)/page.tsx): its ambient
+   aurora behind the page, and the ripple on the "Launching soon" dot. Brought
+   over with it when beta merged into main; nothing else uses them. */
+
+/* Rings travel out from the dot and fade as they go. The ceiling is 3x rather
+   than anything larger because the dot sits one gap-width from the label beside
+   it, and a wider ring would wash across the text. The two grew together when
+   the badge was enlarged, so the ratio still holds. */
+@keyframes ripple {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* Ambient drift. Translations are percentages of each bloom's own size, so the
+   amplitude scales with the element and stays proportionate on every viewport.
+   Only transform and opacity animate — both are compositor properties, so this
+   costs no layout and no paint; animating filter or background-position would
+   repaint a full-screen layer every frame. Three-stop paths (0/33/66%) keep the
+   drift from reading as a straight back-and-forth.
+
+   Amplitudes are deliberately small and the periods long: at rest the page
+   should read as still, and the motion should only be apparent if you look for
+   it. The scale range does most of the work — a bloom breathing between 1.0 and
+   1.06 changes the light without anything appearing to travel. */
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.88; }
+  33%      { transform: translate3d(6%, 4%, 0) scale(1.06);   opacity: 1; }
+  66%      { transform: translate3d(2%, 7%, 0) scale(1.02);   opacity: 0.93; }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05);     opacity: 1; }
+  33%      { transform: translate3d(-7%, 5%, 0) scale(1);     opacity: 0.86; }
+  66%      { transform: translate3d(-3%, 9%, 0) scale(1.06);  opacity: 0.95; }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.9; }
+  33%      { transform: translate3d(5%, -6%, 0) scale(1.07);  opacity: 1; }
+  66%      { transform: translate3d(-4%, -2%, 0) scale(1.03); opacity: 0.87; }
+}
+@keyframes drift-d {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.04);     opacity: 0.86; }
+  33%      { transform: translate3d(-6%, -7%, 0) scale(1);    opacity: 1; }
+  66%      { transform: translate3d(-2%, 4%, 0) scale(1.07);  opacity: 0.92; }
+}
+
 
 @layer components {
   /* Ambient background: four cyan blooms drifting over pure black. Purely
@@ -350,17 +391,6 @@
     mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 40%, transparent 100%);
   }
 
-  /* Hairline card. Borders do the work shadows would. */
-  .card-hairline {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-card);
-  }
-
-  .brand-glow {
-    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28), 0 0 40px -12px var(--color-brand-glow);
-  }
-
   /* Ripple for the "launching soon" dot.
 
      Two rings rather than one, half a cycle apart, so there is always one
@@ -401,13 +431,5 @@
       animation: none !important;
       opacity: 0;
     }
-  }
-
-  /* Locked pick content. The blur is cosmetic only — locked picks never reach
-     the client (see lib/gating.ts); this styles the redacted placeholder. */
-  .redacted {
-    filter: blur(7px);
-    user-select: none;
-    pointer-events: none;
   }
 }

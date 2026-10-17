@@ -1,6 +1,6 @@
 import "server-only";
-import { resendClient, sendEmail } from "@/lib/email";
-import { welcomeEmail } from "@/lib/email/templates";
+import { resendClient, sendEmail } from "@/lib/email/resend-client";
+import { launchListWelcomeEmail } from "@/lib/email/launch-list-templates";
 
 /**
  * The mailing list.
@@ -130,7 +130,15 @@ export async function subscribe(
     contactId = data.id;
   }
 
-  if (welcome) await sendEmail({ to: email, ...welcomeEmail(contactId) });
+  // The app's sender throws where main's returned a result: a failed welcome
+  // must not turn a subscription that happened into an error on the form.
+  if (welcome) {
+    try {
+      await sendEmail({ to: email, ...launchListWelcomeEmail(contactId) });
+    } catch (err) {
+      console.error("[newsletter] welcome email failed:", err);
+    }
+  }
 
   return "subscribed";
 }

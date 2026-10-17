@@ -2,10 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SITE } from "@/lib/site";
-import { shareCard } from "@/lib/metadata";
 import { getLocale, localeConfig } from "@/lib/i18n/config";
-import { Aurora } from "@/components/aurora";
 import { ServiceWorker } from "@/components/pwa/service-worker";
+import { StaleDeploy } from "@/components/pwa/stale-deploy";
 import "./globals.css";
 import { t } from "@/lib/i18n";
 
@@ -24,7 +23,7 @@ export const metadata: Metadata = {
     "sports betting picks",
     "betting tips",
     "verified track record",
-    "daily picks",
+    "NFL picks",
     "sports handicapping",
   ],
   authors: [{ name: SITE.name, url: SITE.url }],
@@ -34,8 +33,21 @@ export const metadata: Metadata = {
   // default — it is an assertion every page without its own repeats verbatim,
   // and nine of them were declaring themselves to be the homepage. Each public
   // route sets its own; the home page's lives in (site)/page.tsx.
-  // The evergreen card every page inherits unless it says otherwise.
-  ...shareCard({ title: `${SITE.name} — ${SITE.tagline}`, description: SITE.description }),
+  openGraph: {
+    type: "website",
+    siteName: SITE.name,
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+    url: SITE.url,
+    locale: localeConfig(getLocale()).ogLocale,
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: SITE.twitter,
+    creator: SITE.twitter,
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+  },
   robots: {
     index: true,
     follow: true,
@@ -66,7 +78,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // `dir` was never set at all, and `lang` was the string "en" in the markup
-  // while og:locale said en_US and the formatters said en-GB.
+  // while og:locale said en_US and the formatters said something else again.
   const locale = localeConfig(getLocale());
 
   return (
@@ -77,8 +89,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Aurora />
-        <div className="grid-lines" aria-hidden="true" />
 
         {/* First focusable element on every page. */}
         <a
@@ -102,6 +112,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <ServiceWorker />
+        <StaleDeploy />
       </body>
     </html>
   );

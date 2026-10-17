@@ -1,52 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 /**
  * Registers the service worker and surfaces updates.
  *
  * A betting app that silently serves an old bundle is a support ticket, so a
- * waiting worker prompts the user rather than activating on its own schedule.
+ * new worker waits (public/sw.js) and the page offers "Reload". It never
+ * reloads on its own: that would throw away whatever is being typed — a post,
+ * a half-filled signup form. Only the tab where Reload is pressed reloads;
+ * any other tab carries on, and picks up the new version on its next page.
  */
 export function ServiceWorker() {
-  const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
-  /**
-   * Whether this page was already under a worker's control. Read before
-   * registering, because registration is what changes the answer.
-   */
-  const hadController = useRef(false);
-
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
 
-    hadController.current = Boolean(navigator.serviceWorker.controller);
-
     let cancelled = false;
+    let reloadOnTakeover = false;
+
+    const onControllerChange = () => {
+      if (reloadOnTakeover) window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    const offer = (worker: ServiceWorker) => {
+      toast("A new version is ready", {
+        id: "sw-update",
+        action: {
+          label: "Reload",
+          onClick: () => {
+            reloadOnTakeover = true;
+            worker.postMessage("SKIP_WAITING");
+          },
+        },
+        duration: Infinity,
+      });
+    };
 
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((reg) => {
         if (cancelled) return;
-        setRegistration(reg);
-
+        // Only an update is worth a word: the very first worker has no
+        // controller to replace, and takes over quietly.
+        if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
         reg.addEventListener("updatefound", () => {
           const installing = reg.installing;
           if (!installing) return;
           installing.addEventListener("statechange", () => {
-            if (installing.state === "installed" && navigator.serviceWorker.controller) {
-              toast("A new version is ready", {
-                action: {
-                  label: "Reload",
-                  onClick: () => {
-                    installing.postMessage("SKIP_WAITING");
-                    window.location.reload();
-                  },
-                },
-                duration: Infinity,
-              });
-            }
+            if (installing.state === "installed" && navigator.serviceWorker.controller) offer(installing);
           });
         });
       })
@@ -56,30 +60,9 @@ export function ServiceWorker() {
 
     return () => {
       cancelled = true;
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
     };
   }, []);
-
-  // Reload once when a *new* worker takes control, so assets stay consistent.
-  useEffect(() => {
-    if (!registration) return;
-    let reloading = false;
-    const onChange = () => {
-      // On a first visit the worker installs and immediately calls
-      // clients.claim(), which fires this event for a page that was never
-      // stale. Reloading there throws away whatever the visitor has typed —
-      // a half-filled signup form, most expensively. Absorb that first claim
-      // and only reload for genuine replacements afterwards.
-      if (!hadController.current) {
-        hadController.current = true;
-        return;
-      }
-      if (reloading) return;
-      reloading = true;
-      window.location.reload();
-    };
-    navigator.serviceWorker?.addEventListener("controllerchange", onChange);
-    return () => navigator.serviceWorker?.removeEventListener("controllerchange", onChange);
-  }, [registration]);
 
   return null;
 }

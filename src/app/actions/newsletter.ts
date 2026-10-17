@@ -1,14 +1,17 @@
 "use server";
 
 import { headers } from "next/headers";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/auth";
 import {
   InvalidUnsubscribeLink,
   subscribe,
   unsubscribeByEmail,
   unsubscribeById,
 } from "@/lib/newsletter";
-import { emailSchema, waitlistSchema, type ActionState } from "@/lib/validation";
+import { z } from "zod";
+import { emailSchema, type ActionState } from "@/lib/validation";
+
+const waitlistSchema = z.object({ email: emailSchema });
 
 const SUBSCRIBE_LIMIT = 5;
 const SUBSCRIBE_WINDOW_MS = 15 * 60 * 1000;

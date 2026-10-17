@@ -12,22 +12,225 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1785709154325,
-      "tag": "0001_slimy_silver_fox",
+      "when": 1787520453435,
+      "tag": "0001_yielding_thunderbird",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1785713881698,
-      "tag": "0002_gorgeous_payback",
+      "when": 1787522149250,
+      "tag": "0002_deferrable_rank_constraint",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1785715254270,
-      "tag": "0003_kind_midnight",
+      "when": 1787564277632,
+      "tag": "0003_moaning_diamondback",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787582844940,
+      "tag": "0004_collapse_owner_into_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787583685405,
+      "tag": "0005_fifteen_picks_per_slate",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788121053840,
+      "tag": "0006_player_props_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791069563980,
+      "tag": "0007_pick_follows",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791073347867,
+      "tag": "0008_parlays",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791322602194,
+      "tag": "0009_social",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791325185297,
+      "tag": "0010_odds_feed",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791848977273,
+      "tag": "0011_featured",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791853718654,
+      "tag": "0012_social_parlays_reposts",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791855799766,
+      "tag": "0013_media_polls",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791857055655,
+      "tag": "0014_post_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791859186806,
+      "tag": "0015_parlay_follows",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791895996089,
+      "tag": "0016_password_resets",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791907572400,
+      "tag": "0017_selection_manual_hold",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792003506811,
+      "tag": "0018_player_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792080900699,
+      "tag": "0019_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792083383231,
+      "tag": "0020_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792085544171,
+      "tag": "0021_quote_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792099410316,
+      "tag": "0022_moderation",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792102661677,
+      "tag": "0023_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792152352680,
+      "tag": "0024_avatars_waitlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792152937515,
+      "tag": "0025_plain_text_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792192677910,
+      "tag": "0026_perf_presence_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792196482742,
+      "tag": "0027_post_counters",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792260751390,
+      "tag": "0028_hundred_picks_per_slate",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792261936650,
+      "tag": "0029_signup_surveys",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792263987405,
+      "tag": "0030_survey_drop_single_sportsbook",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792264416070,
+      "tag": "0031_survey_sportsbooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792270060227,
+      "tag": "0032_user_suspension",
       "breakpoints": true
     }
   ]

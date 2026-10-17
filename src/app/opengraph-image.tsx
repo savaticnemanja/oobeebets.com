@@ -74,7 +74,7 @@ export default function OpengraphImage() {
             color: "#22d3ee",
           }}
         >
-          settled in public.
+          settled on the record.
         </div>
 
         <div

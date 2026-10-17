@@ -1,139 +1,129 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { SITE } from "@/lib/site";
-import { shareCard } from "@/lib/metadata";
-
-const DESCRIPTION = `Terms for using the ${SITE.name} pre-launch site and email list.`;
+import { SITE, pageSocial } from "@/lib/site";
+import { DocPage, DocSection } from "@/components/doc-page";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
-  title: "Terms of use",
-  description: DESCRIPTION,
+  title: "Terms of service",
+  description: `Terms of service for ${SITE.name}.`,
   alternates: { canonical: "/legal/terms" },
-  ...shareCard({
-    title: `Terms of use · ${SITE.name}`,
-    description: DESCRIPTION,
-    path: "/legal/terms",
-  }),
+  ...pageSocial("/legal/terms", `Terms of service · ${SITE.name}`, `Terms of service for ${SITE.name}.`),
 };
 
 /**
- * Cut to what the site actually offers today: a page and an email list.
- *
- * The previous draft ran to eight sections on subscriptions, billing, free
- * trials, refunds and account termination — for a product nobody can reach.
- * Publishing commitments about a service that does not exist is worse than
- * publishing nothing: they are live terms, and §4's price-lock and §8's
- * "amount you paid us" liability cap were both being offered to people who
- * cannot pay us anything.
- *
- * Those sections are not lost — `git log` has them, and they need restoring
- * (with counsel, per FSD O6: legal entity + jurisdiction) as part of opening
- * signup, not before.
+ * Placeholder. This is not legal advice and must be replaced by counsel before
+ * taking payments — see FSD open question O6 (legal entity + jurisdiction).
  */
-
-/** Shown to visitors, so it has to be updated whenever the copy below changes. */
-const LAST_UPDATED = "3 August 2026";
-
 export default function TermsPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Terms of use</h1>
-      <p className="mt-2 text-xs uppercase tracking-wider text-fg-subtle">
-        Last updated {LAST_UPDATED}
-      </p>
+    <DocPage
+      title="Terms of service"
+      kicker={
+        <p className="mt-1 text-xs uppercase tracking-wider text-pending">
+          Draft — must be reviewed by a lawyer before launch
+        </p>
+      }
+    >
+      <DocSection title="1. What we sell">
+        <p>
+          {SITE.name}{" "}
+          sells access to sports betting information and analysis. We are not a
+          bookmaker, sportsbook, exchange, or financial adviser. We do not accept
+          wagers, hold customer funds, or place bets on anyone&apos;s behalf.
+        </p>
+      </DocSection>
 
-      <div className="mt-8 space-y-6 text-sm leading-relaxed text-fg-muted">
-        <section>
-          <h2 className="text-base font-semibold text-fg">1. What this site is today</h2>
-          <p className="mt-2">
-            {SITE.name}{" "}
-            has not launched. Right now this site does one thing: it takes an
-            email address so we can tell you when we open. Nothing is for sale, no
-            account exists, and no picks are published. These terms cover that and
-            nothing more &mdash; full terms will replace them before anything is sold,
-            and we will not charge anyone under this page.
-          </p>
-        </section>
+      <DocSection title="2. No guarantee">
+        <p>
+          Picks are opinion. They lose regularly and are published with that
+          expectation. Nothing on this site is a guarantee, a prediction of a certain
+          outcome, or a promise of profit. Past performance does not indicate future
+          results. You are solely responsible for every bet you place and for any
+          money you lose.
+        </p>
+      </DocSection>
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">
-            2. We are not a bookmaker, and this is not advice
-          </h2>
-          <p className="mt-2">
-            {SITE.name}{" "}
-            sells information and opinion. We are not a bookmaker,
-            sportsbook, exchange or financial adviser. We do not accept wagers, hold
-            customer funds, or place bets for anyone. When picks are published they will
-            be opinion, they will lose regularly, and nothing we write is a guarantee of
-            profit or a prediction of a certain outcome. Every bet you place is your
-            decision and your risk.
-          </p>
-        </section>
+      <DocSection title="3. Eligibility">
+        <p>
+          You must be at least 21 years old, or older where the law where you live
+          requires it, and allowed to bet on sports there. You are responsible for
+          knowing whether sports betting is lawful in your jurisdiction. We do not
+          provide the service where it would be unlawful.
+        </p>
+      </DocSection>
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">3. Who can join the list</h2>
-          <p className="mt-2">
-            You must be at least 18, or the legal gambling age where you live if that is
-            higher. You are responsible for knowing whether sports betting is lawful
-            where you are; we do not offer the service where it would not be.
+      {billingEnabled() ? (
+        <DocSection title="4. Plans and billing">
+          <p>
+            {SITE.name} is in a closed beta. The top pick of each list is free every game day;
+            the rest of the board comes with a paid plan (Base, Pro or Elite), as listed on
+            the Plans page with its price.
           </p>
-        </section>
+          <p>
+            Plans are billed monthly in advance through Stripe and renew automatically each
+            month until you cancel. You can cancel, change plan or update your card at any
+            time from your account. A cancelled plan stays active until the end of the month
+            already paid for and then does not renew. Changing plan takes effect right away,
+            with the difference prorated on your next invoice. Payments already made are not
+            refunded, except where the law requires it.
+          </p>
+          <p>
+            If a payment fails we retry it for a short time, and the plan ends if it still
+            can&apos;t be collected. We will tell subscribers by email before any price change
+            applies to them; a new price applies from the next renewal after that notice.
+          </p>
+          <p>
+            A plan buys access to our picks and nothing more: no plan guarantees any result
+            (see section 2).
+          </p>
+        </DocSection>
+      ) : (
+        <DocSection title="4. Beta access">
+          <p>
+            {SITE.name} is currently in a closed beta. Access is free — we do not take
+            payment, run subscriptions, or offer paid plans at this time. That may change
+            in the future, and this page will be updated before it does.
+          </p>
+        </DocSection>
+      )}
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">4. The email list</h2>
-          <p className="mt-2">
-            Subscribing is free and commits you to nothing. You will get a welcome note,
-            the launch announcement, and the occasional update in between &mdash; no
-            picks, and nothing sold on to anyone else. You can leave at any time from the{" "}
-            <Link href="/unsubscribe" className="text-brand hover:underline">
-              unsubscribe page
-            </Link>{" "}
-            or the link in any email, and we may close or change the list before launch.
-            What we do with your address is set out in our{" "}
-            <Link href="/legal/privacy" className="text-brand hover:underline">
-              privacy policy
-            </Link>
-            .
-          </p>
-          <p className="mt-2">
-            Please only submit an address that is yours. Do not sign other people up,
-            and do not try to break, overload or scrape the site.
-          </p>
-        </section>
+      <DocSection title="5. Your account">
+        <p>
+          Accounts are personal. Sharing your sign-in, scraping the site, copying the
+          board wholesale, or reselling access will result in termination. Sharing a post,
+          or a link to one, with friends is fine — that&apos;s what the Share button is for.
+        </p>
+      </DocSection>
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">5. Liability</h2>
-          <p className="mt-2">
-            The site is provided as it is, and we do not promise it will be uninterrupted
-            or that we will launch on any particular date. To the fullest extent the law
-            allows, we are not liable for any loss arising from your use of this
-            pre-launch site or the list &mdash; including gambling losses, which nothing
-            here could have caused, since we have not published a pick yet. Nothing in
-            these terms limits liability that cannot legally be limited.
-          </p>
-        </section>
+      <DocSection title="6. What you post">
+        <p>
+          What you post stays yours. By posting it, you let us show it to other testers on
+          the site, in feeds and in link previews, for as long as it is up.
+        </p>
+        <p>
+          Don&apos;t post anything illegal, hateful or harassing, sexual content, or someone
+          else&apos;s private information. Don&apos;t impersonate anyone — including{" "}
+          {SITE.name} — and don&apos;t advertise paid picks, other services, or spam. We may
+          remove posts and suspend or close accounts that break these rules. To tell us about
+          a post or an account, choose Report from its ⋯ menu — an admin reads every report.
+          You can also mute or block anyone from the same menu.
+        </p>
+      </DocSection>
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">6. Responsible gambling</h2>
-          <p className="mt-2">
-            When we do launch: only stake what you can afford to lose, and do not chase
-            losses. If gambling is causing you harm, stop and seek help from a
-            support service in your country &mdash; free and confidential help is
-            available, and it is independent of us.
-          </p>
-        </section>
+      <DocSection title="7. Responsible gambling">
+        <p>
+          Only stake money you can afford to lose. Do not chase losses. If gambling is
+          causing you harm, stop and get help: call or text 1-800-GAMBLER, the National
+          Problem Gambling Helpline — free, confidential, and open around the clock.
+        </p>
+      </DocSection>
 
-        <section>
-          <h2 className="text-base font-semibold text-fg">7. Changes and contact</h2>
-          <p className="mt-2">
-            We may update these terms; the date at the top says when we last did. Email{" "}
-            <a href={`mailto:${SITE.supportEmail}`} className="text-brand hover:underline">
-              {SITE.supportEmail}
-            </a>{" "}
-            with any question about this page.
-          </p>
-        </section>
-      </div>
-    </div>
+      <DocSection title="8. Limitation of liability">
+        <p>
+          To the fullest extent permitted by law, we are not liable for gambling
+          losses, missed bets, closed lines, or bookmaker disputes.
+        </p>
+      </DocSection>
+    </DocPage>
   );
 }

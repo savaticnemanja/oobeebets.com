@@ -1,5 +1,10 @@
 import type { NextConfig } from "next";
 
+// Content-Security-Policy is set by nginx, per site, not here: see
+// /etc/nginx/conf.d/csp.conf on the server (enforced, with violation
+// reports to nemanjas.dev/csp-report). One policy in one place — a second
+// copy here would keep blocking whatever that one is loosened to allow.
+
 const nextConfig: NextConfig = {
   // Emits a self-contained server bundle so the Docker runtime stage can ship
   // without node_modules. See Dockerfile.

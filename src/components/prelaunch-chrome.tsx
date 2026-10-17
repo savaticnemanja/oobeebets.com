@@ -27,7 +27,7 @@ export function PrelaunchChrome({ children }: { children: React.ReactNode }) {
     <div className="pl-safe-left pr-safe-right">
       <header className="pt-safe-top">
         <div className="mx-auto flex h-16 max-w-3xl items-center px-4 sm:px-6">
-          <Logo />
+          <Logo badge={false} />
         </div>
       </header>
 
@@ -51,7 +51,7 @@ export function PrelaunchChrome({ children }: { children: React.ReactNode }) {
           </nav>
 
           <p className="mt-6 text-xs leading-relaxed text-fg-subtle">
-            <strong className="text-fg-muted">18+ only.</strong> {SITE.name}{" "}
+            <strong className="text-fg-muted">21+ only.</strong> {SITE.name}{" "}
             sells information and opinion, not wagers. We do not take bets, hold funds,
             or act as a bookmaker. Every pick is a judgement call that can lose. Past
             performance does not predict future results. Never stake money you cannot

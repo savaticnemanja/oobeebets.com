@@ -12,10 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE.name,
     short_name: SITE.name,
     description: SITE.description,
-    // The root, not /picks. That route went with the product, so an installed
-    // app was launching straight into a 404 — the one screen a PWA install is
-    // judged on. Restore this to the board when the board ships.
-    start_url: "/",
+    // Home, like the signed-in site itself (/ → /home). Signed out, it
+    // sends you to sign in and back.
+    start_url: "/home",
     // Installed app opens without browser chrome; falls back gracefully on
     // platforms that don't support the window-controls-overlay display mode.
     display: "standalone",
@@ -32,7 +31,13 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    // No shortcuts while this is a one-page site. Both entries pointed at
-    // /picks and /track-record, so the long-press menu offered two 404s.
+    shortcuts: [
+      {
+        name: "Today's picks",
+        short_name: "Picks",
+        url: "/picks",
+        description: "The board",
+      },
+    ],
   };
 }
