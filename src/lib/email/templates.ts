@@ -390,7 +390,7 @@ export function waitlistConfirmEmail({
     kicker: "Waitlist",
     heading: "Confirm your place",
     paragraphs: [
-      "Someone — hopefully you — asked to join the oobee bets waitlist with this address. Press the button below to confirm, and we'll email you once, the day there's a place for you.",
+      "Someone — hopefully you — asked to join the oobee bets waitlist with this address. Press the button below to confirm, and we'll email you the day there's a place for you — plus the odd update before then, which you can unsubscribe from in one click.",
       answered
         ? "We have your answers to the sign-up questions, so there's nothing else to do."
         : "Once you've confirmed, you can answer a few quick questions about how you bet — testers who do are let in first.",
@@ -399,6 +399,21 @@ export function waitlistConfirmEmail({
     cta: { label: "Confirm my place", url: confirmUrl },
     linkNote: "This link works for 7 days.",
     footerNote: `If you didn't ask for this, ignore it — you won't hear from ${SITE.name} again, and the address is deleted in 7 days.`,
+  });
+}
+
+/** /unsubscribe, typed address: the address's own link, since typing it alone proves nothing. */
+export function unsubscribeLinkEmail({ unsubscribeUrl }: { unsubscribeUrl: string }): Email {
+  return actionEmail({
+    subject: "Your link to unsubscribe from oobee bets",
+    preheader: "One click and you won't hear from us again.",
+    heading: "Unsubscribe",
+    paragraphs: [
+      "Someone asked for this address to be taken off the oobee bets waitlist and newsletter. If that was you, press the button below — it's one click, and you won't hear from us again.",
+      "If it wasn't you, ignore this email and nothing changes.",
+    ],
+    cta: { label: "Unsubscribe", url: unsubscribeUrl },
+    footerNote: `You're getting this because this address was entered on ${SITE.name}'s unsubscribe page.`,
   });
 }
 

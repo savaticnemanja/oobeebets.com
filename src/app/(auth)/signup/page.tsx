@@ -44,7 +44,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       </p>
 
       <div className="mt-8">
-        <GetStartedForm open={open} source="signup" formToken={issueFormToken()} initialEmail={initialEmail} />
+        <GetStartedForm open={open} formToken={issueFormToken()} initialEmail={initialEmail} />
       </div>
 
     </div>

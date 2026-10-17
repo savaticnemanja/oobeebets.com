@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
 import { BellOff } from "lucide-react";
-import { UnsubscribeForm } from "@/components/newsletter/unsubscribe-form";
+import { UnsubscribeForm } from "@/components/unsubscribe-form";
+import { issueFormToken } from "@/lib/spam-guard";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Unsubscribe",
-  description: `Stop receiving emails from ${SITE.name}.`,
+  description: `Leave the ${SITE.name} waitlist and newsletter.`,
   // Nothing to gain from indexing it, and a crawler that follows a tokenised
   // link out of a leaked email should not be able to surface it in results.
   robots: { index: false, follow: false },
 };
 
 /**
- * Reached two ways: from the tokenised link in an email footer, or typed in by
- * someone who no longer has the email.
+ * The one place every unsubscribe link lands — the waitlist's emails, the old
+ * launch-list emails (lib/waitlist.ts unsubscribeByToken takes both tokens) —
+ * or reached by someone who no longer has the email, who is mailed a link.
  *
  * The opt-out happens on submit, never on load. Corporate mail scanners and
  * link prefetchers follow every URL in a message with a GET, so unsubscribing
@@ -45,8 +47,8 @@ export default async function UnsubscribePage({
             one click, and nothing here tries to talk anyone round. */}
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
           {token
-            ? "One click and you're off the pre-launch list. We won't ask you to confirm and we won't email you to check."
-            : "Enter the address you signed up with and we'll take it off the pre-launch list. No account or password needed."}
+            ? "One click and you're off the waitlist and the newsletter. We won't ask you to confirm and we won't email you to check."
+            : "Enter the address you signed up with and we'll email it a link — one click there and you're off the waitlist and the newsletter."}
         </p>
       </div>
 
@@ -54,7 +56,7 @@ export default async function UnsubscribePage({
         className="animate-rise card-hairline mt-7 p-5 sm:p-6"
         style={{ animationDelay: "80ms" }}
       >
-        <UnsubscribeForm token={token} />
+        <UnsubscribeForm token={token} formToken={issueFormToken()} />
       </div>
     </div>
   );

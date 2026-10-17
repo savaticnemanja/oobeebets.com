@@ -4,31 +4,36 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizz
 import { db } from "@/db";
 import { signupSurveys, users, waitlist } from "@/db/schema";
 import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-client";
-import { accountExistsEmail, signupsOpenEmail, waitlistConfirmEmail } from "@/lib/email/templates";
+import { accountExistsEmail, signupsOpenEmail, unsubscribeLinkEmail, waitlistConfirmEmail } from "@/lib/email/templates";
+import { contactEmail, contactIdFor, mirrorConfirmed, mirrorUnsubscribe, syncNewsletter } from "@/lib/newsletter";
 import { hashToken } from "@/lib/auth";
 import { issueInvite } from "@/lib/invitations";
 import { appUrl } from "@/lib/site";
 import { OTHER, asksBettingHabits, type SignupSurvey, type SurveySource } from "@/lib/signup-survey";
 
 /**
- * The waitlist, and the sign-up that replaces it when SIGNUP_ENABLED is on.
+ * The waitlist — the one list. Both public forms join it (the homepage box and
+ * the /signup application; actions/waitlist.ts screens them first), an address
+ * counts only once confirmed, confirmed addresses are mirrored into Resend's
+ * "Waitlist" segment for newsletters (lib/newsletter.ts), and unsubscribing
+ * anywhere takes the address off both.
  *
- * Both answer the form identically whatever the address is — new, already
- * waiting, or already an account — so the form can't be used to find out who
- * has an account. The difference shows only in the owner's inbox: an
- * existing account gets "you already have one" instead.
+ * Every reply to a form is the same whatever the address is — new, already
+ * waiting, or already an account — so a form can't be used to find out who's
+ * on the list or has an account. The difference shows only in that inbox.
  */
 
 /** RFC 8058 one-click unsubscribe, which Gmail and Yahoo want on list mail. */
 function listHeaders(token: string): Record<string, string> {
   return {
-    "List-Unsubscribe": `<${appUrl(`/api/waitlist/leave?token=${encodeURIComponent(token)}`)}>`,
+    "List-Unsubscribe": `<${appUrl(`/api/unsubscribe?token=${encodeURIComponent(token)}`)}>`,
     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
   };
 }
 
-function leaveUrl(token: string): string {
-  return appUrl(`/waitlist/leave?token=${encodeURIComponent(token)}`);
+/** The page every unsubscribe link opens — a leave token or, from the old launch list, a Resend contact id. */
+function unsubscribeUrl(token: string): string {
+  return appUrl(`/unsubscribe?token=${encodeURIComponent(token)}`);
 }
 
 async function hasAccount(email: string): Promise<boolean> {
@@ -106,7 +111,7 @@ export async function joinWaitlist(
   const [answered] = await db.select({ id: signupSurveys.id }).from(signupSurveys).where(eq(signupSurveys.email, email)).limit(1);
   await sendEmail({
     to: email,
-    ...waitlistConfirmEmail({ confirmUrl: confirmUrl(token), leaveUrl: leaveUrl(leaveToken), answered: Boolean(answered) }),
+    ...waitlistConfirmEmail({ confirmUrl: confirmUrl(token), leaveUrl: unsubscribeUrl(leaveToken), answered: Boolean(answered) }),
     headers: listHeaders(leaveToken),
     idempotencyKey: idempotencyKey("waitlist-confirm", hashToken(token).slice(0, 16)),
   });
@@ -131,6 +136,8 @@ export async function confirmWaitlist(token: string): Promise<{ email: string; a
     )
     .returning({ email: waitlist.email });
   if (!row) return null;
+  // On the list now — so in the newsletter too (retried hourly if Resend fails).
+  await mirrorConfirmed(row.email);
   const [answered] = await db.select({ id: signupSurveys.id }).from(signupSurveys).where(eq(signupSurveys.email, row.email)).limit(1);
   return { email: row.email, answered: Boolean(answered) };
 }
@@ -160,14 +167,45 @@ export async function startSignup(email: string): Promise<void> {
   await issueInvite(email, null);
 }
 
-/** Off the list, and forgotten, by the token in their link. False if the link matches no one. */
-export async function leaveWaitlist(token: string): Promise<boolean> {
-  const [row] = await db
-    .delete(waitlist)
-    .where(eq(waitlist.leaveToken, token))
-    .returning({ id: waitlist.id, email: waitlist.email });
-  if (row) await db.delete(signupSurveys).where(eq(signupSurveys.email, row.email));
-  return Boolean(row);
+const CONTACT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Every unsubscribe link we've ever sent, resolved to its address and acted
+ * on: unsubscribed at Resend first (so a failure there is retried, never left
+ * half done), then off the waitlist with its answers. A leave token is in the
+ * waitlist's own emails; a Resend contact id is in the old launch-list emails.
+ * False if the token matches no one; a malformed contact id throws
+ * InvalidUnsubscribeLink.
+ */
+export async function unsubscribeByToken(token: string): Promise<boolean> {
+  let email: string | null;
+  if (CONTACT_ID.test(token)) {
+    email = await contactEmail(token);
+  } else {
+    const [row] = await db.select({ email: waitlist.email }).from(waitlist).where(eq(waitlist.leaveToken, token)).limit(1);
+    email = row?.email ?? null;
+  }
+  if (!email) return false;
+  await mirrorUnsubscribe(email);
+  await leaveWaitlistByEmail(email);
+  return true;
+}
+
+/**
+ * Someone on /unsubscribe without their email: mail the address its own link
+ * (at most once a day). Typing an address never unsubscribes it directly —
+ * that would let anyone knock a stranger off the waitlist.
+ */
+export async function requestUnsubscribeLink(email: string): Promise<void> {
+  const [row] = await db.select({ leaveToken: waitlist.leaveToken }).from(waitlist).where(eq(waitlist.email, email)).limit(1);
+  const token = row?.leaveToken ?? (await contactIdFor(email));
+  if (!token) return;
+  const day = new Date().toISOString().slice(0, 10);
+  await sendEmail({
+    to: email,
+    ...unsubscribeLinkEmail({ unsubscribeUrl: unsubscribeUrl(token) }),
+    idempotencyKey: idempotencyKey("unsubscribe-link", email, day),
+  });
 }
 
 /**
@@ -228,9 +266,10 @@ export async function getSignupSurvey(email: string): Promise<SignupSurveyRow | 
 export type SignupSurveyRow = typeof signupSurveys.$inferSelect;
 
 /**
- * Off the list by address — an unsubscribe from the old launch-list emails
- * (lib/newsletter.ts). Like leaving, it forgets the answers too, unless the
- * address has an account.
+ * Off the waitlist by address, forgetting the answers too unless the address
+ * has an account. Resend is the caller's to update: unsubscribeByToken does
+ * it first, and syncNewsletter calls this for people who already
+ * unsubscribed there.
  */
 export async function leaveWaitlistByEmail(email: string): Promise<boolean> {
   const [row] = await db.delete(waitlist).where(eq(waitlist.email, email)).returning({ id: waitlist.id });
@@ -238,17 +277,11 @@ export async function leaveWaitlistByEmail(email: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** The typed-address unsubscribe's reach (lib/newsletter.ts): only a row imported from the launch list. */
-export async function leaveImportedByEmail(email: string): Promise<boolean> {
-  const [row] = await db
-    .delete(waitlist)
-    .where(and(eq(waitlist.email, email), eq(waitlist.source, "launch-list")))
-    .returning({ id: waitlist.id });
-  if (row && !(await hasAccount(email))) await db.delete(signupSurveys).where(eq(signupSurveys.email, email));
-  return Boolean(row);
-}
-
-/** An account was made for this address: it's no longer waiting for anything. */
+/**
+ * An account was made for this address: it's no longer waiting for anything.
+ * Its Resend contact stays subscribed — they asked for the news, and making
+ * an account doesn't change that (a broadcast's own link unsubscribes them).
+ */
 export async function removeFromWaitlist(email: string): Promise<void> {
   await db.delete(waitlist).where(eq(waitlist.email, email));
 }
@@ -331,6 +364,8 @@ export async function inviteFromWaitlist(id: string, invitedBy: string): Promise
  * accepted are marked, so running it again picks up any that failed.
  */
 export async function notifyWaitlist(): Promise<{ sent: number; failed: number }> {
+  // Anyone who unsubscribed at Resend since the last hourly sync comes off first.
+  await syncNewsletter({ force: true }).catch((err) => console.error("[newsletter] sync before notify failed:", err));
   const rows = await db
     .select({ email: waitlist.email, leaveToken: waitlist.leaveToken })
     .from(waitlist)
@@ -341,7 +376,7 @@ export async function notifyWaitlist(): Promise<{ sent: number; failed: number }
   const { sent, failed } = await sendEmailBatch(
     rows.map((r) => ({
       to: r.email,
-      ...signupsOpenEmail({ signupUrl, leaveUrl: leaveUrl(r.leaveToken) }),
+      ...signupsOpenEmail({ signupUrl, leaveUrl: unsubscribeUrl(r.leaveToken) }),
       headers: listHeaders(r.leaveToken),
     })),
   );

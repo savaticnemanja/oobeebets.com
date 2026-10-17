@@ -2,37 +2,41 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { Bell, Check, Loader2 } from "lucide-react";
+import { Check, ListPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { subscribeAction } from "@/app/actions/newsletter";
+import { joinWaitlistAction } from "@/app/actions/waitlist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SpamGuardFields } from "@/components/spam-guard-fields";
 
-/** `formToken` comes from the page (issueFormToken) — see lib/spam-guard.ts. */
-export function SubscribeForm({ formToken }: { formToken: string }) {
-  const [state, formAction, pending] = useActionState(subscribeAction, null);
+/**
+ * The homepage's box: an email onto the waitlist (unconfirmed until its
+ * confirmation link is used — lib/waitlist.ts). `formToken` comes from the
+ * page (issueFormToken) — see lib/spam-guard.ts.
+ */
+export function JoinWaitlistForm({ formToken }: { formToken: string }) {
+  const [state, formAction, pending] = useActionState(joinWaitlistAction, null);
 
   // Controlled only so the confirmation can name the address back. It is the
   // one thing that turns "something happened" into "the address I typed is the
   // one that got it", and it catches a typo while the visitor still cares.
   const [email, setEmail] = React.useState("");
 
-  if (state?.ok) return <Subscribed email={email} />;
+  if (state?.ok) return <Joined email={email} />;
 
-  const errorId = state && !state.ok ? "newsletter-error" : undefined;
+  const errorId = state && !state.ok ? "waitlist-error" : undefined;
 
   return (
     <form action={formAction} className="mt-8">
       <SpamGuardFields token={formToken} />
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="flex-1">
-          <Label htmlFor="newsletter-email" className="sr-only">
+          <Label htmlFor="waitlist-email" className="sr-only">
             Email address
           </Label>
           <Input
-            id="newsletter-email"
+            id="waitlist-email"
             name="email"
             type="email"
             autoComplete="email"
@@ -49,9 +53,9 @@ export function SubscribeForm({ formToken }: { formToken: string }) {
           {pending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (
-            <Bell aria-hidden="true" />
+            <ListPlus aria-hidden="true" />
           )}
-          Notify me
+          Join the waitlist
         </Button>
       </div>
 
@@ -62,8 +66,8 @@ export function SubscribeForm({ formToken }: { formToken: string }) {
       )}
 
       <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-        We&rsquo;ll ask you to confirm, then email you once &mdash; the day there&rsquo;s a place
-        for you. No picks, no spam, leave any time.
+        We&rsquo;ll ask you to confirm, then email you the day there&rsquo;s a place for you,
+        with the odd update before. No picks, no spam, unsubscribe in one click.
       </p>
     </form>
   );
@@ -84,7 +88,7 @@ export function SubscribeForm({ formToken }: { formToken: string }) {
  * regardless: a screen reader user who just submitted is otherwise parked on a
  * button that no longer exists.
  */
-function Subscribed({ email }: { email: string }) {
+function Joined({ email }: { email: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -98,7 +102,7 @@ function Subscribed({ email }: { email: string }) {
     <div
       ref={ref}
       tabIndex={-1}
-      aria-labelledby="newsletter-subscribed"
+      aria-labelledby="waitlist-joined"
       className="card-hairline brand-glow animate-rise mt-8 flex items-start gap-4 p-5 focus:outline-none"
     >
       <span className="mt-0.5 shrink-0 rounded-full bg-hit-dim p-2 text-hit">
@@ -107,7 +111,7 @@ function Subscribed({ email }: { email: string }) {
 
       <div className="min-w-0">
         <h2
-          id="newsletter-subscribed"
+          id="waitlist-joined"
           className="text-base font-semibold tracking-tight text-fg"
         >
           Check your inbox

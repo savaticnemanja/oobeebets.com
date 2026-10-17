@@ -239,6 +239,13 @@
       "when": 1792276684083,
       "tag": "0033_waitlist_double_opt_in",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792278292672,
+      "tag": "0034_waitlist_newsletter_mirror",
+      "breakpoints": true
     }
   ]
 }

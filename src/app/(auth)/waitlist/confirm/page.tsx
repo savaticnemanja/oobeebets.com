@@ -17,8 +17,8 @@ export default async function ConfirmWaitlistPage({ searchParams }: { searchPara
     <>
       <h1 className="text-2xl font-semibold tracking-tight">Confirm your place</h1>
       <p className="mt-2 text-sm text-fg-muted">
-        One click and you&apos;re on the oobee bets waitlist. We&apos;ll email you once, the day there&apos;s a
-        place for you.
+        One click and you&apos;re on the oobee bets waitlist. We&apos;ll email you the day there&apos;s a place
+        for you, and the odd update before then.
       </p>
       <div className="mt-8">
         <ConfirmWaitlistForm token={token ?? ""} />

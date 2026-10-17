@@ -30,12 +30,10 @@ import type { ActionState } from "@/lib/validation";
  */
 export function GetStartedForm({
   open,
-  source,
   formToken,
   initialEmail = "",
 }: {
   open: boolean;
-  source: "landing" | "signup";
   /** From the page (issueFormToken) — see lib/spam-guard.ts. */
   formToken: string;
   /** /signup?email=… — the confirm page's "answer the questions" link. */
@@ -67,7 +65,6 @@ export function GetStartedForm({
       return;
     }
     const data = new FormData();
-    data.set("source", source);
     appendSurvey(data, values);
     // The bot checks' two hidden inputs ride along from the form itself.
     const dom = new FormData(e.currentTarget);
@@ -122,7 +119,7 @@ export function GetStartedForm({
             <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
               {open
                 ? "We'll email you a link to finish creating your account."
-                : "We'll ask you to confirm by email, then write once — the day sign-ups open. No picks, no spam, leave any time."}
+                : "We'll ask you to confirm by email, then write the day sign-ups open, with the odd update before. No picks, no spam, unsubscribe in one click."}
             </p>
           </div>
         </>

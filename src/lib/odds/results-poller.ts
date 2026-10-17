@@ -1,4 +1,5 @@
 import { sweepExpired } from "@/lib/housekeeping";
+import { syncNewsletter } from "@/lib/newsletter";
 import { ensureScores } from "./sync";
 
 /**
@@ -35,6 +36,8 @@ async function tick() {
   }
   // Rides on this timer rather than starting another; it runs once a day.
   await sweepExpired().catch((err) => console.error("[sweep] failed:", err));
+  // Hourly (its own claim): Resend's Waitlist segment ↔ the confirmed waitlist.
+  await syncNewsletter().catch((err) => console.error("[newsletter] sync failed:", err));
 }
 
 export function startResultsPoller(): void {

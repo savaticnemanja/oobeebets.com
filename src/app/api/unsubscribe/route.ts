@@ -1,39 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { unsubscribeById } from "@/lib/newsletter";
+import { unsubscribeByToken } from "@/lib/waitlist";
 import { appUrl } from "@/lib/site";
 
 /**
- * The RFC 8058 one-click unsubscribe endpoint named in every message's
- * List-Unsubscribe header.
+ * One-click unsubscribe (RFC 8058) for every email we send: the mailbox POSTs
+ * here from the List-Unsubscribe header. The token is a waitlist leave token
+ * or, in the old launch-list emails, a Resend contact id — lib/waitlist.ts
+ * unsubscribeByToken takes either. 204 even for a token that matches no one:
+ * that outcome is the one they asked for.
  *
- * This is not the page a person visits — that is /unsubscribe. Gmail and Yahoo
- * POST here themselves when someone uses the unsubscribe control built into
- * the mail client, with no browser involved and nothing to render.
+ * A GET is a person following the link, so it goes to the page and its button
+ * — never unsubscribed on load, which link scanners would trigger.
  */
-
 export async function POST(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (!token) return new NextResponse("Missing token", { status: 400 });
-
   try {
-    await unsubscribeById(token);
+    await unsubscribeByToken(token);
   } catch (err) {
-    console.error("[newsletter] one-click unsubscribe failed:", err);
+    console.error("[waitlist] one-click unsubscribe failed:", err);
+    // A 5xx makes the mailbox provider retry.
     return new NextResponse("Unsubscribe failed", { status: 500 });
   }
-
-  // A 2xx is the whole contract; the provider shows its own confirmation.
   return new NextResponse(null, { status: 204 });
 }
 
-/**
- * Some clients follow the header as an ordinary link instead of posting to it.
- * Hand those to the real page rather than acting on a GET, so that a link
- * prefetcher cannot unsubscribe somebody by scanning their mail.
- */
 export function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
-  return NextResponse.redirect(
-    appUrl(`/unsubscribe?token=${encodeURIComponent(token)}`),
-  );
+  return NextResponse.redirect(appUrl(`/unsubscribe?token=${encodeURIComponent(token)}`));
 }

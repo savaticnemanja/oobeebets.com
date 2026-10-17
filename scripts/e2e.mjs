@@ -1265,7 +1265,7 @@ console.log("\nWaitlist, change password and profile pictures");
     await hydrated(page, 'form input[type="email"]');
     await page.fill('form input[type="email"]', homeEmail);
     await page.waitForTimeout(1700);
-    await page.getByRole("button", { name: /Notify me/ }).click();
+    await page.getByRole("button", { name: "Join the waitlist" }).click();
     await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
     let joined;
     for (let i = 0; i < 40 && !joined; i++) {
@@ -1307,7 +1307,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.locator('input[name="website"]').evaluate((el) => (el.value = "http://spam.example"));
   await page.fill('form input[type="email"]', `e2e-bot-${Date.now()}@example.com`);
   await page.waitForTimeout(1700);
-  await page.getByRole("button", { name: /Notify me/ }).click();
+  await page.getByRole("button", { name: "Join the waitlist" }).click();
   check(
     await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 }).then(() => true, () => false),
     "a bot filling the homepage decoy is told it worked",
@@ -1353,13 +1353,15 @@ console.log("\nWaitlist, change password and profile pictures");
   );
   await adminCtx.close();
 
-  // The leave link asks first: opening it changes nothing.
+  // Every unsubscribe link lands on /unsubscribe (old /waitlist/leave links
+  // redirect there) and asks first: opening it changes nothing.
   await page.goto(`${APP_URL}/waitlist/leave?token=${encodeURIComponent(row.leave_token)}`);
-  await hydrated(page);
+  await page.waitForURL("**/unsubscribe?token=**", { timeout: 10000 });
+  await hydrated(page, "form button");
   const [{ n: still }] = await sql`select count(*)::int as n from waitlist where email = ${waitEmail}`;
-  check(still === 1, "opening the leave link doesn't act on its own");
-  await page.getByRole("button", { name: "Yes, take me off the waitlist" }).click();
-  await page.getByText("You're off the waitlist").waitFor({ timeout: 10000 });
+  check(still === 1, "opening the unsubscribe link doesn't act on its own");
+  await page.getByRole("button", { name: "Unsubscribe" }).click();
+  await page.getByText("You’re unsubscribed").waitFor({ timeout: 10000 });
   const [{ n: gone }] = await sql`select count(*)::int as n from waitlist where email = ${waitEmail}`;
   const [{ n: answersGone }] = await sql`select count(*)::int as n from signup_surveys where email = ${waitEmail}`;
   check(answersGone === 0, "leaving the waitlist forgets the answers too");
@@ -1370,7 +1372,25 @@ console.log("\nWaitlist, change password and profile pictures");
   await sql`insert into waitlist (email, leave_token, source) values (${`e2e-oneclick-${Date.now()}@example.com`}, ${oneClick}, 'signup')`;
   const res = await page.request.post(`${APP_URL}/api/waitlist/leave?token=${oneClick}`);
   const [{ n: oneClickLeft }] = await sql`select count(*)::int as n from waitlist where leave_token = ${oneClick}`;
-  check(res.status() === 204 && oneClickLeft === 0, "one-click unsubscribe takes them off", `${res.status()}`);
+  check(res.status() === 204 && oneClickLeft === 0, "one-click unsubscribe takes them off (old address)", `${res.status()}`);
+  const oneClick2 = randomBytes(24).toString("base64url");
+  await sql`insert into waitlist (email, leave_token, source) values (${`e2e-oneclick2-${Date.now()}@example.com`}, ${oneClick2}, 'signup')`;
+  const res2 = await page.request.post(`${APP_URL}/api/unsubscribe?token=${oneClick2}`);
+  const [{ n: oneClickLeft2 }] = await sql`select count(*)::int as n from waitlist where leave_token = ${oneClick2}`;
+  check(res2.status() === 204 && oneClickLeft2 === 0, "and at the address new emails use", `${res2.status()}`);
+
+  // Typing an address only mails it a link — it never unsubscribes a stranger.
+  const typedEmail = `e2e-typed-${Date.now()}@example.com`;
+  await sql`insert into waitlist (email, leave_token, source, confirmed_at) values (${typedEmail}, ${randomBytes(24).toString("base64url")}, 'signup', now())`;
+  await page.goto(`${APP_URL}/unsubscribe`);
+  await hydrated(page, 'form input[type="email"]');
+  await page.fill('form input[type="email"]', typedEmail);
+  await page.waitForTimeout(1700);
+  await page.getByRole("button", { name: "Email me a link" }).click();
+  await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
+  const [{ n: typedLeft }] = await sql`select count(*)::int as n from waitlist where email = ${typedEmail}`;
+  check(typedLeft === 1, "typing an address on /unsubscribe mails a link instead of acting");
+  await sql`delete from waitlist where email = ${typedEmail}`;
   await ctx.close();
 }
 {

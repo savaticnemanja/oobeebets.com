@@ -11,6 +11,7 @@ import { SESSION_COOKIE, getAuth, rateLimit, verifyPassword } from "@/lib/auth";
 import { LIVE_STATUSES } from "@/lib/billing/access";
 import { sendEmail } from "@/lib/email/resend-client";
 import { accountDeletedEmail } from "@/lib/email/templates";
+import { mirrorForget } from "@/lib/newsletter";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 
 const deleteSchema = z.object({
@@ -77,6 +78,13 @@ export async function deleteAccountAction(_prev: ActionState, formData: FormData
     await tx.insert(auditLog).values({ actorId: null, actorEmail: null, action: "user.deleted", entity: "user", entityId: id });
     await tx.delete(users).where(eq(users.id, id));
   });
+
+  // Forgotten by the newsletter too — the account page promises everything goes.
+  try {
+    await mirrorForget(email);
+  } catch (err) {
+    console.error("[account] couldn't remove the Resend contact:", err);
+  }
 
   // The sessions went with the account; the cookie goes too.
   (await cookies()).delete(SESSION_COOKIE);

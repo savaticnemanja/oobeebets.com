@@ -1,18 +1,69 @@
 import "server-only";
+import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
+import { db } from "@/db";
+import { waitlist } from "@/db/schema";
 import { resendClient } from "@/lib/email/resend-client";
-import { leaveImportedByEmail, leaveWaitlistByEmail } from "@/lib/waitlist";
+import { planNewsletterSync } from "@/lib/newsletter-plan";
+import { claim } from "@/lib/sync-claim";
 
 /**
- * What's left of the launch list: unsubscribing from it.
+ * The newsletter: Resend's "Waitlist" segment, kept as a mirror of the
+ * confirmed waitlist so a broadcast sent from Resend reaches exactly the people
+ * on it. The waitlist (lib/waitlist.ts) stays the list — this file only copies
+ * it across, and carries the one change that flows back: someone who
+ * unsubscribes through a Resend broadcast's link comes off the waitlist too.
  *
- * Until 18 Oct 2026 the homepage box added addresses to a Resend contact book
- * and mailed them a welcome. That list was merged into the waitlist (the 28
- * contacts that weren't bot sign-ups were imported as confirmed, source
- * "launch-list"), and the homepage box now joins the waitlist with a
- * confirmation email (lib/waitlist.ts). The emails already sent still carry
- * unsubscribe links into Resend — /api/unsubscribe and the /unsubscribe page —
- * so these keep working, and now take the address off the waitlist as well.
+ *  - Confirming a place subscribes the address here (mirrorSubscribe).
+ *  - Unsubscribing anywhere — our emails' links, the old launch-list links,
+ *    /unsubscribe — marks the contact unsubscribed (mirrorUnsubscribe). The
+ *    contact stays at Resend as the record that they opted out.
+ *  - Deleting an account forgets the contact altogether (mirrorForget).
+ *  - syncNewsletter, hourly, mends anything a failed call left behind, and
+ *    pulls in unsubscribes made at Resend.
+ *
+ * With no RESEND_API_KEY (dev, CI) every function here does nothing.
  */
+
+/** RESEND_SEGMENT_ID, or the older RESEND_AUDIENCE_ID — audiences are segments now. */
+const SEGMENT_ID = process.env.RESEND_SEGMENT_ID || process.env.RESEND_AUDIENCE_ID || null;
+const enabled = () => Boolean(process.env.RESEND_API_KEY);
+
+/** Resend allows two requests a second; the sync spaces its writes to stay under it. */
+const pause = () => new Promise((r) => setTimeout(r, 600));
+
+function fail(what: string, error: { name: string; message: string }): never {
+  throw new Error(`Resend ${what} failed: ${error.name} — ${error.message}`);
+}
+
+/** Subscribed, and in the segment. Every step is idempotent at Resend. */
+export async function mirrorSubscribe(email: string): Promise<void> {
+  if (!enabled()) return;
+  const contacts = resendClient().contacts;
+  // Create returns the existing contact if there is one, but leaves its
+  // unsubscribed flag alone — so a rejoin needs the update as well.
+  const created = await contacts.create({ email, unsubscribed: false, ...(SEGMENT_ID ? { segments: [{ id: SEGMENT_ID }] } : {}) });
+  if (created.error) fail("contacts.create", created.error);
+  const updated = await contacts.update({ email, unsubscribed: false });
+  if (updated.error) fail("contacts.update", updated.error);
+  if (SEGMENT_ID) {
+    const added = await contacts.segments.add({ email, segmentId: SEGMENT_ID });
+    if (added.error) fail("contacts.segments.add", added.error);
+  }
+}
+
+/** Unsubscribed (a contact that doesn't exist is already as unsubscribed as it gets). */
+export async function mirrorUnsubscribe(email: string): Promise<void> {
+  if (!enabled()) return;
+  const { error } = await resendClient().contacts.update({ email, unsubscribed: true });
+  if (error && error.name !== "not_found") fail("contacts.update", error);
+}
+
+/** Gone from Resend entirely — for account deletion, which promises to forget them. */
+export async function mirrorForget(email: string): Promise<void> {
+  if (!enabled()) return;
+  const { error } = await resendClient().contacts.remove({ email });
+  if (error && error.name !== "not_found") fail("contacts.remove", error);
+}
 
 export class InvalidUnsubscribeLink extends Error {
   constructor() {
@@ -22,69 +73,99 @@ export class InvalidUnsubscribeLink extends Error {
 }
 
 /**
- * Opts an address out by the contact id carried in its unsubscribe link.
- * Returns false only when the id matches nothing — an already-unsubscribed
- * contact still reports success, because from the subscriber's side the
- * outcome they asked for is the outcome they have.
- *
- * The two failure modes are deliberately not merged, because Resend
- * distinguishes them and so must we (verified against the live API):
- *
- *  - A well-formed id that matches nobody comes back `not_found`. That is
- *    swallowed into a success, or the page becomes a way to test whether a
- *    given contact exists.
- *  - A malformed id comes back `validation_error`. Reporting success there
- *    would tell someone with a truncated link that they are unsubscribed when
- *    nothing happened, and they would keep getting mail. It carries no
- *    membership information either, since it cannot be anyone's id — so it is
- *    safe, and honest, to say the link is broken.
+ * The address behind a Resend contact id — what the old launch-list emails
+ * carry in their unsubscribe links. Null for an id that matches nobody; a
+ * malformed id throws InvalidUnsubscribeLink (Resend answers validation_error),
+ * so a truncated link is reported rather than quietly "succeeding".
  */
-export async function unsubscribeById(contactId: string): Promise<boolean> {
-  // The id is only in mail we sent to that address, so it stands for the
-  // address: whatever list it's on now, it comes off.
-  const { data: contact, error: lookup } = await resendClient().contacts.get({ id: contactId });
-  if (lookup) {
-    if (lookup.name === "not_found") return false;
-    if (lookup.name === "validation_error") throw new InvalidUnsubscribeLink();
-    throw new Error(`Resend contacts.get failed: ${lookup.name} — ${lookup.message}`);
-  }
-
-  const { error } = await resendClient().contacts.update({
-    id: contactId,
-    unsubscribed: true,
-  });
-
+export async function contactEmail(contactId: string): Promise<string | null> {
+  if (!enabled()) return null;
+  const { data, error } = await resendClient().contacts.get({ id: contactId });
   if (error) {
-    if (error.name === "not_found") return false;
+    if (error.name === "not_found") return null;
     if (error.name === "validation_error") throw new InvalidUnsubscribeLink();
-    throw new Error(`Resend contacts.update failed: ${error.name} — ${error.message}`);
+    fail("contacts.get", error);
   }
+  return data?.email?.toLowerCase() ?? null;
+}
 
-  if (contact?.email) await leaveWaitlistByEmail(contact.email.toLowerCase());
-  return true;
+/** A subscribed contact's id, for an unsubscribe link mailed to someone not on the waitlist (an account holder). */
+export async function contactIdFor(email: string): Promise<string | null> {
+  if (!enabled()) return null;
+  const { data, error } = await resendClient().contacts.get({ email });
+  if (error) {
+    if (error.name === "not_found") return null;
+    fail("contacts.get", error);
+  }
+  return data && !data.unsubscribed ? data.id : null;
+}
+
+/** Every page of a contacts listing (all contacts, or one segment's). */
+async function listAll(segmentId?: string): Promise<{ email: string; unsubscribed: boolean }[]> {
+  const out: { email: string; unsubscribed: boolean }[] = [];
+  let after: string | undefined;
+  for (;;) {
+    const { data, error } = await resendClient().contacts.list({ limit: 100, ...(after ? { after } : {}), ...(segmentId ? { segmentId } : {}) });
+    if (error) fail("contacts.list", error);
+    const page = data?.data ?? [];
+    out.push(...page.map((c) => ({ email: c.email.toLowerCase(), unsubscribed: c.unsubscribed })));
+    if (!data?.has_more || page.length === 0) return out;
+    after = page[page.length - 1].id;
+    await pause();
+  }
 }
 
 /**
- * Opts out by typed address, for someone who no longer has the email.
- *
- * No confirmation step on purpose. The alternative — mailing a link to
- * somebody who has just told us they want less mail — is worse for the person
- * we would be protecting. Since anyone can type any address here, it only
- * reaches what that address got from the old launch list: the Resend contact,
- * and its imported waitlist row (source "launch-list"). Anyone who joined the
- * waitlist since leaves with the link in their own email, which proves the
- * address is theirs — so a griefer can't knock strangers off the waitlist.
+ * Brings Resend's segment in line with the confirmed waitlist, and the
+ * waitlist in line with unsubscribes made at Resend. Hourly from the results
+ * poller (a claim keeps it to one process), and on demand before the
+ * "sign-ups are open" email goes out. See planNewsletterSync for the rules.
  */
-export async function unsubscribeByEmail(email: string): Promise<boolean> {
-  const { error } = await resendClient().contacts.update({
-    email,
-    unsubscribed: true,
-  });
+export async function syncNewsletter({ force = false }: { force?: boolean } = {}): Promise<void> {
+  if (!enabled()) return;
+  if (!force && !(await claim("sync:newsletter", 55))) return;
 
-  if (error && error.name !== "not_found") {
-    throw new Error(`Resend contacts.update failed: ${error.name} — ${error.message}`);
+  const started = new Date();
+  const rows = await db
+    .select({ email: waitlist.email, mirroredAt: waitlist.mirroredAt })
+    .from(waitlist)
+    .where(and(isNotNull(waitlist.confirmedAt), lt(waitlist.confirmedAt, started)));
+  const [contacts, members] = await Promise.all([listAll(), SEGMENT_ID ? listAll(SEGMENT_ID) : Promise.resolve([])]);
+  const plan = planNewsletterSync(rows, contacts, new Set(members.map((m) => m.email)));
+
+  for (const email of [...plan.create, ...plan.resubscribe, ...plan.addToSegment]) {
+    try {
+      await mirrorSubscribe(email);
+      plan.markMirrored.push(email);
+    } catch (err) {
+      console.error(`[newsletter] couldn't mirror ${email}:`, err);
+    }
+    await pause();
+  }
+  if (plan.markMirrored.length > 0) {
+    await db.update(waitlist).set({ mirroredAt: started }).where(inArray(waitlist.email, plan.markMirrored));
+  }
+  // Unsubscribed at Resend after we'd mirrored them: they've left.
+  if (plan.remove.length > 0) {
+    const { leaveWaitlistByEmail } = await import("@/lib/waitlist");
+    for (const email of plan.remove) await leaveWaitlistByEmail(email);
   }
 
-  const imported = await leaveImportedByEmail(email);
-  return !error || imported;
+  const changed = plan.create.length + plan.resubscribe.length + plan.addToSegment.length + plan.remove.length;
+  if (changed > 0) {
+    console.log(
+      `[newsletter] synced: +${plan.create.length} new, ${plan.resubscribe.length} re-subscribed, ` +
+        `${plan.addToSegment.length} into the segment, ${plan.remove.length} unsubscribed at Resend and taken off the waitlist`,
+    );
+  }
+}
+
+/** For one row just confirmed: mirror it now, and note it; the sync retries if this fails. */
+export async function mirrorConfirmed(email: string): Promise<void> {
+  try {
+    await mirrorSubscribe(email);
+    if (enabled()) await db.update(waitlist).set({ mirroredAt: new Date() }).where(eq(waitlist.email, email));
+  } catch (err) {
+    console.error(`[newsletter] couldn't mirror ${email} on confirm (the hourly sync will):`, err);
+  }
 }

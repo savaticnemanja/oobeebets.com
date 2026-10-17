@@ -309,6 +309,13 @@ export const waitlist = pgTable(
     confirmTokenHash: text("confirm_token_hash"),
     /** The last confirmation email — at most one a day per address. */
     confirmSentAt: timestamp("confirm_sent_at", { withTimezone: true }),
+    /**
+     * When this confirmed address was last put, subscribed, in Resend's
+     * "Waitlist" segment (lib/newsletter.ts). Null = not mirrored yet, so a
+     * Resend contact that reads unsubscribed is a rejoin to re-subscribe, not
+     * someone who left — see planNewsletterSync.
+     */
+    mirroredAt: timestamp("mirrored_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

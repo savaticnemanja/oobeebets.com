@@ -45,6 +45,7 @@ import { safeNextPath } from "../src/lib/safe-next.ts";
 import { signupSurveySchema } from "../src/lib/signup-survey.ts";
 import { unitsSchema } from "../src/lib/validation.ts";
 import { checkFormToken, signFormToken } from "../src/lib/form-token.ts";
+import { planNewsletterSync } from "../src/lib/newsletter-plan.ts";
 import { NFL_TEAM_ABBR, gradeProp, playerKey } from "../src/lib/odds/props.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
@@ -539,6 +540,36 @@ console.log("\nForm tokens (lib/form-token.ts)");
   check(checkFormToken("other-secret", token, t0 + 5000, { minMs: 0, maxMs: 1e12 }) === "invalid", "another key's token is refused");
   check(checkFormToken(key, token.replace(/.$/, (c) => (c === "A" ? "B" : "A")), t0 + 5000, { minMs: 0, maxMs: 1e12 }) === "invalid", "a tampered token is refused");
   check(checkFormToken(key, undefined, t0, { minMs: 0, maxMs: 1e12 }) === "invalid", "no token is refused");
+}
+
+console.log("\nNewsletter mirror rules (lib/newsletter-plan.ts)");
+{
+  const at = new Date("2026-10-18T00:00:00Z");
+  const plan = planNewsletterSync(
+    [
+      { email: "new@x.com", mirroredAt: null },
+      { email: "Left@x.com", mirroredAt: at },
+      { email: "rejoined@x.com", mirroredAt: null },
+      { email: "outside@x.com", mirroredAt: at },
+      { email: "imported@x.com", mirroredAt: null },
+      { email: "settled@x.com", mirroredAt: at },
+    ],
+    [
+      { email: "left@x.com", unsubscribed: true },
+      { email: "rejoined@x.com", unsubscribed: true },
+      { email: "outside@x.com", unsubscribed: false },
+      { email: "imported@x.com", unsubscribed: false },
+      { email: "settled@x.com", unsubscribed: false },
+      { email: "account-holder@x.com", unsubscribed: false },
+    ],
+    new Set(["imported@x.com", "settled@x.com", "account-holder@x.com"]),
+  );
+  check(plan.create.join() === "new@x.com", "a confirmed address with no contact is created");
+  check(plan.remove.join() === "left@x.com", "one mirrored, then unsubscribed at Resend, comes off the waitlist");
+  check(plan.resubscribe.join() === "rejoined@x.com", "one confirmed again since is re-subscribed, not removed");
+  check(plan.addToSegment.join() === "outside@x.com", "a subscribed contact outside the segment is added to it");
+  check(plan.markMirrored.join() === "imported@x.com", "one already right at Resend is only marked");
+  check(!JSON.stringify(plan).includes("settled@") && !JSON.stringify(plan).includes("account-holder@"), "nothing else is touched");
 }
 
 console.log("\nPlayer props graded from box scores");

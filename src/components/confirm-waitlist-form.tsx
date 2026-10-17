@@ -21,7 +21,7 @@ export function ConfirmWaitlistForm({ token }: { token: string }) {
             <h2 className="text-base font-semibold tracking-tight text-fg">You&apos;re on the list</h2>
             <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               <span className="break-words font-medium text-fg">{state.email}</span> is confirmed. We&apos;ll
-              email you the day there&apos;s a place for you.
+              email you the day there&apos;s a place for you, and the odd update before then.
             </p>
           </div>
         </div>

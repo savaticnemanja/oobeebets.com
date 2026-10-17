@@ -53,10 +53,12 @@ export default function PrivacyPage() {
           and what you&apos;d want from us). We email you once to confirm the address is yours; if you
           don&apos;t, the address and any answers are deleted after 7 days. Once confirmed, we use the
           address only to tell you when there&apos;s a place for you, and the answers to understand
-          who&apos;s testing. Every waitlist email has a link to leave, and leaving deletes the address
-          and the answers. Making an account takes you off the waitlist; the answers stay with your
-          account. If you joined our earlier launch list, your address was moved here, and our email
-          provider (Resend) also kept a copy from then.
+          who&apos;s testing. Every email has a link to unsubscribe, and unsubscribing deletes the address
+          and the answers from the waitlist. Making an account takes you off the waitlist; the answers stay with your
+          account. Once you&apos;ve confirmed, your address is also on our newsletter list at our email
+          provider (Resend), for the occasional update before launch; unsubscribing from any of our
+          emails takes you off both, and Resend keeps a note that you unsubscribed so you aren&apos;t
+          mailed again. Deleting an account removes the address from Resend altogether.
         </p>
         <p>
           <strong className="text-fg">Signing in and security.</strong> For each device you sign
