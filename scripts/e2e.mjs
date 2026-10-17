@@ -834,11 +834,12 @@ await seedStatsFixture(sql);
   await page.goto(`${APP_URL}/players?sport=nfl&season=${STATS_SEASON}`);
   await hydrated(page, "button");
   check((await page.locator('nav.fixed a[href="/players"]').count()) === 0, "Players is not in the bottom bar");
+  // Measured before the drawer opens: its slide-in briefly pokes past the edge.
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  check(width <= 390, "the table never scrolls the page sideways", `scrollWidth=${width}`);
   await page.getByRole("button", { name: "Open menu" }).click();
   const link = page.getByRole("dialog").getByRole("link", { name: "Players" });
   check(await link.isVisible(), "Players is in the phone drawer");
-  const width = await page.evaluate(() => document.documentElement.scrollWidth);
-  check(width <= 390, "the table never scrolls the page sideways", `scrollWidth=${width}`);
   await ctx.close();
 }
 await dropStatsFixture(sql);
