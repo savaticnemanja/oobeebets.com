@@ -7,6 +7,8 @@ import { requireAdminPage } from "@/lib/auth";
 import { deviceLabel, getUserDetail } from "@/lib/admin/users";
 import { getActivity } from "@/lib/admin/activity";
 import { getPlayerFollows } from "@/lib/stats";
+import { getSignupSurvey } from "@/lib/waitlist";
+import { SurveyAnswerList } from "@/components/admin/survey-answers";
 import { getPlayedParlays, getUserParlays } from "@/lib/parlay-store";
 import { SPEND_BAND_LABELS, FEEDBACK_KIND_LABELS } from "@/lib/validation";
 import { FOLLOW_STAKE_UNITS } from "@/lib/follows";
@@ -44,6 +46,7 @@ export default async function AdminUserPage({
   const [detail, bets] = await Promise.all([getUserDetail(id), getPlayerFollows(id)]);
   if (!detail || !bets) notFound();
   const { user, counts } = detail;
+  const survey = await getSignupSurvey(user.email);
   const name = user.displayName?.trim() || user.username;
   const lastActive = [user.lastLoginAt, detail.sessions[0]?.lastSeenAt]
     .filter((d): d is Date => Boolean(d))
@@ -131,6 +134,7 @@ export default async function AdminUserPage({
           </KpiGrid>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="grid content-start gap-4">
             <Panel id="account" title="Account">
               <dl className="divide-y divide-border/60 text-sm">
                 <Fact label="Came in">
@@ -146,9 +150,10 @@ export default async function AdminUserPage({
                 <Fact label="21+ and Terms">
                   {user.termsAcceptedAt ? <LocalTime at={user.termsAcceptedAt} format="date" /> : "Not recorded"}
                 </Fact>
-                <Fact label="Monthly spend">
-                  {user.monthlySpendBand ? SPEND_BAND_LABELS[user.monthlySpendBand] : "Not given"}
-                </Fact>
+                {/* Asked at sign-up until 17 Oct; the application below replaced it. */}
+                {user.monthlySpendBand && (
+                  <Fact label="Monthly spend">{SPEND_BAND_LABELS[user.monthlySpendBand]}</Fact>
+                )}
                 <Fact label="Phone">{user.phone ?? "Not given"}</Fact>
                 <Fact label="Plan">{detail.plan ?? "Free"}</Fact>
                 <Fact label="Parlays built">
@@ -157,6 +162,17 @@ export default async function AdminUserPage({
                 </Fact>
               </dl>
             </Panel>
+
+            <Panel id="application" title="Beta application" description="Their answers when they signed up">
+              {survey ? (
+                <div className="text-sm">
+                  <SurveyAnswerList s={survey} />
+                </div>
+              ) : (
+                <p className="text-sm text-fg-muted">Not answered — they joined before the application existed.</p>
+              )}
+            </Panel>
+            </div>
 
             <div className="grid content-start gap-4">
               <Panel id="sessions" title="Signed in on" description="Devices with a live session">

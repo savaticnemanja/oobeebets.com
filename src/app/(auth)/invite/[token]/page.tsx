@@ -52,12 +52,10 @@ export default async function InvitePage({
     );
   }
 
+  const needsSurvey = !(await hasSignupSurvey(invite.email));
   return (
-    <OnboardingForm
-      email={invite.email}
-      token={token}
-      selfServe={invite.invitedBy === null}
-      needsSurvey={!(await hasSignupSurvey(invite.email))}
-    />
+    <div data-wide={needsSurvey || undefined}>
+      <OnboardingForm email={invite.email} token={token} selfServe={invite.invitedBy === null} needsSurvey={needsSurvey} />
+    </div>
   );
 }

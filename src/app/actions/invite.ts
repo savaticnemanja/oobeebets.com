@@ -143,7 +143,7 @@ export async function acceptInviteAction(
     return { ok: false, error: "Too many attempts. Try again in 15 minutes." };
   }
 
-  const { token, password, name, phone, spendBand } = parsed.data;
+  const { token, password, name, phone } = parsed.data;
 
   // The posted `email` is a hidden field mirroring what the server already
   // resolved — it's for the client's display, not trusted here. The account
@@ -157,7 +157,8 @@ export async function acceptInviteAction(
   // this address already answered it there.
   let survey: SignupSurvey | null = null;
   if (!(await hasSignupSurvey(invite.email))) {
-    const s = signupSurveySchema.safeParse({ ...surveyFromForm(formData), email: invite.email });
+    // Age is confirmed by the Terms box the schema above already required.
+    const s = signupSurveySchema.safeParse({ ...surveyFromForm(formData), email: invite.email, is21: "yes" });
     if (!s.success) {
       return { ok: false, error: "Check the fields below", fieldErrors: fieldErrorsFrom(s.error) };
     }
@@ -178,7 +179,6 @@ export async function acceptInviteAction(
         displayName: name,
         username: await mintUsername(name, invite.email),
         phone,
-        monthlySpendBand: spendBand,
         role: "user",
         // Clicking a link mailed to this address is a real verification signal.
         emailVerifiedAt: new Date(),

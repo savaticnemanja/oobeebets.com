@@ -1,4 +1,3 @@
-import * as React from "react";
 import type { Metadata } from "next";
 import { WaitlistInvite, WaitlistNotify } from "@/components/admin/waitlist-controls";
 import { LocalTime } from "@/components/local-time";
@@ -9,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Hourglass } from "lucide-react";
 import { requireAdminPage } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
-import { getWaitlistPage, type SignupSurveyRow } from "@/lib/waitlist";
+import { getWaitlistPage } from "@/lib/waitlist";
+import { SurveyAnswerList } from "@/components/admin/survey-answers";
 
 export const metadata: Metadata = { title: "Waitlist" };
 
@@ -94,7 +94,14 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
                   {r.invitedAt && <Badge variant="brand">Invited</Badge>}
                   {r.notifiedAt && <Badge>Told sign-ups are open</Badge>}
                 </p>
-                {r.survey && <SurveyAnswers s={r.survey} />}
+                {r.survey && (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-fg-muted hover:text-fg">{r.survey.fullName} — answers</summary>
+                    <div className="mt-2">
+                      <SurveyAnswerList s={r.survey} />
+                    </div>
+                  </details>
+                )}
               </div>
               <WaitlistInvite id={r.id} invited={r.invitedAt !== null} />
             </li>
@@ -106,34 +113,3 @@ export default async function AdminWaitlistPage({ searchParams }: { searchParams
   );
 }
 
-/** The /signup application, folded under the row. */
-function SurveyAnswers({ s }: { s: SignupSurveyRow }) {
-  const withOther = (xs: string[], other: string | null) => xs.map((x) => (x === "Other" && other ? `Other: ${other}` : x)).join(", ");
-  const yn = (b: boolean) => (b ? "Yes" : "No");
-  const rows: [string, string][] = [
-    ["Name", s.fullName],
-    ["21+", yn(s.is21)],
-    ["Bets", s.betFrequency],
-    ["Experience", s.experience],
-    ["Sports", withOther(s.sports, s.sportsOther)],
-    ["Sportsbook", s.sportsbook === "Other" && s.sportsbookOther ? `Other: ${s.sportsbookOther}` : s.sportsbook],
-    ["Typical bet", s.betSize],
-    ["Decides with", withOther(s.decisionTools, s.decisionToolsOther)],
-    ["Wants", s.wants],
-    ["Will give feedback", yn(s.willGiveFeedback)],
-    ["Will do survey", yn(s.willDoSurvey)],
-  ];
-  return (
-    <details className="mt-2 text-xs">
-      <summary className="cursor-pointer text-fg-muted hover:text-fg">{s.fullName} — answers</summary>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-        {rows.map(([k, v]) => (
-          <React.Fragment key={k}>
-            <dt className="text-fg-subtle">{k}</dt>
-            <dd className="whitespace-pre-wrap break-words text-fg">{v}</dd>
-          </React.Fragment>
-        ))}
-      </dl>
-    </details>
-  );
-}

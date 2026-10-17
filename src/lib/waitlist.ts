@@ -7,7 +7,7 @@ import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-cl
 import { accountExistsEmail, signupsOpenEmail, waitlistJoinedEmail } from "@/lib/email/templates";
 import { issueInvite } from "@/lib/invitations";
 import { appUrl } from "@/lib/site";
-import { OTHER, type SignupSurvey, type SurveySource } from "@/lib/signup-survey";
+import { OTHER, asksBettingHabits, type SignupSurvey, type SurveySource } from "@/lib/signup-survey";
 
 /**
  * The waitlist, and the sign-up that replaces it when SIGNUP_ENABLED is on.
@@ -86,13 +86,12 @@ export async function leaveWaitlist(token: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Stores /signup's answers, replacing any earlier ones for the address. */
-export async function hasSignupSurvey(email: string): Promise<boolean> {
-  const [row] = await db.select({ id: signupSurveys.id }).from(signupSurveys).where(eq(signupSurveys.email, email)).limit(1);
-  return Boolean(row);
-}
-
+/** Stores the application's answers, replacing any earlier ones for the address. */
 export async function saveSignupSurvey(v: SignupSurvey, source: SurveySource): Promise<void> {
+  // Never bets: the habit questions weren't asked, so nothing is kept for them.
+  const habits = asksBettingHabits(v.betFrequency);
+  const sportsbooks = habits ? v.sportsbooks : [];
+  const decisionTools = habits ? v.decisionTools : [];
   const values = {
     email: v.email,
     fullName: v.fullName,
@@ -101,11 +100,11 @@ export async function saveSignupSurvey(v: SignupSurvey, source: SurveySource): P
     experience: v.experience,
     sports: v.sports,
     sportsOther: v.sports.includes(OTHER) ? v.sportsOther : null,
-    sportsbook: v.sportsbook,
-    sportsbookOther: v.sportsbook === OTHER ? v.sportsbookOther : null,
-    betSize: v.betSize,
-    decisionTools: v.decisionTools,
-    decisionToolsOther: v.decisionTools.includes(OTHER) ? v.decisionToolsOther : null,
+    sportsbooks,
+    sportsbookOther: sportsbooks.includes(OTHER) ? v.sportsbooksOther : null,
+    betSize: habits ? v.betSize : null,
+    decisionTools,
+    decisionToolsOther: decisionTools.includes(OTHER) ? v.decisionToolsOther : null,
     wants: v.wants,
     willGiveFeedback: v.willGiveFeedback === "yes",
     willDoSurvey: v.willDoSurvey === "yes",
@@ -116,6 +115,18 @@ export async function saveSignupSurvey(v: SignupSurvey, source: SurveySource): P
     .insert(signupSurveys)
     .values(values)
     .onConflictDoUpdate({ target: signupSurveys.email, set: { ...update, updatedAt: new Date() } });
+}
+
+/** Whether this address has answered the application (on /signup, or an earlier invite). */
+export async function hasSignupSurvey(email: string): Promise<boolean> {
+  const [row] = await db.select({ id: signupSurveys.id }).from(signupSurveys).where(eq(signupSurveys.email, email)).limit(1);
+  return Boolean(row);
+}
+
+/** One address's answers, if it ever gave any. */
+export async function getSignupSurvey(email: string): Promise<SignupSurveyRow | null> {
+  const [row] = await db.select().from(signupSurveys).where(eq(signupSurveys.email, email)).limit(1);
+  return row ?? null;
 }
 
 export type SignupSurveyRow = typeof signupSurveys.$inferSelect;

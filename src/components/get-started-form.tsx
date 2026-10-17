@@ -5,288 +5,110 @@ import { useActionState } from "react";
 import { ArrowRight, Check, ListPlus, Loader2 } from "lucide-react";
 import { getStartedAction } from "@/app/actions/waitlist";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import type { ActionState } from "@/lib/validation";
 import {
-  BET_FREQUENCIES,
-  DECISION_TOOLS,
-  EXPERIENCE_LEVELS,
-  OTHER,
-  SPORTS,
-  SPORTSBOOKS,
-} from "@/lib/signup-survey";
+  AgeQuestion,
+  BetaQuestions,
+  BettingQuestions,
+  FullNameQuestion,
+  SurveySection,
+  TextQuestion,
+  checkSurvey,
+  focusFirstError,
+  surveyErrorsFrom,
+  useSurvey,
+} from "@/components/signup-survey";
+import { appendSurvey } from "@/lib/signup-survey";
+import type { ActionState } from "@/lib/validation";
 
 /**
- * The beta application: every question /signup asks, then "Join waitlist"
- * while sign-ups are closed or "Sign up" once SIGNUP_ENABLED is on. Answers
- * are kept in signup_surveys. Submitted by hand rather than through the
- * form's action so a rejected submission doesn't reset what was typed.
+ * /signup: the beta application, then "Join waitlist" while sign-ups are
+ * closed or "Sign up" once SIGNUP_ENABLED is on. Answers are kept in
+ * signup_surveys. Age comes first, so someone under 21 learns it before
+ * typing anything else.
  */
 export function GetStartedForm({ open, source }: { open: boolean; source: "landing" | "signup" }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(getStartedAction, null);
-  const [email, setEmail] = React.useState("");
+  const survey = useSurvey();
+  const { values, setErrors } = survey;
 
-  if (state?.ok) return <Done email={email} open={open} message={state.message} />;
+  // The server runs the same rules; anything it still refuses lands on the
+  // same fields. Render-phase, like onboarding-form.tsx.
+  const [handled, setHandled] = React.useState(state);
+  if (state !== handled) {
+    setHandled(state);
+    if (state && !state.ok && state.fieldErrors) setErrors(surveyErrorsFrom(state.fieldErrors));
+  }
+  React.useEffect(() => {
+    if (state && !state.ok && state.fieldErrors) focusFirstError(surveyErrorsFrom(state.fieldErrors));
+  }, [state]);
 
-  const errs = state && !state.ok ? (state.fieldErrors ?? {}) : {};
-  const err = (k: string) => errs[k]?.[0];
+  if (state?.ok) return <Done email={values.email} open={open} message={state.message} />;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
+    const errors = checkSurvey(values);
+    if (Object.keys(errors).length > 0) {
+      setErrors(errors);
+      focusFirstError(errors);
+      return;
+    }
+    const data = new FormData();
+    data.set("source", source);
+    appendSurvey(data, values);
     React.startTransition(() => action(data));
   }
 
+  const under21 = values.is21 === "no";
+  const formError = state && !state.ok && !state.fieldErrors ? state.error : null;
+
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-7">
-      <input type="hidden" name="source" value={source} />
+    <form onSubmit={onSubmit} noValidate className="space-y-10">
+      <AgeQuestion survey={survey} />
 
-      <Field label="First and last name" name="fullName" error={err("fullName")} autoComplete="name" />
-      <Field
-        label="Email address"
-        name="email"
-        type="email"
-        autoComplete="email"
-        error={err("email")}
-        value={email}
-        onChange={setEmail}
-      />
-
-      <SurveyQuestions err={err} />
-
-      <div>
-        <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
-          {pending ? (
-            <Loader2 className="animate-spin" aria-hidden="true" />
-          ) : open ? (
-            <ArrowRight aria-hidden="true" />
-          ) : (
-            <ListPlus aria-hidden="true" />
-          )}
-          {open ? "Sign up" : "Join waitlist"}
-        </Button>
-        {state && !state.ok && (
-          <p role="alert" className="mt-3 text-sm text-miss">
-            {state.error}
-          </p>
-        )}
-        <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-          {open
-            ? "We'll email you a link to finish creating your account. 21+ only."
-            : "One email the day sign-ups open, and nothing before it. No picks, no spam, leave any time."}
+      {under21 ? (
+        <p role="status" className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg-muted">
+          Sorry — oobee bets is only for people 21 and older, so we can&apos;t take your sign-up.
         </p>
-      </div>
+      ) : (
+        <>
+          <SurveySection title="About you">
+            <FullNameQuestion survey={survey} hint="Only the oobee bets team sees this." />
+            <TextQuestion survey={survey} field="email" label="Email address" type="email" autoComplete="email" placeholder="you@example.com" />
+          </SurveySection>
+
+          <SurveySection title="How you bet">
+            <BettingQuestions survey={survey} />
+          </SurveySection>
+
+          <SurveySection title="The beta">
+            <BetaQuestions survey={survey} />
+          </SurveySection>
+
+          <div>
+            <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+              {pending ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : open ? (
+                <ArrowRight aria-hidden="true" />
+              ) : (
+                <ListPlus aria-hidden="true" />
+              )}
+              {open ? "Sign up" : "Join waitlist"}
+            </Button>
+            {formError && (
+              <p role="alert" className="mt-3 text-sm text-miss">
+                {formError}
+              </p>
+            )}
+            <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
+              {open
+                ? "We'll email you a link to finish creating your account."
+                : "One email the day sign-ups open, and nothing before it. No picks, no spam, leave any time."}
+            </p>
+          </div>
+        </>
+      )}
     </form>
-  );
-}
-
-/**
- * Every application question after name and email — shared with the invite
- * wizard, which asks them of anyone who hasn't answered on /signup.
- */
-export function SurveyQuestions({ err }: { err: (k: string) => string | undefined }) {
-  const [otherOn, setOtherOn] = React.useState({ sports: false, sportsbook: false, decisionTools: false });
-  return (
-    <>
-        <Choice legend="Are you 21+?" name="is21" options={["yes", "no"]} labels={YES_NO} error={err("is21")} />
-        <Choice legend="How often do you currently sports bet?" name="betFrequency" options={BET_FREQUENCIES} error={err("betFrequency")} />
-        <Choice
-          legend="How would you describe your sports betting experience?"
-          name="experience"
-          options={EXPERIENCE_LEVELS}
-          error={err("experience")}
-        />
-        <Choice
-          legend="Which sports do you typically bet on?"
-          name="sports"
-          multiple
-          options={[...SPORTS, OTHER]}
-          error={err("sports")}
-          onOther={(on) => setOtherOn((o) => ({ ...o, sports: on }))}
-          other={otherOn.sports && <OtherInput name="sportsOther" error={err("sportsOther")} />}
-        />
-        <Choice
-          legend="What sportsbook do you typically use?"
-          name="sportsbook"
-          options={[...SPORTSBOOKS, OTHER]}
-          error={err("sportsbook")}
-          onOther={(on) => setOtherOn((o) => ({ ...o, sportsbook: on }))}
-          other={otherOn.sportsbook && <OtherInput name="sportsbookOther" error={err("sportsbookOther")} />}
-        />
-        <Field label="Typical bet size" name="betSize" error={err("betSize")} placeholder="e.g. $20" />
-        <Choice
-          legend="What do you currently use to make betting decisions?"
-          name="decisionTools"
-          multiple
-          options={[...DECISION_TOOLS, OTHER]}
-          error={err("decisionTools")}
-          onOther={(on) => setOtherOn((o) => ({ ...o, decisionTools: on }))}
-          other={otherOn.decisionTools && <OtherInput name="decisionToolsOther" error={err("decisionToolsOther")} />}
-        />
-        <Field
-          label="What would you most want from a sports betting analytics platform?"
-          name="wants"
-          multiline
-          error={err("wants")}
-        />
-        <Choice
-          legend="Would you be willing to use Oobee and give feedback throughout the trial?"
-          name="willGiveFeedback"
-          options={["yes", "no"]}
-          labels={YES_NO}
-          error={err("willGiveFeedback")}
-        />
-        <Choice
-          legend="Would you be willing to complete a short survey after the beta trial?"
-          name="willDoSurvey"
-          options={["yes"]}
-          labels={YES_NO}
-          error={err("willDoSurvey")}
-        />
-
-    </>
-  );
-}
-
-const YES_NO: Record<string, string> = { yes: "Yes", no: "No" };
-
-function Req() {
-  return (
-    <span className="text-miss" aria-hidden="true">
-      {" "}*
-    </span>
-  );
-}
-
-function ErrorText({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} role="alert" className="mt-1.5 text-xs text-miss">
-      {message}
-    </p>
-  );
-}
-
-export function Field({
-  label,
-  name,
-  error,
-  type = "text",
-  multiline,
-  value,
-  onChange,
-  ...rest
-}: {
-  label: string;
-  name: string;
-  error?: string;
-  type?: string;
-  multiline?: boolean;
-  value?: string;
-  onChange?: (v: string) => void;
-  autoComplete?: string;
-  placeholder?: string;
-}) {
-  const id = `signup-${name}`;
-  const common = {
-    id,
-    name,
-    required: true,
-    "aria-invalid": Boolean(error),
-    "aria-describedby": error ? `${id}-error` : undefined,
-    ...(onChange ? { value, onChange: (e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement>) => onChange(e.target.value) } : {}),
-    ...rest,
-  };
-  return (
-    <div>
-      <Label htmlFor={id} className="text-sm text-fg">
-        {label}
-        <Req />
-      </Label>
-      <div className="mt-2">
-        {multiline ? (
-          <textarea
-            {...common}
-            rows={3}
-            maxLength={1000}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-brand/60 focus:outline-none"
-          />
-        ) : (
-          <Input {...common} type={type} />
-        )}
-      </div>
-      <ErrorText id={`${id}-error`} message={error} />
-    </div>
-  );
-}
-
-function OtherInput({ name, error }: { name: string; error?: string }) {
-  const id = `signup-${name}`;
-  return (
-    <div className="mt-2">
-      <Input id={id} name={name} maxLength={100} placeholder="Other…" aria-label="Other" aria-invalid={Boolean(error)} autoFocus />
-      <ErrorText id={`${id}-error`} message={error} />
-    </div>
-  );
-}
-
-function Choice({
-  legend,
-  name,
-  options,
-  labels,
-  multiple,
-  error,
-  other,
-  onOther,
-}: {
-  legend: string;
-  name: string;
-  options: readonly string[];
-  labels?: Record<string, string>;
-  multiple?: boolean;
-  error?: string;
-  other?: React.ReactNode;
-  onOther?: (on: boolean) => void;
-}) {
-  const errorId = `signup-${name}-error`;
-  return (
-    <fieldset aria-describedby={error ? errorId : undefined}>
-      <legend className="text-sm text-fg">
-        {legend}
-        <Req />
-        {multiple && <span className="ml-1 text-xs text-fg-subtle">(pick any)</span>}
-      </legend>
-      <div className="mt-3 grid gap-2">
-        {options.map((value) => (
-          <label
-            key={value}
-            className="flex cursor-pointer items-center rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg transition-colors has-[:checked]:border-brand/60 has-[:checked]:bg-brand/5 hover:border-border-strong"
-          >
-            <input
-              type={multiple ? "checkbox" : "radio"}
-              name={name}
-              value={value}
-              className="peer sr-only"
-              onChange={(e) => {
-                if (!onOther) return;
-                if (multiple) {
-                  if (value === OTHER) onOther(e.target.checked);
-                } else onOther(value === OTHER);
-              }}
-            />
-            <span>{labels?.[value] ?? (value === OTHER ? "Other" : value)}</span>
-            <span
-              className={`ml-auto size-4 shrink-0 border border-border-strong peer-checked:border-brand peer-checked:bg-brand ${multiple ? "rounded" : "rounded-full"}`}
-              aria-hidden="true"
-            />
-          </label>
-        ))}
-      </div>
-      {other}
-      <ErrorText id={errorId} message={error} />
-    </fieldset>
   );
 }
 
@@ -297,7 +119,10 @@ function Choice({
  */
 function Done({ email, open, message }: { email: string; open: boolean; message?: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => ref.current?.focus(), []);
+  React.useEffect(() => {
+    ref.current?.focus();
+    ref.current?.scrollIntoView({ block: "center" });
+  }, []);
 
   return (
     <div
@@ -316,7 +141,7 @@ function Done({ email, open, message }: { email: string; open: boolean; message?
         <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
           {email && (
             <>
-              Sent to <span className="break-words font-medium text-fg">{email}</span>.{" "}
+              Sent to <span className="break-words font-medium text-fg">{email.trim()}</span>.{" "}
             </>
           )}
           {message}

@@ -42,6 +42,7 @@ import { ACCESS, TIERS, TIER_ORDER, tierForLookupKey, tierForRank } from "../src
 import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/safe-next.ts";
+import { signupSurveySchema } from "../src/lib/signup-survey.ts";
 import { NFL_TEAM_ABBR, gradeProp, playerKey } from "../src/lib/odds/props.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
@@ -480,6 +481,41 @@ console.log("\nRedirect targets (safeNextPath)");
   for (const [v, want] of [["/picks", "/picks"], ["/stats?tab=parlays", "/stats?tab=parlays"], ["/u/rob19#replies", "/u/rob19#replies"], ["/a/../picks", "/picks"]]) {
     check(safeNextPath(v) === want, `keeps ${JSON.stringify(v)}`, `-> ${JSON.stringify(safeNextPath(v))}`);
   }
+}
+
+console.log("\nBeta application rules (lib/signup-survey.ts)");
+{
+  const base = {
+    fullName: "Pat Doe",
+    email: "pat@example.com",
+    is21: "yes",
+    betFrequency: "A few times per month",
+    experience: "Beginner",
+    sports: ["NFL"],
+    sportsOther: "",
+    sportsbooks: ["FanDuel"],
+    sportsbooksOther: "",
+    betSize: "$10–$25",
+    decisionTools: ["Stats"],
+    decisionToolsOther: "",
+    wants: "A record I can trust",
+    willGiveFeedback: "yes",
+    willDoSurvey: "yes",
+  };
+  const ok = (v) => signupSurveySchema.safeParse(v).success;
+  const failsOn = (v) => signupSurveySchema.safeParse(v).error?.issues.map((i) => i.path[0]) ?? [];
+  check(ok(base), "a full application passes");
+  check(failsOn({ ...base, is21: "no" }).includes("is21"), "under 21 is refused");
+  check(
+    ok({ ...base, betFrequency: "Never", sportsbooks: [], betSize: "", decisionTools: [] }),
+    "someone who never bets needs no sportsbook, bet size or method",
+  );
+  check(failsOn({ ...base, sportsbooks: [] }).includes("sportsbooks"), "a bettor names at least one sportsbook");
+  check(failsOn({ ...base, betSize: "$20" }).includes("betSize"), "bet size is one of the ranges");
+  check(failsOn({ ...base, decisionTools: ["Nothing", "Stats"] }).includes("decisionTools"), '"Nothing" can\'t go with a method');
+  check(failsOn({ ...base, sportsbooks: ["Don't use one", "FanDuel"] }).includes("sportsbooks"), '"Don\'t use one" can\'t go with a sportsbook');
+  check(failsOn({ ...base, sports: ["Other"] }).includes("sportsOther"), "Other needs its text");
+  check(failsOn({ ...base, willDoSurvey: "" }).includes("willDoSurvey"), "the end-of-beta survey is agreed to");
 }
 
 console.log("\nPlayer props graded from box scores");

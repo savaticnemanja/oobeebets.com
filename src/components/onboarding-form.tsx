@@ -10,42 +10,61 @@ import { Label } from "@/components/ui/label";
 import { PhoneField, toE164 } from "@/components/phone-field";
 import { Reveal } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
-import { HelpLine } from "@/components/help-line";
 import { acceptInviteAction } from "@/app/actions/invite";
-import { Field as SurveyField, SurveyQuestions } from "@/components/get-started-form";
-import { nameSchema, passwordSchema, SPEND_BAND_LABELS, spendBandValues } from "@/lib/validation";
+import {
+  BETA_FIELDS,
+  BETTING_FIELDS,
+  BetaQuestions,
+  BettingQuestions,
+  checkSurvey,
+  focusFirstError,
+  surveyErrorsFrom,
+  useSurvey,
+  type SurveyErrors,
+} from "@/components/signup-survey";
+import { appendSurvey, type SurveyField } from "@/lib/signup-survey";
+import { nameSchema, passwordSchema } from "@/lib/validation";
 import type { ActionState } from "@/lib/validation";
 
-type Step = 1 | 2 | 3 | 4;
-type Field = "password" | "confirm" | "name" | "phone" | "spendBand" | "agree";
-
-const STEP_TITLES: Record<Step, string> = {
-  1: "You're in",
-  2: "Set a password",
-  3: "A couple details",
-  4: "Last thing",
-};
-
-/** Which step owns each field, so a server-side field error jumps back there. */
-const FIELD_STEP: Record<string, Step> = {
-  email: 1,
-  password: 2,
-  confirm: 2,
-  name: 3,
-  phone: 3,
-  spendBand: 4,
-  agree: 4,
-};
+/**
+ * The invite wizard. Someone who came through /signup has answered the beta
+ * application already and gets four steps; someone an admin invited directly
+ * answers it here, over two extra steps, so it's asked of every tester once.
+ */
+type Step = "intro" | "password" | "profile" | "betting" | "last";
+type Field = "password" | "confirm" | "name" | "phone" | "agree";
 
 const STEP_FIELDS: Record<Step, Field[]> = {
-  1: [],
-  2: ["password", "confirm"],
-  3: ["name", "phone"],
-  4: ["spendBand", "agree"],
+  intro: [],
+  password: ["password", "confirm"],
+  profile: ["name", "phone"],
+  betting: [],
+  last: ["agree"],
 };
 
-/** The spend question's "Prefer not to say" — posted as no answer. */
-const SKIP = "skip" as const;
+/** The survey's questions by step — only asked when `needsSurvey`. */
+const SURVEY_STEP_FIELDS: Record<Step, readonly SurveyField[]> = {
+  intro: [],
+  password: [],
+  profile: ["fullName"],
+  betting: BETTING_FIELDS,
+  last: BETA_FIELDS,
+};
+
+function stepTitle(step: Step, needsSurvey: boolean): string {
+  switch (step) {
+    case "intro":
+      return "You're in";
+    case "password":
+      return "Set a password";
+    case "profile":
+      return "Your profile";
+    case "betting":
+      return "How you bet";
+    case "last":
+      return needsSurvey ? "The beta" : "Last thing";
+  }
+}
 
 type Values = {
   password: string;
@@ -53,7 +72,6 @@ type Values = {
   name: string;
   country: CountryCode;
   phone: string;
-  spendBand: string;
   agree: boolean;
 };
 
@@ -63,7 +81,6 @@ const EMPTY: Values = {
   name: "",
   country: "US",
   phone: "",
-  spendBand: "",
   agree: false,
 };
 
@@ -89,8 +106,6 @@ function validate(field: Field, v: Values): string | undefined {
         ? undefined
         : "That doesn't look like a valid number for that country";
     }
-    case "spendBand":
-      return undefined;
     case "agree":
       return v.agree ? undefined : "Confirm you're 21 or older and accept the Terms to finish";
   }
@@ -118,18 +133,40 @@ export function OnboardingForm({
   needsSurvey: boolean;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(acceptInviteAction, null);
-  const [step, setStep] = React.useState<Step>(1);
+  const steps: Step[] = needsSurvey
+    ? ["intro", "password", "profile", "betting", "last"]
+    : ["intro", "password", "profile", "last"];
+  const [index, setIndex] = React.useState(0);
+  const step = steps[index];
+  const isLast = index === steps.length - 1;
 
   // Every field is controlled, so a failed submit can't take the answers with
   // it — React resets an uncontrolled form once its action settles, which is
   // what used to wipe the steps the tester had already filled in.
   const [values, setValues] = React.useState<Values>(EMPTY);
+  // The Terms box on the last step is where an invited tester confirms age.
+  const survey = useSurvey({ is21: "yes" });
   // A field's error only shows once it's been blurred or a step was
   // advanced past it; after that it re-validates on every keystroke.
   const [touched, setTouched] = React.useState<Partial<Record<Field, boolean>>>({});
   const headingRef = React.useRef<HTMLHeadingElement>(null);
+  // Survey errors to focus once their step is on screen (a hidden step's
+  // inputs can't take focus).
+  const focusAfterStep = React.useRef<SurveyErrors | null>(null);
 
   const serverFieldErrors = state && !state.ok ? state.fieldErrors : undefined;
+
+  function stepOf(field: string): Step | undefined {
+    if (field === "email") return "intro";
+    return steps.find(
+      (s) => (STEP_FIELDS[s] as string[]).includes(field) || (SURVEY_STEP_FIELDS[s] as readonly string[]).includes(field),
+    );
+  }
+
+  function goTo(target: Step, focus?: SurveyErrors) {
+    focusAfterStep.current = focus ?? null;
+    setIndex(steps.indexOf(target));
+  }
 
   // Render-phase reset (not an effect) so jumping back to the errored step
   // happens in the same render the new state arrives in, matching the
@@ -137,14 +174,20 @@ export function OnboardingForm({
   const [lastHandledState, setLastHandledState] = React.useState(state);
   if (state !== lastHandledState) {
     setLastHandledState(state);
-    const firstField = serverFieldErrors ? Object.keys(serverFieldErrors)[0] : undefined;
-    const target = firstField ? (FIELD_STEP[firstField] ?? 3) : undefined;
-    if (target) setStep(target);
+    if (serverFieldErrors) {
+      const surveyErrors = surveyErrorsFrom(serverFieldErrors);
+      survey.setErrors(surveyErrors);
+      const target = steps.find((s) => Object.keys(serverFieldErrors).some((k) => stepOf(k) === s));
+      if (target) setIndex(steps.indexOf(target));
+    }
   }
 
   React.useEffect(() => {
-    headingRef.current?.focus();
-  }, [step]);
+    const pendingFocus = focusAfterStep.current;
+    focusAfterStep.current = null;
+    if (pendingFocus && Object.keys(pendingFocus).length > 0) focusFirstError(pendingFocus);
+    else headingRef.current?.focus();
+  }, [index]);
 
   function setField<K extends keyof Values>(field: K, value: Values[K]) {
     setValues((v) => ({ ...v, [field]: value }));
@@ -164,40 +207,57 @@ export function OnboardingForm({
     return serverFieldErrors?.[field]?.[0];
   }
 
+  function surveyErrorsOn(s: Step): SurveyErrors {
+    return needsSurvey ? checkSurvey(survey.values, SURVEY_STEP_FIELDS[s]) : {};
+  }
+
   function handleContinue() {
     const fields = STEP_FIELDS[step];
     setTouched((t) => ({ ...t, ...Object.fromEntries(fields.map((f) => [f, true])) }));
+    const surveyErrors = surveyErrorsOn(step);
+    survey.setErrors(surveyErrors);
     if (fields.some((f) => validate(f, values))) return;
-    setStep((s) => (s < 4 ? ((s + 1) as Step) : s));
+    if (Object.keys(surveyErrors).length > 0) {
+      focusFirstError(surveyErrors);
+      return;
+    }
+    setIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
   function handleBack() {
-    setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+    setIndex((i) => Math.max(i - 1, 0));
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    const fields: Field[] = ["password", "confirm", "name", "phone", "spendBand", "agree"];
-    setTouched(Object.fromEntries(fields.map((f) => [f, true])));
-    const firstBad = fields.find((f) => validate(f, values));
-    // Submitted by hand: the survey's inputs are uncontrolled, and a form
-    // action would reset them when a submission comes back refused.
+    // Submitted by hand: a form action would reset the form when a
+    // submission comes back refused.
     e.preventDefault();
+    const fields: Field[] = ["password", "confirm", "name", "phone", "agree"];
+    setTouched(Object.fromEntries(fields.map((f) => [f, true])));
+    const surveyErrors = needsSurvey
+      ? checkSurvey(survey.values, steps.flatMap((s) => SURVEY_STEP_FIELDS[s]))
+      : {};
+    survey.setErrors(surveyErrors);
+    const firstBad = steps.find(
+      (s) => STEP_FIELDS[s].some((f) => validate(f, values)) || SURVEY_STEP_FIELDS[s].some((k) => surveyErrors[k]),
+    );
     if (firstBad) {
-      setStep(FIELD_STEP[firstBad]);
+      if (firstBad === step) focusFirstError(surveyErrors);
+      else goTo(firstBad, surveyErrors);
       return;
     }
     const data = new FormData(e.currentTarget);
+    if (needsSurvey) appendSurvey(data, { ...survey.values, email });
     React.startTransition(() => action(data));
   }
+
+  const fullNameError = survey.errors.fullName;
 
   return (
     <Reveal>
       <div className="flex gap-1.5" aria-hidden="true">
-        {([1, 2, 3, 4] as const).map((i) => (
-          <div
-            key={i}
-            className={cn("h-1 flex-1 rounded-full transition-colors", i <= step ? "bg-brand" : "bg-border")}
-          />
+        {steps.map((s, i) => (
+          <div key={s} className={cn("h-1 flex-1 rounded-full transition-colors", i <= index ? "bg-brand" : "bg-border")} />
         ))}
       </div>
 
@@ -206,8 +266,11 @@ export function OnboardingForm({
         tabIndex={-1}
         className="mt-6 text-2xl font-semibold tracking-tight outline-none"
       >
-        {STEP_TITLES[step]}
+        {stepTitle(step, needsSurvey)}
       </h1>
+      <p className="mt-1 text-xs text-fg-subtle">
+        Step {index + 1} of {steps.length}
+      </p>
 
       {state && !state.ok && !state.fieldErrors && (
         <p
@@ -224,16 +287,21 @@ export function OnboardingForm({
         {/* E.164 is what the server stores; the formatted national number is
             only ever a display concern. */}
         <input type="hidden" name="phone" value={toE164(values.country, values.phone) ?? values.phone.trim()} />
-        <input type="hidden" name="spendBand" value={values.spendBand === SKIP ? "" : values.spendBand} />
         <input type="hidden" name="agree" value={values.agree ? "yes" : ""} />
 
-        {/* --------------------------------------------------------- step 1 */}
-        <div className={step === 1 ? "space-y-4" : "hidden"}>
+        {/* ---------------------------------------------------------- intro */}
+        <div className={step === "intro" ? "space-y-4" : "hidden"}>
           <p className="text-sm text-fg-muted">
             {selfServe
               ? "You're creating an oobee bets account. This link is tied to one email address."
               : "You've been invited to oobee bets. This link is tied to one email address."}
           </p>
+          {needsSurvey && (
+            <p className="text-sm text-fg-muted">
+              It takes about three minutes: a password, your profile, and a few questions about how
+              you bet so we know who&apos;s testing.
+            </p>
+          )}
           <div>
             <Label>Email</Label>
             <p className="mt-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg">
@@ -242,8 +310,8 @@ export function OnboardingForm({
           </div>
         </div>
 
-        {/* --------------------------------------------------------- step 2 */}
-        <div className={step === 2 ? "space-y-4" : "hidden"}>
+        {/* ------------------------------------------------------- password */}
+        <div className={step === "password" ? "space-y-4" : "hidden"}>
           <div>
             <Label htmlFor="password">Password</Label>
             <Input
@@ -284,8 +352,33 @@ export function OnboardingForm({
           </div>
         </div>
 
-        {/* --------------------------------------------------------- step 3 */}
-        <div className={step === 3 ? "space-y-4" : "hidden"}>
+        {/* -------------------------------------------------------- profile */}
+        <div className={step === "profile" ? "space-y-4" : "hidden"}>
+          {needsSurvey && (
+            // The real name, private — beside the public display name below,
+            // so the two can't be mistaken for each other.
+            <div>
+              <Label htmlFor="survey-fullName">First and last name</Label>
+              <Input
+                id="survey-fullName"
+                name="q-fullName"
+                autoComplete="name"
+                maxLength={120}
+                value={survey.values.fullName}
+                onChange={(e) => survey.set("fullName", e.target.value)}
+                className="mt-1.5"
+                aria-invalid={Boolean(fullNameError)}
+                aria-describedby={fullNameError ? "survey-fullName-error" : "survey-fullName-hint"}
+              />
+              {fullNameError ? (
+                <FieldError id="survey-fullName-error" message={fullNameError} />
+              ) : (
+                <p id="survey-fullName-hint" className="mt-1.5 text-xs text-fg-subtle">
+                  Private — only the oobee bets team sees it.
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <Label htmlFor="name">Display name</Label>
             <Input
@@ -334,90 +427,54 @@ export function OnboardingForm({
               </p>
             )}
           </div>
-          {needsSurvey && (
-            <div className="space-y-7 border-t border-border pt-6">
-              <p className="text-sm text-fg-muted">A few questions about how you bet, for the beta.</p>
-              <SurveyField label="First and last name" name="fullName" autoComplete="name" error={serverFieldErrors?.fullName?.[0]} />
-              <SurveyQuestions err={(k) => serverFieldErrors?.[k]?.[0]} />
-            </div>
-          )}
         </div>
 
-        {/* --------------------------------------------------------- step 4 */}
-        <div className={step === 4 ? "space-y-4" : "hidden"}>
-          <fieldset>
-            <legend className="text-sm text-fg-muted">
-              How much do you typically spend on sports betting a month?{" "}
-              <span className="text-fg-subtle">(optional)</span>
-            </legend>
-            <p className="mt-1 text-xs text-fg-subtle">
-              Never shown to anyone — it helps us understand who&apos;s testing.
-            </p>
-            <div className="mt-4 grid gap-2">
-              {([...spendBandValues, SKIP] as const).map((value) => (
-                <label
-                  key={value}
-                  className="flex cursor-pointer items-center rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg transition-colors has-[:checked]:border-brand/60 has-[:checked]:bg-brand/5 hover:border-border-strong"
-                >
-                  <input
-                    type="radio"
-                    name="spendBandChoice"
-                    value={value}
-                    checked={values.spendBand === value}
-                    onChange={() => {
-                      setField("spendBand", value);
-                      markTouched("spendBand");
-                    }}
-                    className="peer sr-only"
-                  />
-                  <span>{value === SKIP ? "Prefer not to say" : SPEND_BAND_LABELS[value]}</span>
-                  <span
-                    className="ml-auto size-4 shrink-0 rounded-full border border-border-strong peer-checked:border-brand peer-checked:bg-brand"
-                    aria-hidden="true"
-                  />
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <FieldError id="spendBand-error" message={errorFor("spendBand")} />
-          {/* Right where someone has just told us how much they spend. */}
-          <p className="text-xs text-fg-subtle">
-            <HelpLine />
-          </p>
+        {/* -------------------------------------------------------- betting */}
+        {needsSurvey && (
+          <div className={step === "betting" ? "space-y-8" : "hidden"}>
+            <BettingQuestions survey={survey} />
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------- last */}
+        <div className={step === "last" ? "space-y-8" : "hidden"}>
+          {needsSurvey && <BetaQuestions survey={survey} />}
 
           {/* Opens in a new tab: following it here would leave the wizard
               and lose the answers above. */}
-          <label className="flex cursor-pointer items-start gap-3 pt-2 text-sm text-fg-muted">
-            <input
-              type="checkbox"
-              name="agreeChoice"
-              checked={values.agree}
-              onChange={(e) => {
-                setField("agree", e.target.checked);
-                markTouched("agree");
-              }}
-              aria-invalid={Boolean(errorFor("agree"))}
-              aria-describedby={errorFor("agree") ? "agree-error" : undefined}
-              className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
-            />
-            <span>
-              I&apos;m 21 or older and allowed to bet on sports where I live, and I accept the{" "}
-              <a href="/legal/terms" target="_blank" rel="noopener" className="text-brand hover:underline">
-                Terms
-              </a>{" "}
-              and{" "}
-              <a href="/legal/privacy" target="_blank" rel="noopener" className="text-brand hover:underline">
-                Privacy Policy
-              </a>
-              .
-            </span>
-          </label>
-          <FieldError id="agree-error" message={errorFor("agree")} />
+          <div>
+            <label className="flex cursor-pointer items-start gap-3 text-sm text-fg-muted">
+              <input
+                type="checkbox"
+                name="agreeChoice"
+                checked={values.agree}
+                onChange={(e) => {
+                  setField("agree", e.target.checked);
+                  markTouched("agree");
+                }}
+                aria-invalid={Boolean(errorFor("agree"))}
+                aria-describedby={errorFor("agree") ? "agree-error" : undefined}
+                className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+              />
+              <span>
+                I&apos;m 21 or older and allowed to bet on sports where I live, and I accept the{" "}
+                <a href="/legal/terms" target="_blank" rel="noopener" className="text-brand hover:underline">
+                  Terms
+                </a>{" "}
+                and{" "}
+                <a href="/legal/privacy" target="_blank" rel="noopener" className="text-brand hover:underline">
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+            <FieldError id="agree-error" message={errorFor("agree")} />
+          </div>
         </div>
 
         {/* ------------------------------------------------------------ nav */}
         <div className="mt-8 flex items-center justify-between gap-3">
-          {step > 1 ? (
+          {index > 0 ? (
             <Button type="button" variant="ghost" onClick={handleBack}>
               Back
             </Button>
@@ -425,10 +482,10 @@ export function OnboardingForm({
             <span />
           )}
 
-          {step < 4 ? (
+          {!isLast ? (
             // `key` forces a fresh DOM node rather than React patching this
             // one's `type` in place. Without it, the click that advances to
-            // step 4 lands on a node React has already flipped to
+            // the last step lands on a node React has already flipped to
             // type="submit" by the time the browser runs the click's default
             // action — turning "Continue" into a surprise, premature submit.
             <Button key="continue" type="button" onClick={handleContinue}>

@@ -319,10 +319,13 @@ export const signupSurveys = pgTable(
     experience: text("experience").notNull(),
     sports: text("sports").array().notNull(),
     sportsOther: text("sports_other"),
-    sportsbook: text("sportsbook").notNull(),
+    /** Pick-any since 17 Oct (it was one answer); empty when they never bet. */
+    sportsbooks: text("sportsbooks").array().notNull().default(sql`'{}'::text[]`),
     sportsbookOther: text("sportsbook_other"),
-    betSize: text("bet_size").notNull(),
-    decisionTools: text("decision_tools").array().notNull(),
+    /** A BET_SIZES range; null when they never bet. */
+    betSize: text("bet_size"),
+    /** Empty when they never bet, like sportsbooks. */
+    decisionTools: text("decision_tools").array().notNull().default(sql`'{}'::text[]`),
     decisionToolsOther: text("decision_tools_other"),
     wants: text("wants").notNull(),
     willGiveFeedback: boolean("will_give_feedback").notNull(),

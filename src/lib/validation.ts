@@ -71,11 +71,10 @@ export const onboardingSchema = z
     password: passwordSchema,
     confirm: z.string(),
     name: nameSchema,
-    // Both optional (empty → null) since 13 Oct 2026: nothing in the product
-    // uses either yet, and a required "how much do you gamble a month" was a
-    // lot to demand of someone signing up to a betting app.
+    // Optional (empty → null) since 13 Oct 2026: nothing in the product uses
+    // it yet. The monthly-spend question that sat beside it went on 17 Oct:
+    // the beta application (lib/signup-survey.ts) asks bet size and how often.
     phone: z.union([z.literal("").transform(() => null), phoneSchema]),
-    spendBand: z.union([z.literal("").transform(() => null), z.enum(spendBandValues)]),
     // The 21+ / Terms checkbox. Required: sports betting is 21+ in nearly every
     // US state, and this is where they say so (users.terms_accepted_at
     // records when).

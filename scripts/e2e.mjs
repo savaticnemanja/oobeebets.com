@@ -122,20 +122,24 @@ const browser = await chromium.launch();
 
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
 
-/** The beta application's questions, minus email — /signup and the invite wizard both ask them. */
-async function answerSurvey(page, name = "E2E Tester") {
-  const pick = (field, value) => page.locator(`input[name="${field}"][value="${value}"]`).check({ force: true });
-  await page.locator('input[name="fullName"]').fill(name);
-  await pick("is21", "yes");
-  await pick("betFrequency", "A few times per week");
-  await pick("experience", "Intermediate");
-  await pick("sports", "NFL");
-  await pick("sportsbook", "FanDuel");
-  await page.locator('input[name="betSize"]').fill("$20");
-  await pick("decisionTools", "Stats");
-  await page.locator('textarea[name="wants"]').fill("Honest records.");
-  await pick("willGiveFeedback", "yes");
-  await pick("willDoSurvey", "yes");
+/** The beta application's answer cards are visually hidden inputs named q-<question>. */
+const pickAnswer = (page, field, value) => page.locator(`input[name="q-${field}"][value="${value}"]`).check({ force: true });
+
+/** "How you bet", answered as a regular bettor. */
+async function answerBetting(page) {
+  await pickAnswer(page, "betFrequency", "A few times per week");
+  await pickAnswer(page, "experience", "Intermediate");
+  await pickAnswer(page, "sports", "NFL");
+  await pickAnswer(page, "sportsbooks", "FanDuel");
+  await pickAnswer(page, "betSize", "$10–$25");
+  await pickAnswer(page, "decisionTools", "Stats");
+}
+
+/** "The beta": what they want, and what they'll give. */
+async function answerBeta(page) {
+  await page.locator('textarea[name="q-wants"]').fill("Honest records.");
+  await pickAnswer(page, "willGiveFeedback", "yes");
+  await page.locator('input[name="q-willDoSurvey"]').check();
 }
 
 console.log("\nInvite onboarding and the free board");
@@ -175,12 +179,23 @@ const testEmail = `e2e-${Date.now()}@example.com`;
     "phone formats as you type",
     `value=${await page.inputValue("#phone-local")}`,
   );
-  // An admin invite skips /signup, so the application is asked here.
-  await answerSurvey(page, "Taylor Tester");
+  // An admin invite skips /signup, so the application is asked here: the
+  // private full name beside the public display name, then two steps.
+  await page.fill("#survey-fullName", "Taylor Tester Sr");
   await page.click('button:has-text("Continue")');
 
-  // Step 4 — spend band, then the 21+ / Terms box, then the real submit.
-  await page.click('label:has-text("Under $50")');
+  // Step 4 — how you bet. Continue checks the answers before moving on.
+  await page.click('button:has-text("Continue")');
+  check(
+    (await page.getByRole("heading", { name: "How you bet" }).isVisible()) &&
+      (await page.getByText("Pick how often you bet").isVisible()),
+    "Continue is refused until the betting questions are answered",
+  );
+  await answerBetting(page);
+  await page.click('button:has-text("Continue")');
+
+  // Step 5 — the beta questions, the 21+ / Terms box, then the real submit.
+  await answerBeta(page);
   await page.click('button:has-text("Finish")');
   await page.waitForTimeout(500);
   check(
@@ -196,8 +211,16 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(Boolean(accepted?.terms_accepted_at), "the account records when the Terms were accepted");
   const [{ waiting }] = await sql`select count(*)::int as waiting from waitlist where email = ${testEmail}`;
   check(waiting === 0, "making the account takes the address off the waitlist");
-  const [answers] = await sql`select full_name, source from signup_surveys where email = ${testEmail}`;
-  check(answers?.full_name === "Taylor Tester" && answers.source === "invite", "the invite wizard keeps the application answers", JSON.stringify(answers));
+  const [answers] = await sql`select full_name, is_21, sportsbooks, bet_size, source from signup_surveys where email = ${testEmail}`;
+  check(
+    answers?.full_name === "Taylor Tester Sr" &&
+      answers.is_21 &&
+      answers.sportsbooks.join() === "FanDuel" &&
+      answers.bet_size === "$10–$25" &&
+      answers.source === "invite",
+    "the invite wizard keeps the application answers",
+    JSON.stringify(answers),
+  );
   // Waited for, not read straight off the page: Home has a loading skeleton,
   // and the client-side redirect after Finish lands while it is still showing.
   check(
@@ -217,11 +240,6 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(created?.role === "user", "new users are not admins", `role=${created?.role}`);
   check(created?.phone === "+16502530000", "phone stored as E.164", `phone=${created?.phone}`);
   check(created?.display_name === "Taylor Tester", "display name stored", `name=${created?.display_name}`);
-  check(
-    created?.monthly_spend_band === "under_50",
-    "spend band stored",
-    `band=${created?.monthly_spend_band}`,
-  );
 
   const [invite] = await sql`select status, accepted_user_id from invitations where email = ${testEmail}`;
   check(invite?.status === "accepted", "invitation marked accepted", `status=${invite?.status}`);
@@ -260,8 +278,8 @@ const quietEmail = `e2e-quiet-${Date.now()}@example.com`;
   await sql`insert into invitations (email, token_hash, status, expires_at)
             values (${quietEmail}, ${inviteTokenHash}, 'pending', ${new Date(Date.now() + 3600_000)})`;
   // Answered on /signup already, so the wizard doesn't ask again.
-  await sql`insert into signup_surveys (email, full_name, is_21, bet_frequency, experience, sports, sportsbook, bet_size, decision_tools, wants, will_give_feedback, will_do_survey, source)
-            values (${quietEmail}, 'Quiet Tester', true, 'Never', 'Beginner', ${["NFL"]}, 'FanDuel', '$5', ${["Stats"]}, 'x', true, true, 'signup')`;
+  await sql`insert into signup_surveys (email, full_name, is_21, bet_frequency, experience, sports, wants, will_give_feedback, will_do_survey, source)
+            values (${quietEmail}, 'Quiet Tester', true, 'Never', 'Beginner', ${["NFL"]}, 'x', true, true, 'signup')`;
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -273,13 +291,12 @@ const quietEmail = `e2e-quiet-${Date.now()}@example.com`;
   await page.click('button:has-text("Continue")');
   // A display name, and the phone left empty.
   await page.fill("#name", "Quiet Tester");
-  check((await page.locator('input[name="fullName"]').count()) === 0, "someone who answered on /signup isn't asked again");
+  check((await page.locator("#survey-fullName").count()) === 0, "someone who answered on /signup isn't asked again");
   await page.click('button:has-text("Continue")');
   check(
-    await page.getByText("How much do you typically spend").isVisible(),
-    "an empty phone doesn't stop step 3",
+    (await page.getByText("Step 4 of 4").isVisible()) && (await page.getByText("I'm 21 or older and allowed").isVisible()),
+    "an empty phone doesn't stop step 3, and the last step follows",
   );
-  await page.click('label:has-text("Prefer not to say")');
   await page.check('input[name="agreeChoice"]');
   await page.click('button:has-text("Finish")');
   await page.waitForURL("**/home**", { timeout: 15000 }).catch(() => {});
@@ -1096,38 +1113,36 @@ console.log("\nWaitlist, change password and profile pictures");
   const waitEmail = `e2e-wait-${Date.now()}@example.com`;
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
-  // The signup application: every required question, one "Other" filled in.
-  const fillSurvey = async (email, { is21 = "yes" } = {}) => {
-    await hydrated(page, 'form input[name="email"]');
-    await page.locator('input[name="fullName"]').fill("E2E Tester");
-    await page.locator('input[name="email"]').fill(email);
-    const pick = (name, value) => page.locator(`input[name="${name}"][value="${value}"]`).check({ force: true });
-    await pick("is21", is21);
-    await pick("betFrequency", "A few times per week");
-    await pick("experience", "Intermediate");
-    await pick("sports", "NFL");
-    await pick("sports", "Other");
-    await page.locator('input[name="sportsOther"]').fill("Darts");
-    await pick("sportsbook", "FanDuel");
-    await page.locator('input[name="betSize"]').fill("$20");
-    await pick("decisionTools", "Stats");
-    await page.locator('textarea[name="wants"]').fill("Honest records.");
-    await pick("willGiveFeedback", "yes");
-    await pick("willDoSurvey", "yes");
-    await page.getByRole("button", { name: "Join waitlist" }).click();
-  };
-
   // The landing page now points at /signup instead of taking an address.
   await page.goto(`${APP_URL}/`);
   check((await page.locator('a[href="/signup"]', { hasText: "Join the waitlist" }).count()) >= 1, "the landing page links to the signup application");
 
   await page.goto(`${APP_URL}/signup`);
-  await fillSurvey(waitEmail, { is21: "no" });
-  await page.getByText("oobee bets is 21+ only.").waitFor({ timeout: 10000 });
-  const [{ n: under21 }] = await sql`select count(*)::int as n from signup_surveys where email = ${waitEmail}`;
-  check(under21 === 0, "a no on 21+ is refused and nothing is stored");
-
-  await page.locator('input[name="is21"][value="yes"]').check({ force: true });
+  await hydrated(page, 'input[name="q-is21"]');
+  // Age comes first, and a no ends it before anything is typed.
+  await pickAnswer(page, "is21", "no");
+  check(
+    (await page.getByText("only for people 21 and older").isVisible()) && (await page.locator('input[name="q-email"]').count()) === 0,
+    "a no on 21+ stops the application",
+  );
+  await pickAnswer(page, "is21", "yes");
+  // Submitting it empty is caught in the browser, at the first unanswered question.
+  await page.getByRole("button", { name: "Join waitlist" }).click();
+  check(await page.getByText("Enter your name").isVisible(), "an empty application is refused where it's wrong");
+  await page.locator('input[name="q-fullName"]').fill("E2E Tester");
+  await page.locator('input[name="q-email"]').fill(waitEmail);
+  // Someone who never bets has no sportsbook, stake or method to tell us about.
+  await pickAnswer(page, "betFrequency", "Never");
+  check((await page.locator('input[name="q-sportsbooks"]').count()) === 0, "someone who never bets isn't asked for a sportsbook");
+  await answerBetting(page);
+  // "Nothing" rules out every other method, and the other way round.
+  await pickAnswer(page, "decisionTools", "Nothing");
+  check(!(await page.locator('input[name="q-decisionTools"][value="Stats"]').isChecked()), '"Nothing" unticks the other methods');
+  await pickAnswer(page, "decisionTools", "Stats");
+  check(!(await page.locator('input[name="q-decisionTools"][value="Nothing"]').isChecked()), 'a method unticks "Nothing"');
+  await pickAnswer(page, "sports", "Other");
+  await page.locator('input[name="q-sportsOther"]').fill("Darts");
+  await answerBeta(page);
   await page.getByRole("button", { name: "Join waitlist" }).click();
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   let row;
@@ -1136,16 +1151,30 @@ console.log("\nWaitlist, change password and profile pictures");
     if (!row) await page.waitForTimeout(250);
   }
   check(row?.source === "signup", "the signup application puts you on the waitlist", `${row?.source}`);
-  const [survey] = await sql`select full_name, sports, sports_other, will_do_survey from signup_surveys where email = ${waitEmail}`;
+  const [survey] = await sql`
+    select full_name, sports, sports_other, sportsbooks, bet_size, decision_tools, will_do_survey
+    from signup_surveys where email = ${waitEmail}`;
   check(
-    survey?.full_name === "E2E Tester" && survey.sports.join() === "NFL,Other" && survey.sports_other === "Darts" && survey.will_do_survey,
+    survey?.full_name === "E2E Tester" &&
+      survey.sports.join() === "NFL,Other" &&
+      survey.sports_other === "Darts" &&
+      survey.sportsbooks.join() === "FanDuel" &&
+      survey.bet_size === "$10–$25" &&
+      survey.decision_tools.join() === "Stats" &&
+      survey.will_do_survey,
     "the answers are kept",
     JSON.stringify(survey),
   );
 
   // An address that already has an account gets the very same reply, and no row.
   await page.goto(`${APP_URL}/signup`);
-  await fillSurvey(testEmail);
+  await hydrated(page, 'input[name="q-is21"]');
+  await pickAnswer(page, "is21", "yes");
+  await page.locator('input[name="q-fullName"]').fill("E2E Tester");
+  await page.locator('input[name="q-email"]').fill(testEmail);
+  await answerBetting(page);
+  await answerBeta(page);
+  await page.getByRole("button", { name: "Join waitlist" }).click();
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   const [{ n: accountRows }] = await sql`select count(*)::int as n from waitlist where email = ${testEmail}`;

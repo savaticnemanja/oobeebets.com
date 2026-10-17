@@ -20,7 +20,7 @@ export default async function SignupPage() {
   const open = signupEnabled();
 
   return (
-    <>
+    <div data-wide>
       {!open && <Badge variant="brand">Waitlist</Badge>}
 
       <h1 className={open ? "text-2xl font-semibold tracking-tight" : "mt-4 text-2xl font-semibold tracking-tight"}>
@@ -28,20 +28,21 @@ export default async function SignupPage() {
       </h1>
       <p className="mt-2 text-sm text-fg-muted">
         {open
-          ? "Tell us a bit about how you bet, and we'll email a link to choose a password and set up your profile."
-          : "We're letting people in a few at a time. Tell us a bit about how you bet and we'll write the day there's a place for you."}
+          ? "A few questions about how you bet — about two minutes — then we'll email a link to choose a password and set up your profile."
+          : "We're letting testers in a few at a time. Answer a few questions about how you bet — about two minutes — and we'll write the day there's a place for you."}
+      </p>
+      {/* Up top: below a two-minute form, it'd be found too late. */}
+      <p className="mt-2 text-sm text-fg-muted">
+        Already have an account?{" "}
+        <Link href="/login" className="text-brand hover:underline">
+          Sign in
+        </Link>
       </p>
 
       <div className="mt-8">
         <GetStartedForm open={open} source="signup" />
       </div>
 
-      <p className="mt-8 text-sm text-fg-muted">
-        Already have an account?{" "}
-        <Link href="/login" className="text-brand hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </>
+    </div>
   );
 }
