@@ -30,7 +30,7 @@ export const ACCESS: Record<Access, AccessRule> = {
   free: { picks: { game: 1, prop: 1 }, parlays: false },
   base: { picks: { game: 5, prop: 5 }, parlays: false },
   pro: { picks: { game: 10, prop: 10 }, parlays: true },
-  elite: { picks: { game: 15, prop: 15 }, parlays: true },
+  elite: { picks: { game: 100, prop: 100 }, parlays: true },
 };
 
 export interface TierConfig {
