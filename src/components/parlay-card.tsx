@@ -12,7 +12,6 @@ import type { ParlayView } from "@/lib/parlay-store";
 import type { Role } from "@/db/schema";
 import { americanToDecimal } from "@/lib/settlement";
 import { formatOdds, formatUnits } from "@/lib/i18n/format";
-import { CATEGORY_LABELS } from "@/lib/board";
 
 /**
  * One parlay ticket, legs and all.
@@ -288,7 +287,7 @@ export function ParlayLegList({ legs }: { legs: ParlayView["legs"] }) {
             {l.selection}
           </span>
           <span className="num text-fg-subtle">{formatOdds(l.price)}</span>
-          <span className="truncate text-fg-subtle">{CATEGORY_LABELS[l.category]}</span>
+          <span className="truncate text-fg-subtle">{l.event}</span>
         </li>
       ))}
     </ol>

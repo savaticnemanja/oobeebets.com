@@ -13,6 +13,7 @@ const STAT: Record<string, string> = {
   player_rush_yds: "rush_yds",
   player_receptions: "rec",
   player_reception_yds: "rec_yds",
+  player_pass_completions: "pass_cmp",
 };
 
 /** The odds feed names teams in full, the stats feed by abbreviation. */
@@ -75,10 +76,19 @@ export function gradeProp(
     if (sel.outcome === "No") return { status: tds > 0 ? "lost" : "won", value: tds };
     return null;
   }
-  const key = STAT[sel.marketKey];
-  if (!key || sel.point === null) return null;
-  // A player with a box-score row who never caught a pass has no `rec` in it.
-  const value = stats[key] ?? 0;
+  if (sel.point === null) return null;
+  let value: number;
+  if (sel.marketKey === "player_kicking_points") {
+    // 3 a field goal, 1 an extra point. A box score without extra points
+    // can't decide it — that one an admin settles by hand.
+    if (stats.xpm === undefined) return null;
+    value = 3 * (stats.fgm ?? 0) + stats.xpm;
+  } else {
+    const key = STAT[sel.marketKey];
+    if (!key) return null;
+    // A player with a box-score row who never caught a pass has no `rec` in it.
+    value = stats[key] ?? 0;
+  }
   if (sel.outcome === "Over") return { status: fromMargin(value - sel.point), value };
   if (sel.outcome === "Under") return { status: fromMargin(sel.point - value), value };
   return null;

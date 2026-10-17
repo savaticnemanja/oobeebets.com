@@ -495,6 +495,9 @@ console.log("\nPlayer props graded from box scores");
   check(g("player_anytime_td", "No", null, { rush_td: 2 }) === "lost", "no-TD side loses on a score");
   check(g("player_pass_tds", "Over", 1.5, { pass_td: 1, rush_td: 1 }) === "lost", "a rushing TD doesn't count as a passing one");
   check(g("player_pass_yds", "Over", null, { pass_yds: 300 }) === null, "a prop with no line is left for an admin");
+  check(g("player_pass_completions", "Over", 22.5, { pass_cmp: 24 }) === "won", "over completions, cleared");
+  check(g("player_kicking_points", "Over", 7.5, { fgm: 2, xpm: 2 }) === "won", "kicking points = 3 a field goal + extra points");
+  check(g("player_kicking_points", "Under", 7.5, { fgm: 2 }) === null, "kicking points without extra points are left for an admin");
   check(g("player_tackles", "Over", 5.5, { tkl: 9 }) === null, "a market it doesn't know is left for an admin");
 
   check(playerKey("A.J. Brown") === playerKey("AJ Brown"), "initials match with or without dots");

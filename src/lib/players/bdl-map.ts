@@ -273,6 +273,7 @@ export function nflGameRow(row: unknown): GameRow | null {
       def_int: "defensive_interceptions",
       fgm: "field_goals_made",
       fga: "field_goal_attempts",
+      xpm: "extra_points_made",
     }),
   };
 }

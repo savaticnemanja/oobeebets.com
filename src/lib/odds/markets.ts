@@ -29,6 +29,8 @@ export const LEAGUE_CONFIG: Record<
       "player_rush_yds",
       "player_receptions",
       "player_reception_yds",
+      "player_pass_completions",
+      "player_kicking_points",
       "player_anytime_td",
     ],
     altPropMarkets: [
@@ -37,6 +39,8 @@ export const LEAGUE_CONFIG: Record<
       "player_rush_yds_alternate",
       "player_receptions_alternate",
       "player_reception_yds_alternate",
+      "player_pass_completions_alternate",
+      "player_kicking_points_alternate",
     ],
   },
 };
@@ -81,6 +85,8 @@ export const PROP_LABELS: Record<string, string> = {
   player_rush_yds: "Rushing Yards",
   player_receptions: "Receptions",
   player_reception_yds: "Receiving Yards",
+  player_pass_completions: "Completions",
+  player_kicking_points: "Kicking Points",
   player_anytime_td: "Anytime TD",
   pitcher_strikeouts: "Strikeouts",
   pitcher_hits_allowed: "Hits Allowed",

@@ -22,6 +22,7 @@ import { formatOdds } from "@/lib/i18n/format";
 import {
   CATEGORY_LABELS,
   CATEGORY_NOUN,
+  MAX_UNITS,
   PICKS_PER_SLATE,
   isPickCategory,
   pickCategories,
@@ -68,7 +69,7 @@ const createPickSchema = z.object({
   lineId: z.string().uuid("Choose a line from the feed"),
   /** The price the admin was looking at; a moved price is refused, not taken. */
   expectedPrice: z.coerce.number().int(),
-  units: z.coerce.number().min(0.1).max(10).default(1),
+  units: z.coerce.number().min(0.1).max(MAX_UNITS.game).default(1),
   confidence: z.coerce.number().int().min(0).max(100).optional(),
   evPct: z.coerce.number().min(-100).max(100).optional(),
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
@@ -114,6 +115,9 @@ export async function createPickAction(
   }
 
   const category = marketCategory(line.marketKey);
+  if (d.units > MAX_UNITS[category]) {
+    return { ok: false, error: `A ${CATEGORY_NOUN[category]} is ${MAX_UNITS[category]} units at most.` };
+  }
   const limit = PICKS_PER_SLATE[category];
   const league = game.league as FeedLeague;
 

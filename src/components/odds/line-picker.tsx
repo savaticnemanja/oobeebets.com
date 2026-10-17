@@ -228,7 +228,7 @@ function GameCard({
             Player props
           </button>
           {propsOpen && (
-            <PropsPanel gameId={game.id} onPick={pick} isSelected={isSelected} disabled={blocked} />
+            <PropsPanel game={game} onPick={pick} isSelected={isSelected} disabled={blocked} />
           )}
         </>
       )}
@@ -284,12 +284,12 @@ function PriceButton({
 }
 
 function PropsPanel({
-  gameId,
+  game,
   onPick,
   isSelected,
   disabled,
 }: {
-  gameId: string;
+  game: GameOption;
   onPick: (o: LineOption) => void;
   isSelected: (lineId: string) => boolean;
   disabled: boolean;
@@ -299,7 +299,7 @@ function PropsPanel({
 
   React.useEffect(() => {
     let cancelled = false;
-    loadGamePropsAction(gameId)
+    loadGamePropsAction(game.id)
       .then((g) => {
         if (!cancelled) {
           setGroups(g);
@@ -310,7 +310,7 @@ function PropsPanel({
     return () => {
       cancelled = true;
     };
-  }, [gameId]);
+  }, [game.id]);
 
   if (groups === null) {
     return (
@@ -330,6 +330,13 @@ function PropsPanel({
 
   return (
     <div className="border-t border-border px-3 pb-3 pt-2">
+      {/* The game, again, beside the props: a long list scrolls the card's header away. */}
+      <p className="truncate pb-2 text-xs text-fg-subtle">
+        <span className="font-medium text-fg-muted">
+          {game.awayTeam} vs {game.homeTeam}
+        </span>{" "}
+        · <LocalTime at={game.commenceTime} format="kickoff" className="num" />
+      </p>
       <div className="-mx-1 flex gap-1 overflow-x-auto pb-2" role="tablist" aria-label="Prop market">
         {groups.map((g) => (
           <button

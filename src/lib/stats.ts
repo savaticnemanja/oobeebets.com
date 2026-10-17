@@ -665,7 +665,7 @@ export async function getPlayerFollows(userId: string): Promise<PlayerFollows | 
     .innerJoin(picks, eq(picks.id, pickFollows.pickId))
     .innerJoin(slates, eq(slates.date, picks.slateDate))
     .where(and(eq(pickFollows.userId, userId), sql`${slates.publishedAt} is not null`))
-    .orderBy(desc(picks.slateDate), asc(picks.category), asc(picks.rank));
+    .orderBy(desc(picks.startsAt), asc(picks.rank));
 
   // "Current" is the pick's own grade, not the clock: a game that kicked off an
   // hour ago is still riding as far as this tester is concerned until an admin
@@ -775,7 +775,7 @@ export async function getMySingles(userId: string) {
     .from(pickFollows)
     .innerJoin(picks, eq(picks.id, pickFollows.pickId))
     .where(and(eq(pickFollows.userId, userId), publishedSlate))
-    .orderBy(desc(picks.slateDate), asc(picks.rank));
+    .orderBy(desc(picks.startsAt), asc(picks.rank));
 }
 
 /**
@@ -795,6 +795,6 @@ export async function getMyTakenPicks(userId: string) {
     .from(pickFollows)
     .innerJoin(picks, eq(picks.id, pickFollows.pickId))
     .where(and(eq(pickFollows.userId, userId), publishedSlate))
-    .orderBy(desc(picks.slateDate), asc(picks.startsAt), asc(picks.rank));
+    .orderBy(desc(picks.startsAt), asc(picks.rank));
   return rows.map((r) => r.pick);
 }

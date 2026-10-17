@@ -32,6 +32,12 @@ export const CATEGORY_NOUN: Record<PickCategory, string> = {
  * day instead of once per day. Both limits are 15 today; raising either means
  * a migration to move the check, not just an edit here.
  */
+/** The most units Oobee may put on one pick: game bets go to 100, props stay at 10. */
+export const MAX_UNITS: Record<PickCategory, number> = {
+  game: 100,
+  prop: 10,
+};
+
 export const PICKS_PER_SLATE: Record<PickCategory, number> = {
   game: 15,
   prop: 15,
