@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -16,6 +16,7 @@ import {
   slates,
 } from "@/db/schema";
 import { freezeLine } from "@/lib/odds/board";
+import { baseMarket, eventLabel } from "@/lib/odds/markets";
 import { formatOdds } from "@/lib/i18n/format";
 import type { AuthContext } from "@/lib/auth";
 import { getAuth, requireAdmin } from "@/lib/auth";
@@ -26,80 +27,18 @@ import {
 } from "@/lib/parlays";
 import { PARLAYS_PER_SLATE } from "@/lib/board";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
-import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
+import { fieldErrorsFrom, optionalNumber, type ActionState } from "@/lib/validation";
 import { violates } from "@/lib/db-errors";
 
 /**
- * Building and tearing down parlays — Oobee's own, and the ones testers make
- * from the board.
+ * Building and tearing down parlays — Oobee's own, and the ones testers make.
  *
- * Both paths run the same leg validation, because the rule they enforce is the
- * same rule: a parlay may only ever contain picks that were published and
- * still unplayed at the moment it was built. Everything downstream — the live
- * price, the grade, the tester's record — is only trustworthy because that is
- * checked here rather than in the form that submitted it.
+ * Both are built from lines in the odds feed, frozen into selections at the
+ * price shown (see freezeLine), so every leg is a bet that was really on offer
+ * and still ahead of kick-off at the moment it was taken. Everything
+ * downstream — the live price, the grade, the record — is only trustworthy
+ * because that is checked here rather than in the form that submitted it.
  */
-
-const legIdsSchema = z
-  .array(z.string().uuid())
-  .min(MIN_PARLAY_LEGS, `A parlay needs at least ${MIN_PARLAY_LEGS} legs`)
-  .max(MAX_PARLAY_LEGS, `A parlay tops out at ${MAX_PARLAY_LEGS} legs`)
-  // A pick twice in one parlay would square its odds and invent money no book
-  // would pay. The primary key refuses it too; this is the readable error.
-  .refine((ids) => new Set(ids).size === ids.length, "A pick can only be in a parlay once");
-
-interface ValidatedLegs {
-  slateDate: string;
-  ids: string[];
-}
-
-/**
- * The gate every parlay passes through.
- *
- * Re-reads each leg from the database rather than trusting anything the form
- * sent: the client's list of selectable picks is a suggestion, and a forged
- * request can name any uuid it likes.
- */
-async function validateLegs(
-  ids: string[],
-): Promise<{ ok: true; legs: ValidatedLegs } | { ok: false; error: string }> {
-  const rows = await db
-    .select({
-      id: picks.id,
-      slateDate: picks.slateDate,
-      startsAt: picks.startsAt,
-      status: picks.status,
-      publishedAt: slates.publishedAt,
-    })
-    .from(picks)
-    .innerJoin(slates, eq(slates.date, picks.slateDate))
-    .where(inArray(picks.id, ids));
-
-  if (rows.length !== ids.length) {
-    return { ok: false, error: "One of those picks no longer exists." };
-  }
-  // Built on the draft and published with it, so legs come off an
-  // unpublished slate; the action itself refuses once the slate is out.
-  if (rows.some((r) => r.status !== "pending")) {
-    return { ok: false, error: "A parlay can only use picks that are still pending." };
-  }
-
-  // One slate per parlay. The row carries a single slate_date, and a ticket
-  // spanning two betting days would belong to neither board — it is also not
-  // something the builder can produce, since it only ever shows one day.
-  const dates = new Set(rows.map((r) => r.slateDate));
-  if (dates.size > 1) {
-    return { ok: false, error: "Every leg has to come from the same day's board." };
-  }
-
-  // The earliest leg closes the ticket. Checked against the legs as a set,
-  // not one at a time, which is the point — see parlayWindowOpen.
-  if (!parlayWindowOpen(rows)) {
-    return { ok: false, error: "One of those games has already started." };
-  }
-
-  return { ok: true, legs: { slateDate: [...dates][0], ids } };
-}
 
 /* ------------------------------------------------------- a tester's parlay */
 
@@ -309,8 +248,8 @@ const oobeeParlaySchema = z.object({
       "American odds: >= +100 or <= -100",
     ),
   units: z.coerce.number().min(0.1).max(10).default(1),
-  confidence: z.coerce.number().int().min(0).max(100).optional(),
-  evPct: z.coerce.number().min(-100).max(100).optional(),
+  confidence: optionalNumber(z.coerce.number().int().min(0).max(100)),
+  evPct: optionalNumber(z.coerce.number().min(-100).max(100)),
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
   book: z.string().trim().max(60).optional().or(z.literal("")),
 });
@@ -339,7 +278,8 @@ function revalidateBoard() {
 }
 
 /**
- * Oobee publishes a parlay onto its own board tab.
+ * Oobee publishes a parlay onto its own board tab, from any lines on the
+ * day's games — it doesn't need those bets on the game or prop board first.
  *
  * Ranked like the other two boards, and on the same "lowest free rank" rule as
  * createPickAction — rank is never typed in, so two admins adding at once
@@ -351,8 +291,13 @@ export async function createOobeeParlayAction(
 ): Promise<ActionState> {
   const actor = await requireAdmin();
 
-  const legIds = formData.getAll("legIds").map(String);
-  const legs = legIdsSchema.safeParse(legIds);
+  // Each leg arrives as "lineId:price" — the line and the price the admin saw.
+  const legs = communityLegsSchema.safeParse(
+    formData.getAll("leg").map((v) => {
+      const [lineId, price] = String(v).split(":");
+      return { lineId, price: Number(price) };
+    }),
+  );
   if (!legs.success) {
     return { ok: false, error: legs.error.issues[0]?.message ?? "Pick the legs first" };
   }
@@ -364,11 +309,7 @@ export async function createOobeeParlayAction(
   const d = parsed.data;
   if (!isValidSlateDate(d.slateDate)) return { ok: false, error: "Bad slate date" };
 
-  const checked = await validateLegs(legs.data);
-  if (!checked.ok) return { ok: false, error: checked.error };
-  if (checked.legs.slateDate !== d.slateDate) {
-    return { ok: false, error: "Those legs are not on that day's board." };
-  }
+  // Built on the draft and published with it; once the day is out it is fixed.
   const [slate] = await db
     .select({ publishedAt: slates.publishedAt })
     .from(slates)
@@ -378,9 +319,40 @@ export async function createOobeeParlayAction(
     return { ok: false, error: "That slate is published — unpublish it to add a parlay." };
   }
 
+  // Any line on any of the day's games. Same-game legs are allowed here, unlike
+  // a tester's ticket: Oobee records the book's own (correlated) price in the
+  // price field. Two lines on one bet — both sides, or two numbers on one
+  // player's prop — are not a parlay anyone can place.
+  const frozen: Array<{ selectionId: string; bet: string }> = [];
+  for (const leg of legs.data) {
+    const f = await freezeLine(leg.lineId, leg.price);
+    if (!f.ok) {
+      return {
+        ok: false,
+        error:
+          f.movedTo !== undefined
+            ? `A price moved (now ${formatOdds(f.movedTo)}) — that leg was taken off the slip, add it again.`
+            : f.error,
+        fieldErrors: { moved: [leg.lineId] },
+      };
+    }
+    if (slateDateString(f.game.commenceTime) !== d.slateDate) {
+      return { ok: false, error: `${eventLabel(f.game)} isn't on this day's slate.` };
+    }
+    frozen.push({
+      selectionId: f.selectionId,
+      bet: `${f.gameId}|${baseMarket(f.line.marketKey)}|${f.line.player ?? ""}`,
+    });
+  }
+  if (new Set(frozen.map((f) => f.bet)).size !== frozen.length) {
+    return { ok: false, error: "Two legs on the same bet — keep one line per market on a game." };
+  }
+
   let rank = 0;
   try {
     const id = await db.transaction(async (tx) => {
+      // A day with only parlays on it has no slate row yet.
+      await tx.insert(slates).values({ date: d.slateDate }).onConflictDoNothing({ target: slates.date });
       const free = await tx.execute<{ rank: number | null }>(sql`
         select min(t.rank) as rank
         from generate_series(1, ${PARLAYS_PER_SLATE}) as t(rank)
@@ -413,15 +385,15 @@ export async function createOobeeParlayAction(
         .returning({ id: parlays.id });
 
       await tx
-        .insert(parlayLegs)
-        .values(checked.legs.ids.map((pickId) => ({ parlayId: row.id, pickId })));
+        .insert(parlaySelectionLegs)
+        .values(frozen.map((f) => ({ parlayId: row.id, selectionId: f.selectionId })));
       return row.id;
     });
 
     await audit(actor, "parlay.created", id, {
       slateDate: d.slateDate,
       rank,
-      legs: checked.legs.ids.length,
+      legs: frozen.length,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

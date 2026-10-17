@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Check, Circle, Layers } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Layers, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,72 +15,97 @@ import {
 import { americanToDecimal, combineOdds } from "@/lib/settlement";
 import { formatOdds } from "@/lib/i18n/format";
 import { LocalTime } from "@/components/local-time";
-import { CATEGORY_LABELS, PARLAYS_PER_SLATE } from "@/lib/board";
-import type { SelectableLeg } from "@/components/parlay-builder";
-import { cn } from "@/lib/utils";
+import { PARLAYS_PER_SLATE } from "@/lib/board";
+import { LinePicker } from "@/components/odds/line-picker";
+import { FeedNotice } from "@/components/admin/pick-composer";
+import { baseMarket, type GameOption, type LineOption } from "@/lib/odds/markets";
+import type { FeedStatus } from "@/lib/odds/sync";
+
+interface Leg {
+  option: LineOption;
+  game: GameOption;
+}
+
+/** One bet on a game: a side of a market, or one player's prop. */
+function betKey(option: LineOption, game: GameOption): string {
+  return `${game.id}|${baseMarket(option.marketKey)}|${option.player ?? ""}`;
+}
 
 /**
  * Where Oobee builds a parlay for its own board tab.
  *
- * Same leg-picking as the tester's builder, plus the things only a published
- * recommendation carries: a stake, a confidence, an edge, the reasoning, and
- * — the one that matters — the price the book is actually offering.
+ * Legs come straight off the odds feed — any line on any of the day's games,
+ * game lines and props alike — without putting them on the game or prop
+ * board first. Then the things only a published recommendation carries: a
+ * stake, a confidence, an edge, the reasoning, and — the one that matters —
+ * the price the book is actually offering.
  *
  * That price field is why this is not just the tester's builder with a save
  * button. Correlated legs price worse than the product of their parts, so a
  * same-game three-leg the maths calls +600 might be +480 at the book. Left
  * blank the legs decide; filled in, Oobee's number wins until a leg drops out.
- * See parlayPrice in lib/parlays.ts.
+ * See parlayPrice in lib/parlays.ts. Same-game legs are allowed for that
+ * reason; two lines on one bet (both sides, two numbers on one prop) swap.
  */
 export function ParlayComposer({
   date,
-  legs,
+  games,
+  feed,
   parlayCount,
   disabled,
 }: {
   date: string;
-  legs: SelectableLeg[];
+  games: GameOption[];
+  feed: FeedStatus;
   parlayCount: number;
   disabled: boolean;
 }) {
   const [state, formAction, pending] = useActionState(createOobeeParlayAction, null);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [legs, setLegs] = useState<Leg[]>([]);
+  const router = useRouter();
 
-  // Clearing the legs is a render-phase adjustment, not an effect: React's
-  // "store information from previous renders" pattern. Doing it in an effect
-  // sets state after paint and costs a second render of the whole list.
+  // Clearing the slip is a render-phase adjustment, not an effect: React's
+  // "store information from previous renders" pattern.
   //
-  // It only clears on success, deliberately. A rejected submit keeps the legs
-  // selected so the admin can fix the price and resend rather than rebuilding
-  // the ticket from scratch — same reasoning as keeping form answers on a
-  // failed submit elsewhere in the panel.
+  // It only clears on success. A rejected submit keeps the legs so the admin
+  // can fix the price and resend — except a leg whose price moved, which
+  // comes off so the refreshed feed can offer it at the new price.
   const [handled, setHandled] = useState(state);
   if (state !== handled) {
     setHandled(state);
-    if (state?.ok) setSelected([]);
+    if (state?.ok) setLegs([]);
+    const moved = state && !state.ok ? state.fieldErrors?.moved : undefined;
+    if (moved) setLegs((cur) => cur.filter((l) => !moved.includes(l.option.lineId)));
   }
 
   // The toast is a genuine effect: sonner is an external system being told
-  // about a state change, which is what effects are for.
+  // about a state change, which is what effects are for. A moved price also
+  // refetches the page, so the feed shows the new number.
   useEffect(() => {
     if (state?.ok) toast.success(state.message ?? "Parlay added");
-    else if (state && !state.ok) toast.error(state.error);
-  }, [state]);
+    else if (state && !state.ok) {
+      toast.error(state.error);
+      if (state.fieldErrors?.moved) router.refresh();
+    }
+  }, [state, router]);
 
-  const chosen = legs.filter((l) => selected.includes(l.id));
-  const derived = combineOdds(chosen.map((l) => l.price));
-  const tooFew = selected.length < MIN_PARLAY_LEGS;
-  const full = selected.length >= MAX_PARLAY_LEGS;
+  const derived = combineOdds(legs.map((l) => l.option.price));
+  const tooFew = legs.length < MIN_PARLAY_LEGS;
   const boardFull = parlayCount >= PARLAYS_PER_SLATE;
 
-  function toggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : prev.length >= MAX_PARLAY_LEGS
-          ? prev
-          : [...prev, id],
-    );
+  function toggle(option: LineOption, game: GameOption) {
+    setLegs((current) => {
+      if (current.some((l) => l.option.lineId === option.lineId)) {
+        return current.filter((l) => l.option.lineId !== option.lineId);
+      }
+      // Another line on the same bet swaps in, as a sportsbook slip does.
+      const without = current.filter((l) => betKey(l.option, l.game) !== betKey(option, game));
+      if (without.length >= MAX_PARLAY_LEGS) {
+        toast.error(`A parlay tops out at ${MAX_PARLAY_LEGS} legs.`);
+        return current;
+      }
+      return [...without, { option, game }];
+    });
   }
 
   if (disabled) {
@@ -106,8 +132,8 @@ export function ParlayComposer({
   return (
     <form action={formAction} className="card-hairline overflow-hidden">
       <input type="hidden" name="slateDate" value={date} />
-      {selected.map((id) => (
-        <input key={id} type="hidden" name="legIds" value={id} />
+      {legs.map((l) => (
+        <input key={l.option.lineId} type="hidden" name="leg" value={`${l.option.lineId}:${l.option.price}`} />
       ))}
 
       <div className="border-b border-border p-5 pb-4">
@@ -116,70 +142,55 @@ export function ParlayComposer({
           Build a parlay
         </h2>
         <p className="mt-1 text-xs text-fg-subtle">
-          {parlayCount}/{PARLAYS_PER_SLATE} today. Legs come off this slate&apos;s own
-          picks, so every one is already logged and will be graded on its own.
+          {parlayCount}/{PARLAYS_PER_SLATE} today. Any line on any of this day&apos;s games —
+          game lines or player props — no need to put them on the board first. It goes
+          out when the slate is published.
         </p>
       </div>
 
-      {/* ------------------------------------------------------------- legs */}
-      {legs.length === 0 ? (
-        <p className="p-5 text-sm text-fg-muted">
-          No picks available — add some to the game or prop board first, and make
-          sure they are still ahead of kick-off.
-        </p>
-      ) : (
-        <ul className="max-h-72 overflow-y-auto overscroll-contain border-b border-border">
-          {legs.map((l) => {
-            const on = selected.includes(l.id);
-            return (
-              <li key={l.id}>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={on}
-                  aria-label={`Add leg: ${l.selection}`}
-                  disabled={!on && full}
-                  onClick={() => toggle(l.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 border-b border-border px-4 py-2 text-left transition-colors",
-                    "last:border-b-0 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40",
-                    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
-                    on && "bg-brand/5",
-                  )}
-                >
-                  <span className={cn("shrink-0", on ? "text-brand" : "text-fg-subtle")}>
-                    {on ? (
-                      <Check className="size-4" strokeWidth={3} aria-hidden="true" />
-                    ) : (
-                      <Circle className="size-4" aria-hidden="true" />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="num text-[0.6875rem] text-fg-subtle">
-                        #{l.rank}
-                      </span>
-                      <span className="text-sm text-fg">{l.selection}</span>
-                      <span className="num text-xs text-fg-muted">
-                        {formatOdds(l.price)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-fg-subtle">
-                      {CATEGORY_LABELS[l.category]} · {l.event} ·{" "}
-                      <LocalTime at={l.startsAt} format="kickoff" className="num" />
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {/* ------------------------------------------------------------- feed */}
+      <div className="border-b border-border p-5 pt-3">
+        <FeedNotice feed={feed} />
+        <div className="max-h-[60vh] overflow-y-auto pr-1">
+          <LinePicker
+            games={games}
+            show={{ lines: true, props: true }}
+            onPick={toggle}
+            isSelected={(id) => legs.some((l) => l.option.lineId === id)}
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- slip */}
+      {legs.length > 0 && (
+        <ol className="space-y-2 border-b border-border p-5">
+          {legs.map((l) => (
+            <li key={l.option.lineId} className="flex items-start gap-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="text-fg">{l.option.label}</p>
+                <p className="truncate text-xs text-fg-subtle">
+                  {l.game.awayTeam} vs {l.game.homeTeam} ·{" "}
+                  <LocalTime at={l.game.commenceTime} format="kickoff" className="num" /> · {l.option.bookTitle}
+                </p>
+              </div>
+              <span className="num shrink-0 text-xs text-fg-muted">{formatOdds(l.option.price)}</span>
+              <button
+                type="button"
+                onClick={() => toggle(l.option, l.game)}
+                aria-label={`Remove ${l.option.label}`}
+                className="grid size-6 shrink-0 place-items-center rounded-full text-fg-subtle hover:bg-surface-2 hover:text-fg"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ol>
       )}
 
       {/* ----------------------------------------------------------- details */}
       <div className="space-y-4 p-5">
         <p className="text-xs">
-          <span className="num text-fg">{selected.length}</span>
+          <span className="num text-fg">{legs.length}</span>
           <span className="text-fg-subtle"> legs selected</span>
           {derived !== null && (
             <>
@@ -254,7 +265,7 @@ export function ParlayComposer({
             ? "Adding…"
             : tooFew
               ? `Select at least ${MIN_PARLAY_LEGS} legs`
-              : `Add ${selected.length}-leg parlay`}
+              : `Add ${legs.length}-leg parlay`}
         </Button>
 
         {state && !state.ok && (

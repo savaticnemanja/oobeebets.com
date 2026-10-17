@@ -107,7 +107,7 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
 
   const tabs = [
     { href: "/admin/settle", label: "Needs a result", count: dueCount, active: tab === "due", attention: true },
-    { href: "/admin/settle?tab=community", label: "Community legs", count: legCount, active: tab === "community", attention: true },
+    { href: "/admin/settle?tab=community", label: "Parlay legs", count: legCount, active: tab === "community", attention: true },
     { href: "/admin/settle?tab=upcoming", label: "Not started", count: upcoming.length, active: tab === "upcoming" },
     { href: "/admin/settle?tab=settled", label: "Recently settled", active: tab === "settled" },
   ];
@@ -136,7 +136,7 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
           href="/admin/settle"
         />
         <Kpi
-          label="Community legs"
+          label="Parlay legs"
           value={legCount}
           tone={legCount > 0 ? "brand" : "neutral"}
           sub={communityLegs[0] ? `oldest kicked off ${since(communityLegs[0].commenceTime)}` : "nothing waiting"}

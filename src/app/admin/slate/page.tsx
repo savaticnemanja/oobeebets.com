@@ -23,7 +23,7 @@ import {
   tabFromParam,
   type PickCategory,
 } from "@/lib/board";
-import { getOobeeParlays, selectableLegs } from "@/lib/parlay-store";
+import { getOobeeParlays } from "@/lib/parlay-store";
 import { ParlayComposer } from "@/components/admin/parlay-composer";
 import { ParlayCard } from "@/components/parlay-card";
 import { DeleteOobeeParlayButton } from "@/components/admin/parlay-delete";
@@ -98,8 +98,7 @@ export default async function AdminSlatePage({
   ) as Record<PickCategory, number>;
 
   // Oobee's parlays go out with the day, so the panel counts them on every
-  // tab; `legs` — what the parlay composer may build from, this slate's picks
-  // still ahead of kick-off — only on the parlay tab.
+  // tab.
   //
   // The day strip covers the coming week and a little behind; a day picked
   // from further off gets its own few days either side instead.
@@ -108,17 +107,13 @@ export default async function AdminSlatePage({
     date >= addDays(today, -2) && date <= addDays(today, 9)
       ? [addDays(today, -2), addDays(today, 9)]
       : [addDays(date, -3), addDays(date, 3)];
-  const [oobeeParlays, legs, days] = await Promise.all([
-    getOobeeParlays(date),
-    isParlayTab ? selectableLegs(date) : [],
-    getSlateDays(from, to),
-  ]);
+  const [oobeeParlays, days] = await Promise.all([getOobeeParlays(date), getSlateDays(from, to)]);
 
   // The pick composer chooses from the odds feed. Refreshed here only when
   // the stored copy is stale, so reloading this screen does not spend credits.
   // A day inside the coming week is covered by the week's call — the same one
   // the parlay builder makes, at the same cost — so it isn't fetched twice.
-  if (!isParlayTab && !published) {
+  if (!published) {
     // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "is it inside the coming week" is the point
     const weekEnd = Date.now() + UPCOMING_DAYS * 24 * 3600_000;
     await within(
@@ -126,22 +121,25 @@ export default async function AdminSlatePage({
       FEED_WAIT_MS,
     );
   }
-  const [games, feed] =
-    !isParlayTab && !published
-      ? await Promise.all([getSlateGames(date), getFeedStatus()])
-      : [[], null];
+  // Both composers pick from the feed: the pick composer one line at a time,
+  // the parlay composer as many legs as it likes from any of the day's games.
+  const [games, feed] = !published ? await Promise.all([getSlateGames(date), getFeedStatus()]) : [[], null];
   // Nothing left to pick on this day: point at the next day that has a game.
   const nextDay =
-    !isParlayTab && !published && games.length === 0
+    !published && games.length === 0
       // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "what hasn't kicked off yet" is the point
       ? await nextGameDay(new Date(Math.max(slateBounds(date).from.getTime(), Date.now())))
       : null;
 
   // eslint-disable-next-line react-hooks/purity -- a server render, once per request: "has a game started yet" is the point
   const now = Date.now();
+  // Parlay legs count as much as picks: a draft parlay with a leg under way
+  // can't go out either.
+  const parlayLegs = oobeeParlays.flatMap((p) => p.legs);
+  const kickoffs = [...rows.map((r) => r.startsAt.getTime()), ...parlayLegs.map((l) => l.startsAt.getTime())];
   const firstKickoff =
-    rows.length > 0
-      ? new Date(Math.min(...rows.map((r) => r.startsAt.getTime())))
+    kickoffs.length > 0
+      ? new Date(Math.min(...kickoffs))
       : (days.find((d) => d.day === date)?.firstKickoff ?? null);
 
   return (
@@ -176,8 +174,8 @@ export default async function AdminSlatePage({
         parlays={oobeeParlays.length}
         featured={rows.filter((r) => r.featured).length + oobeeParlays.filter((p) => p.featured).length}
         firstKickoff={firstKickoff}
-        anySettled={rows.some((r) => r.settledAt !== null)}
-        anyStarted={rows.some((r) => r.startsAt.getTime() <= now)}
+        anySettled={rows.some((r) => r.settledAt !== null) || parlayLegs.some((l) => l.status !== "pending")}
+        anyStarted={rows.some((r) => r.startsAt.getTime() <= now) || parlayLegs.some((l) => l.startsAt.getTime() <= now)}
       />
 
       {nextDay && nextDay !== date && (
@@ -209,7 +207,8 @@ export default async function AdminSlatePage({
           {isParlayTab ? (
             <ParlayComposer
               date={date}
-              legs={legs}
+              games={games}
+              feed={feed ?? { configured: false, creditsRemaining: null, lastError: null }}
               parlayCount={oobeeParlays.length}
               disabled={published}
             />
@@ -232,7 +231,7 @@ export default async function AdminSlatePage({
               {published
                 ? "Published — the order is fixed; stars still work"
                 : isParlayTab
-                  ? "Built from this day's picks"
+                  ? "Built from the day's games"
                   : "Drag a row to change its rank · ★ to feature"}
             </p>
           </div>

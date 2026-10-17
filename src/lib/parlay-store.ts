@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { games, parlayFollows, parlayLegs, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
+import { games, parlayFollows, parlayLegs, parlaySelectionLegs, parlays, picks, selections, users } from "@/db/schema";
 import { LEAGUE_CONFIG, eventLabel, lineLabel, marketCategory, marketEnum, type FeedLeague } from "./odds/markets";
 import type { Market, PickCategory, PickStatus, Role, Sport } from "@/db/schema";
 import { visibleTo } from "@/lib/moderation";
@@ -495,37 +495,3 @@ export async function getParlay(id: string): Promise<ParlayView | null> {
   return view ?? null;
 }
 
-/**
- * The picks a parlay may legally be built from: on a published slate, and
- * still ahead of kick-off.
- *
- * Used by the builder to render its options and by the action to re-check
- * them — the second is what matters, since the first is only a suggestion the
- * client can ignore.
- */
-export async function selectableLegs(slateDate: string) {
-  return db
-    .select({
-      id: picks.id,
-      rank: picks.rank,
-      category: picks.category,
-      league: picks.league,
-      event: picks.event,
-      selection: picks.selection,
-      price: picks.price,
-      startsAt: picks.startsAt,
-      status: picks.status,
-    })
-    .from(picks)
-    .innerJoin(slates, eq(slates.date, picks.slateDate))
-    .where(
-      and(
-        // The draft's picks: Oobee's parlays are built before the slate goes
-        // out and are published with it (the composer locks once it has).
-        eq(picks.slateDate, slateDate),
-        eq(picks.status, "pending"),
-        sql`${picks.startsAt} > now()`,
-      ),
-    )
-    .orderBy(asc(picks.category), asc(picks.rank));
-}

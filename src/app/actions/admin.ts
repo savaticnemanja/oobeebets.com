@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog, picks, slates, users } from "@/db/schema";
+import { auditLog, games, parlaySelectionLegs, parlays, picks, selections, slates, users } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { canManageRole, requireAdmin, revokeAllSessions } from "@/lib/auth";
-import { fieldErrorsFrom, settleSchema, type ActionState } from "@/lib/validation";
+import { fieldErrorsFrom, optionalNumber, settleSchema, type ActionState } from "@/lib/validation";
 import { isValidSlateDate, slateDateString } from "@/lib/slate-date";
 import { freezeLine } from "@/lib/odds/board";
 import { settleSelection, unsettleSelection } from "@/lib/odds/settle";
@@ -70,8 +70,8 @@ const createPickSchema = z.object({
   /** The price the admin was looking at; a moved price is refused, not taken. */
   expectedPrice: z.coerce.number().int(),
   units: z.coerce.number().min(0.1).max(MAX_UNITS.game).default(1),
-  confidence: z.coerce.number().int().min(0).max(100).optional(),
-  evPct: z.coerce.number().min(-100).max(100).optional(),
+  confidence: optionalNumber(z.coerce.number().int().min(0).max(100)),
+  evPct: optionalNumber(z.coerce.number().min(-100).max(100)),
   reasoning: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
@@ -318,6 +318,25 @@ export async function deletePickAction(
 
 /* --------------------------------------------------------- publish slate */
 
+/**
+ * Oobee's parlays on a day, and how many of their feed legs have kicked off or
+ * been graded. Their legs are frozen feed lines, not picks, so the picks
+ * checks below don't see them — but a parlay is as public as a pick.
+ */
+async function parlayFacts(date: string): Promise<{ parlays: number; started: number; settled: number }> {
+  const [r] = await db.execute<{ parlays: number; started: number; settled: number }>(sql`
+    select count(distinct p.id)::int as parlays,
+      count(*) filter (where g.commence_time <= now())::int as started,
+      count(*) filter (where s.status <> 'pending')::int as settled
+    from ${parlays} p
+    left join ${parlaySelectionLegs} l on l.parlay_id = p.id
+    left join ${selections} s on s.id = l.selection_id
+    left join ${games} g on g.id = s.game_id
+    where p.slate_date = ${date} and p.owner_id is null
+  `);
+  return r ?? { parlays: 0, started: 0, settled: 0 };
+}
+
 export async function publishSlateAction(
   _prev: ActionState,
   formData: FormData,
@@ -337,8 +356,9 @@ export async function publishSlateAction(
     number | undefined
   >;
   const n = byCategory.reduce((total, r) => total + r.n, 0);
+  const pf = await parlayFacts(date);
 
-  if (n === 0) return { ok: false, error: "Nothing to publish — add picks first." };
+  if (n === 0 && pf.parlays === 0) return { ok: false, error: "Nothing to publish — add picks or a parlay first." };
 
   // A slate goes public before its games, never after. Otherwise a draft is a
   // way to pick winners in hindsight: add fifteen, wait for the results,
@@ -356,6 +376,9 @@ export async function publishSlateAction(
       error: `${late} pick${late === 1 ? " has" : "s have"} already started — delete ${late === 1 ? "it" : "them"} from the draft, then publish the rest.`,
     };
   }
+  if (pf.started > 0 || pf.settled > 0) {
+    return { ok: false, error: "A parlay has a leg that already started — delete it from the draft, then publish the rest." };
+  }
 
   await db
     .update(slates)
@@ -370,9 +393,10 @@ export async function publishSlateAction(
 
   // Both tabs go live together, so the confirmation names both — "15 picks
   // live" no longer says which board got them.
-  const breakdown = pickCategories
-    .map((c) => `${counts[c] ?? 0} ${CATEGORY_NOUN[c]}${counts[c] === 1 ? "" : "s"}`)
-    .join(", ");
+  const breakdown = [
+    ...pickCategories.map((c) => `${counts[c] ?? 0} ${CATEGORY_NOUN[c]}${counts[c] === 1 ? "" : "s"}`),
+    ...(pf.parlays > 0 ? [`${pf.parlays} parlay${pf.parlays === 1 ? "" : "s"}`] : []),
+  ].join(", ");
   return { ok: true, message: `Slate published — ${breakdown} live.` };
 }
 
@@ -391,16 +415,17 @@ export async function unpublishSlateAction(
     })
     .from(picks)
     .where(eq(picks.slateDate, date));
+  const pf = await parlayFacts(date);
 
   // Once results are on the public record, pulling the slate would be editing
   // history after the fact.
-  if (settled > 0) {
+  if (settled > 0 || pf.settled > 0) {
     return { ok: false, error: "Picks are already settled — this slate is part of the record." };
   }
   // So would pulling it once a game is under way: a draft's picks can be
   // deleted, so this was the way to make a pick that's going badly vanish
   // before anyone settled it. From the first kick-off, void instead.
-  if (started > 0) {
+  if (started > 0 || pf.started > 0) {
     return {
       ok: false,
       error: "A game on this slate has started — it's part of the record now. Void a pick instead.",

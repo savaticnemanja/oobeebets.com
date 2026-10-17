@@ -62,6 +62,8 @@ export function PublishPanel({
   }, [pubState, unpubState]);
 
   const picks = pickCategories.reduce((n, c) => n + counts[c], 0);
+  // Anything at all — a day can go out with only parlays on it.
+  const total = picks + parlays;
   const locked = anySettled || anyStarted;
   const lines = [
     ...pickCategories.map((c) => ({ key: c, label: CATEGORY_LABELS[c], n: counts[c], of: PICKS_PER_SLATE[c] })),
@@ -77,7 +79,7 @@ export function PublishPanel({
       aria-label="Slate status"
       className={cn(
         "card-hairline mb-6 overflow-hidden",
-        published ? "border-hit/25" : picks > 0 ? "border-pending/30" : undefined,
+        published ? "border-hit/25" : total > 0 ? "border-pending/30" : undefined,
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5">
@@ -92,8 +94,8 @@ export function PublishPanel({
                 Published <LocalTime at={publishedAt} format="datetime" /> — every tester can see it. Featuring still works;
                 anything else is a void on Settle.
               </>
-            ) : picks === 0 ? (
-              "Nothing on it yet. Add game bets and props from the feed below."
+            ) : total === 0 ? (
+              "Nothing on it yet. Add game bets, props or parlays from the feed below."
             ) : firstKickoff ? (
               <>
                 Publish before the first kick-off: <LocalTime at={firstKickoff} format="kickoff" />.
@@ -124,7 +126,7 @@ export function PublishPanel({
               Back to draft
             </Button>
           ) : (
-            <Button type="button" disabled={publishing || picks === 0 || locked} onClick={() => setConfirm("publish")}>
+            <Button type="button" disabled={publishing || total === 0 || locked} onClick={() => setConfirm("publish")}>
               {publishing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
               Publish slate
             </Button>
@@ -157,8 +159,8 @@ export function PublishPanel({
       {!published && locked && (
         <p className="flex items-start gap-2 border-t border-pending/20 bg-pending-dim px-4 py-3 text-sm text-pending sm:px-5">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          Some picks on this draft have already started. A slate goes public only before its games — delete those picks,
-          then publish the rest.
+          Some picks or parlay legs on this draft have already started. A slate goes public only before its games —
+          delete those picks or parlays, then publish the rest.
         </p>
       )}
 

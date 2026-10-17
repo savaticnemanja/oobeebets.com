@@ -164,6 +164,15 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
 
 /** Shape every server action returns, so forms can render errors uniformly. */
+/**
+ * An optional number from a form field. z.coerce turns a blank input into 0,
+ * which would print "Confidence 0%" for a field nobody filled in; blank here
+ * means not given.
+ */
+export function optionalNumber<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((v) => (v === "" || v === null ? undefined : v), schema.optional());
+}
+
 export type ActionState =
   | { ok: true; message?: string }
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> }
