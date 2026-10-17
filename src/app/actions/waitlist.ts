@@ -7,6 +7,7 @@ import { signupEnabled } from "@/lib/signup";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 import { signupSurveySchema, surveyFromForm } from "@/lib/signup-survey";
 import { joinWaitlist, leaveWaitlist, saveSignupSurvey, startSignup } from "@/lib/waitlist";
+import { BAD_DOMAIN, GUARD_MESSAGES, emailDomainAccepts, guardForm, takeSignupMailBudget } from "@/lib/spam-guard";
 
 /**
  * The landing page's form and /signup's: the waitlist while sign-ups are
@@ -24,6 +25,19 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
   const email = parsed.data.email;
   const source = formData.get("source") === "signup" ? "signup" : "landing";
   const open = signupEnabled();
+  const done: ActionState = {
+    ok: true,
+    message: open
+      ? "We've sent a link to finish creating your account. It works for 48 hours."
+      : "We've sent a confirmation, and we'll email you the day sign-ups open.",
+  };
+
+  // Bots (lib/spam-guard.ts): nobody fills the application in three seconds.
+  // A decoy hit or a forged token gets the ordinary reply and nothing else.
+  const guard = guardForm(formData, "signup application", 3000);
+  if (guard === "bot") return done;
+  if (guard !== "ok") return { ok: false, error: GUARD_MESSAGES[guard] };
+  let mail = true;
 
   try {
     const ip = clientIp(await headers());
@@ -31,6 +45,13 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
     const ipOk = await rateLimit("get-started:ip", ip, 8, 15 * 60 * 1000);
     const emailOk = await rateLimit("get-started:email", email, 3, 60 * 60 * 1000);
     if (!ipOk || !emailOk) return { ok: false, error: "Too many tries. Give it a few minutes." };
+    if (!(await emailDomainAccepts(email))) {
+      return { ok: false, error: BAD_DOMAIN, fieldErrors: { email: [BAD_DOMAIN] } };
+    }
+    mail = await takeSignupMailBudget();
+    // A sign-up link is the whole point of the form once sign-ups are open,
+    // so without one to send, say so rather than pretend.
+    if (open && !mail) return { ok: false, error: "We're getting a lot of sign-ups right now — try again in a few minutes." };
     // Saved before the reply: the answers are the point of the form. Never
     // over an existing account's own (see saveSignupSurvey).
     await saveSignupSurvey(parsed.data, source, { unlessAccount: true });
@@ -42,18 +63,14 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
   after(async () => {
     try {
       if (open) await startSignup(email);
-      else await joinWaitlist(email, source);
+      // Over the hour's mail budget they still join, without the confirmation.
+      else await joinWaitlist(email, source, { mail });
     } catch (err) {
       console.error(`[get-started] ${open ? "sign-up" : "waitlist"} email failed:`, err);
     }
   });
 
-  return {
-    ok: true,
-    message: open
-      ? "We've sent a link to finish creating your account. It works for 48 hours."
-      : "We've sent a confirmation, and we'll email you the day sign-ups open.",
-  };
+  return done;
 }
 
 /** The confirm button on /waitlist/leave — a POST, so a link prefetcher can't take anyone off. */

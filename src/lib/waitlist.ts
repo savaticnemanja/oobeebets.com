@@ -50,8 +50,12 @@ async function sendAccountExists(email: string): Promise<void> {
  * already waiting gets nothing new — a form anyone can post must not become a
  * way to mail a stranger again and again.
  */
-export async function joinWaitlist(email: string, source: "landing" | "signup"): Promise<void> {
-  if (await hasAccount(email)) return sendAccountExists(email);
+export async function joinWaitlist(
+  email: string,
+  source: "landing" | "signup",
+  { mail = true }: { mail?: boolean } = {},
+): Promise<void> {
+  if (await hasAccount(email)) return mail ? sendAccountExists(email) : undefined;
 
   const token = randomBytes(24).toString("base64url");
   // Already waiting: the insert returns nothing, and nothing returned means no email.
@@ -60,7 +64,7 @@ export async function joinWaitlist(email: string, source: "landing" | "signup"):
     .values({ email, leaveToken: token, source })
     .onConflictDoNothing({ target: waitlist.email })
     .returning({ leaveToken: waitlist.leaveToken });
-  if (!row) return;
+  if (!row || !mail) return;
 
   await sendEmail({
     to: email,

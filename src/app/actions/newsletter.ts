@@ -10,6 +10,7 @@ import {
 } from "@/lib/newsletter";
 import { z } from "zod";
 import { emailSchema, type ActionState } from "@/lib/validation";
+import { BAD_DOMAIN, GUARD_MESSAGES, emailDomainAccepts, guardForm, takeSignupMailBudget } from "@/lib/spam-guard";
 
 const waitlistSchema = z.object({ email: emailSchema });
 
@@ -29,6 +30,12 @@ export async function subscribeAction(
     return { ok: false, error: "That doesn't look like an email" };
   }
 
+  // Bots (lib/spam-guard.ts): a filled decoy or a forged token is told it
+  // worked and nothing happens; a post faster than a person types is refused.
+  const guard = guardForm(formData, "launch list", 1500);
+  if (guard === "bot") return { ok: true };
+  if (guard !== "ok") return { ok: false, error: GUARD_MESSAGES[guard] };
+
   // Everything below leaves the process — the limiter to Postgres, the signup
   // itself to Resend — and an action that throws takes the whole page to the
   // error boundary. A signup form is the wrong place to lose the page over a
@@ -41,11 +48,19 @@ export async function subscribeAction(
     ) {
       return { ok: false, error: "Too many attempts. Try again in a few minutes." };
     }
+    // Per address too, so nobody can be signed up (and mailed) over and over.
+    if (!(await rateLimit("newsletter:email", parsed.data.email, 3, 60 * 60 * 1000))) {
+      return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+    }
+    if (!(await emailDomainAccepts(parsed.data.email))) {
+      return { ok: false, error: BAD_DOMAIN };
+    }
 
     // The outcome is intentionally discarded. "Already subscribed" and "just
     // subscribed" have to be indistinguishable from the outside, or the form
     // becomes an oracle for whether a given address is on the list.
-    await subscribe(parsed.data.email);
+    // Over the site-wide hour's budget, they still join — just without the welcome.
+    await subscribe(parsed.data.email, { welcome: await takeSignupMailBudget() });
   } catch (err) {
     console.error("[newsletter] subscribe failed:", err);
     return { ok: false, error: "Something went wrong. Try again in a moment." };

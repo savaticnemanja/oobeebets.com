@@ -8,8 +8,10 @@ import { subscribeAction } from "@/app/actions/newsletter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SpamGuardFields } from "@/components/spam-guard-fields";
 
-export function SubscribeForm() {
+/** `formToken` comes from the page (issueFormToken) — see lib/spam-guard.ts. */
+export function SubscribeForm({ formToken }: { formToken: string }) {
   const [state, formAction, pending] = useActionState(subscribeAction, null);
 
   // Controlled only so the confirmation can name the address back. It is the
@@ -23,6 +25,7 @@ export function SubscribeForm() {
 
   return (
     <form action={formAction} className="mt-8">
+      <SpamGuardFields token={formToken} />
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="flex-1">
           <Label htmlFor="newsletter-email" className="sr-only">

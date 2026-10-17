@@ -134,6 +134,20 @@ async function pickAnswer(page, field, value) {
   for (let i = 0; i < 40 && !(await input.isChecked().catch(() => true)); i++) await page.waitForTimeout(50);
 }
 
+/**
+ * The application refuses a post within 3 s of its page (lib/spam-guard.ts),
+ * so the suite opens it, then submits no sooner than a person could.
+ */
+async function openSignup(page) {
+  await page.goto(`${APP_URL}/signup`);
+  page.__openedAt = Date.now();
+}
+async function submitApplication(page) {
+  const wait = 3200 - (Date.now() - (page.__openedAt ?? 0));
+  if (wait > 0) await page.waitForTimeout(wait);
+  await page.getByRole("button", { name: "Join waitlist" }).click();
+}
+
 /** "How you bet", answered as a regular bettor. */
 async function answerBetting(page) {
   await pickAnswer(page, "betFrequency", "A few times per week");
@@ -1182,7 +1196,7 @@ console.log("\nWaitlist, change password and profile pictures");
     await signedIn.close();
   }
 
-  await page.goto(`${APP_URL}/signup`);
+  await openSignup(page);
   await hydrated(page, 'input[name="q-is21"]');
   // Age comes first, and a no ends it before anything is typed.
   await pickAnswer(page, "is21", "no");
@@ -1190,7 +1204,7 @@ console.log("\nWaitlist, change password and profile pictures");
   check(stopped && (await page.locator('input[name="q-email"]').count()) === 0, "a no on 21+ stops the application");
   await pickAnswer(page, "is21", "yes");
   // Submitting it empty is caught in the browser, at the first unanswered question.
-  await page.getByRole("button", { name: "Join waitlist" }).click();
+  await submitApplication(page);
   check(await page.getByText("Enter your name").isVisible(), "an empty application is refused where it's wrong");
   await page.locator('input[name="q-fullName"]').fill("E2E Tester");
   await page.locator('input[name="q-email"]').fill(waitEmail);
@@ -1206,7 +1220,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await pickAnswer(page, "sports", "Other");
   await page.locator('input[name="q-sportsOther"]').fill("Darts");
   await answerBeta(page);
-  await page.getByRole("button", { name: "Join waitlist" }).click();
+  await submitApplication(page);
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   let row;
   for (let i = 0; i < 40 && !row; i++) {
@@ -1230,18 +1244,46 @@ console.log("\nWaitlist, change password and profile pictures");
   );
 
   // An address that already has an account gets the very same reply, and no row.
-  await page.goto(`${APP_URL}/signup`);
+  await openSignup(page);
   await hydrated(page, 'input[name="q-is21"]');
   await pickAnswer(page, "is21", "yes");
   await page.locator('input[name="q-fullName"]').fill("E2E Tester");
   await page.locator('input[name="q-email"]').fill(testEmail);
   await answerBetting(page);
   await answerBeta(page);
-  await page.getByRole("button", { name: "Join waitlist" }).click();
+  await submitApplication(page);
   await page.getByText("You're on the list").waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   const [{ n: accountRows }] = await sql`select count(*)::int as n from waitlist where email = ${testEmail}`;
   check(accountRows === 0, "an existing account isn't put on it, and the reply doesn't say so");
+
+  // Bots: the decoy field, filled, gets the ordinary reply and nothing else —
+  // on the homepage box (whose real path needs Resend, so a success here can
+  // only be the decoy's) and on the application.
+  await page.goto(`${APP_URL}/`);
+  await hydrated(page, 'form input[type="email"]');
+  await page.locator('input[name="website"]').evaluate((el) => (el.value = "http://spam.example"));
+  await page.fill('form input[type="email"]', `e2e-bot-${Date.now()}@example.com`);
+  await page.waitForTimeout(1700);
+  await page.getByRole("button", { name: /Notify me/ }).click();
+  check(
+    await page.getByText(/You.re on the list/).first().waitFor({ timeout: 10000 }).then(() => true, () => false),
+    "a bot filling the homepage decoy is told it worked",
+  );
+  const botEmail = `e2e-bot-${Date.now()}@example.com`;
+  await openSignup(page);
+  await hydrated(page, 'input[name="q-is21"]');
+  await pickAnswer(page, "is21", "yes");
+  await page.locator('input[name="q-fullName"]').fill("Bot Bot");
+  await page.locator('input[name="q-email"]').fill(botEmail);
+  await answerBetting(page);
+  await answerBeta(page);
+  await page.locator('input[name="website"]').evaluate((el) => (el.value = "http://spam.example"));
+  await submitApplication(page);
+  await page.getByText("You're on the list").waitFor({ timeout: 10000 });
+  const [{ n: botRows }] = await sql`
+    select (select count(*) from waitlist where email = ${botEmail}) + (select count(*) from signup_surveys where email = ${botEmail}) as n`;
+  check(Number(botRows) === 0, "and a bot filling the application's decoy is stored nowhere", `rows=${botRows}`);
 
   await page.goto(`${APP_URL}/login`);
   check((await page.getByRole("link", { name: "Join the waitlist" }).count()) === 1, "sign-in points to the waitlist while sign-ups are closed");

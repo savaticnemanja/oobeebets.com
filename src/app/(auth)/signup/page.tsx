@@ -5,6 +5,7 @@ import { getAuth } from "@/lib/auth";
 import { signupEnabled } from "@/lib/signup";
 import { Badge } from "@/components/ui/badge";
 import { GetStartedForm } from "@/components/get-started-form";
+import { issueFormToken } from "@/lib/spam-guard";
 
 export const metadata: Metadata = {
   title: "Sign up",
@@ -40,7 +41,7 @@ export default async function SignupPage() {
       </p>
 
       <div className="mt-8">
-        <GetStartedForm open={open} source="signup" />
+        <GetStartedForm open={open} source="signup" formToken={issueFormToken()} />
       </div>
 
     </div>

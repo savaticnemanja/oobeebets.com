@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth";
+import { issueFormToken } from "@/lib/spam-guard";
 import { SubscribeForm } from "@/components/newsletter/subscribe-form";
 import { SITE, appUrl } from "@/lib/site";
 import { shareCard } from "@/lib/metadata";
@@ -126,7 +127,7 @@ export default async function PrelaunchPage() {
       </p>
 
       <div className="animate-rise max-w-xl" style={{ animationDelay: "180ms" }}>
-        <SubscribeForm />
+        <SubscribeForm formToken={issueFormToken()} />
         <p className="mt-4 text-sm text-fg-muted">
           Already have an account?{" "}
           <Link href="/login" className="text-brand hover:underline">

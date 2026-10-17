@@ -44,6 +44,7 @@ import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/safe-next.ts";
 import { signupSurveySchema } from "../src/lib/signup-survey.ts";
 import { unitsSchema } from "../src/lib/validation.ts";
+import { checkFormToken, signFormToken } from "../src/lib/form-token.ts";
 import { NFL_TEAM_ABBR, gradeProp, playerKey } from "../src/lib/odds/props.ts";
 import { FEED_LEAGUES, SCORES_SPORT_KEYS } from "../src/lib/odds/markets.ts";
 import { LEAGUE_BY_NAME } from "../src/lib/players/catalog.ts";
@@ -524,6 +525,20 @@ console.log("\nStake in units (unitsSchema)");
   const units = unitsSchema(100);
   for (const v of ["1.01", "0.1", "1.25", "100", "37.33"]) check(units.safeParse(v).success, `takes ${v}`);
   for (const v of ["1.015", "0.05", "100.01", ""]) check(!units.safeParse(v).success, `refuses ${JSON.stringify(v)}`);
+}
+
+console.log("\nForm tokens (lib/form-token.ts)");
+{
+  const key = "verify-secret";
+  const t0 = 1_800_000_000_000;
+  const token = signFormToken(key, t0);
+  const at = (ms) => checkFormToken(key, token, t0 + ms, { minMs: 3000, maxMs: 7 * 86_400_000 });
+  check(at(500) === "too-fast", "a post half a second after the page is too fast");
+  check(at(3500) === "ok", "one after a few seconds passes");
+  check(at(8 * 86_400_000) === "stale", "a week-old page asks for a refresh");
+  check(checkFormToken("other-secret", token, t0 + 5000, { minMs: 0, maxMs: 1e12 }) === "invalid", "another key's token is refused");
+  check(checkFormToken(key, token.replace(/.$/, (c) => (c === "A" ? "B" : "A")), t0 + 5000, { minMs: 0, maxMs: 1e12 }) === "invalid", "a tampered token is refused");
+  check(checkFormToken(key, undefined, t0, { minMs: 0, maxMs: 1e12 }) === "invalid", "no token is refused");
 }
 
 console.log("\nPlayer props graded from box scores");

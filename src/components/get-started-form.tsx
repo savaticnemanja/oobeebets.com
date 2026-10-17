@@ -18,6 +18,8 @@ import {
   useSurvey,
 } from "@/components/signup-survey";
 import { appendSurvey } from "@/lib/signup-survey";
+import { HONEYPOT_FIELD, TOKEN_FIELD } from "@/lib/form-token";
+import { SpamGuardFields } from "@/components/spam-guard-fields";
 import type { ActionState } from "@/lib/validation";
 
 /**
@@ -26,7 +28,16 @@ import type { ActionState } from "@/lib/validation";
  * signup_surveys. Age comes first, so someone under 21 learns it before
  * typing anything else.
  */
-export function GetStartedForm({ open, source }: { open: boolean; source: "landing" | "signup" }) {
+export function GetStartedForm({
+  open,
+  source,
+  formToken,
+}: {
+  open: boolean;
+  source: "landing" | "signup";
+  /** From the page (issueFormToken) — see lib/spam-guard.ts. */
+  formToken: string;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(getStartedAction, null);
   const survey = useSurvey();
   const { values, setErrors } = survey;
@@ -55,6 +66,10 @@ export function GetStartedForm({ open, source }: { open: boolean; source: "landi
     const data = new FormData();
     data.set("source", source);
     appendSurvey(data, values);
+    // The bot checks' two hidden inputs ride along from the form itself.
+    const dom = new FormData(e.currentTarget);
+    data.set(TOKEN_FIELD, String(dom.get(TOKEN_FIELD) ?? ""));
+    data.set(HONEYPOT_FIELD, String(dom.get(HONEYPOT_FIELD) ?? ""));
     React.startTransition(() => action(data));
   }
 
@@ -63,6 +78,7 @@ export function GetStartedForm({ open, source }: { open: boolean; source: "landi
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-10">
+      <SpamGuardFields token={formToken} />
       <AgeQuestion survey={survey} />
 
       {under21 ? (
