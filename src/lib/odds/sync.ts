@@ -320,12 +320,12 @@ export async function ensureGameProps(gameId: string): Promise<void> {
   if (!(await claim(key, PROPS_TTL_MIN()))) return;
   try {
     const event = await call<ApiEvent>(`/sports/${config.sportKey}/events/${gameId}/odds`, {
-      markets: config.propMarkets.join(","),
+      markets: [...config.propMarkets, ...config.altPropMarkets].join(","),
       bookmakers: bookmakers(),
       oddsFormat: "american",
       dateFormat: "iso",
     });
-    await writeLines(event, config.propMarkets);
+    await writeLines(event, [...config.propMarkets, ...config.altPropMarkets]);
     await db.update(games).set({ propsSyncedAt: new Date() }).where(eq(games.id, gameId));
   } catch (err) {
     await release(key, PROPS_TTL_MIN(), err);

@@ -10,6 +10,7 @@ import {
   GAME_MARKETS,
   LEAGUE_CONFIG,
   PROP_LABELS,
+  baseMarket,
   decimalOdds,
   eventLabel,
   lineLabel,
@@ -18,6 +19,7 @@ import {
   type LineOption,
   type PropGroup,
   type PropRow,
+  type PropRung,
 } from "./markets";
 
 /**
@@ -181,11 +183,33 @@ async function gamesBetween(from: Date, to: Date): Promise<GameOption[]> {
     .filter((g) => g.moneyline.home || g.moneyline.away || g.spread.home || g.total.over);
 }
 
+/**
+ * A player's ladder: every number any book hangs, main line and alternates
+ * together, each with the best Over and best Under at exactly that number.
+ */
+function ladder(group: Line[]): PropRung[] {
+  const byPoint = new Map<number, Line[]>();
+  for (const l of group) {
+    if (l.point === null) continue;
+    const k = Number(l.point);
+    byPoint.set(k, [...(byPoint.get(k) ?? []), l]);
+  }
+  return [...byPoint]
+    .sort(([a], [b]) => a - b)
+    .map(([point, at]) => {
+      const over = best(at.filter((l) => l.outcome === "Over"));
+      const under = best(at.filter((l) => l.outcome === "Under"));
+      return { point, over: over ? toOption(over) : null, under: under ? toOption(under) : null };
+    })
+    .filter((r) => r.over || r.under);
+}
+
 /** One game's player props, grouped by market then player. */
 export async function getGameProps(gameId: string): Promise<PropGroup[]> {
   const [g] = await db.select().from(games).where(eq(games.id, gameId)).limit(1);
   if (!g) return [];
   const markets = LEAGUE_CONFIG[g.league as FeedLeague]?.propMarkets ?? [];
+  const alts = new Set(LEAGUE_CONFIG[g.league as FeedLeague]?.altPropMarkets ?? []);
   const ls = await db
     .select()
     .from(lines)
@@ -194,6 +218,7 @@ export async function getGameProps(gameId: string): Promise<PropGroup[]> {
   const groups: PropGroup[] = [];
   for (const m of markets) {
     const inMarket = ls.filter((l) => l.marketKey === m);
+    const inAlt = alts.has(`${m}_alternate`) ? ls.filter((l) => l.marketKey === `${m}_alternate`) : [];
     const players = [...new Set(inMarket.map((l) => l.player).filter((p): p is string => !!p))].sort();
     const rows: PropRow[] = players
       .map((player) => {
@@ -203,6 +228,7 @@ export async function getGameProps(gameId: string): Promise<PropGroup[]> {
           over: sideAt(mine, "Over"),
           under: sideAt(mine, "Under"),
           yes: sideAt(mine, "Yes"),
+          ladder: ladder([...mine, ...inAlt.filter((l) => l.player === player)]),
         };
       })
       .filter((r) => r.over || r.under || r.yes);
@@ -243,7 +269,9 @@ export async function freezeLine(lineId: string, expectedPrice: number): Promise
     .insert(selections)
     .values({
       gameId: line.gameId,
-      marketKey: line.marketKey,
+      // An alternate is the same bet at another number: graded, labelled
+      // and deduplicated as its base market.
+      marketKey: baseMarket(line.marketKey),
       outcome: line.outcome,
       player: line.player,
       point: line.point,

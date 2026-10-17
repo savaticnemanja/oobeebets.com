@@ -12,7 +12,13 @@ export type FeedLeague = (typeof FEED_LEAGUES)[number];
 
 export const LEAGUE_CONFIG: Record<
   FeedLeague,
-  { sportKey: string; sport: Sport; propMarkets: readonly string[] }
+  {
+    sportKey: string;
+    sport: Sport;
+    propMarkets: readonly string[];
+    /** Alternate lines (other yardages, other prices) for the over/under props. */
+    altPropMarkets: readonly string[];
+  }
 > = {
   NFL: {
     sportKey: "americanfootball_nfl",
@@ -25,8 +31,27 @@ export const LEAGUE_CONFIG: Record<
       "player_reception_yds",
       "player_anytime_td",
     ],
+    altPropMarkets: [
+      "player_pass_yds_alternate",
+      "player_pass_tds_alternate",
+      "player_rush_yds_alternate",
+      "player_receptions_alternate",
+      "player_reception_yds_alternate",
+    ],
   },
 };
+
+const ALT_SUFFIX = "_alternate";
+
+/**
+ * The market an alternate line belongs to: "player_rush_yds_alternate" is
+ * still Rushing Yards. Lines keep the provider key (so the main line stays
+ * findable), but a selection is frozen under the base key, so grading and
+ * labels never need to know a leg came off the ladder.
+ */
+export function baseMarket(key: string): string {
+  return key.endsWith(ALT_SUFFIX) ? key.slice(0, -ALT_SUFFIX.length) : key;
+}
 
 /**
  * Every league the feed has ever carried, for grading only. A league taken
@@ -71,7 +96,7 @@ export const GAME_MARKET_LABELS: Record<GameMarketKey, string> = {
 };
 
 export function marketLabel(key: string): string {
-  return isGameMarket(key) ? GAME_MARKET_LABELS[key] : (PROP_LABELS[key] ?? key);
+  return isGameMarket(key) ? GAME_MARKET_LABELS[key] : (PROP_LABELS[baseMarket(key)] ?? key);
 }
 
 /** The board a line belongs on. */
@@ -114,7 +139,7 @@ export function lineLabel(l: LineFacts): string {
   if (l.marketKey === "player_anytime_td") {
     return l.outcome === "No" ? `${l.player} No TD` : `${l.player} Anytime TD`;
   }
-  return [l.player, l.outcome, point, PROP_LABELS[l.marketKey] ?? l.marketKey]
+  return [l.player, l.outcome, point, PROP_LABELS[baseMarket(l.marketKey)] ?? l.marketKey]
     .filter((x) => x !== null && x !== "")
     .join(" ");
 }
@@ -206,10 +231,20 @@ export interface GameOption {
   total: { over: LineOption | null; under: LineOption | null };
 }
 
-export interface PropRow {
-  player: string;
+/** One yardage on a player's ladder, with the best price either side of it. */
+export interface PropRung {
+  point: number;
   over: LineOption | null;
   under: LineOption | null;
+}
+
+export interface PropRow {
+  player: string;
+  /** The main line — what the row opens on. */
+  over: LineOption | null;
+  under: LineOption | null;
+  /** Every number on offer, main and alternates, lowest first. */
+  ladder: PropRung[];
   /** Yes/no props (anytime TD) have one side worth offering. */
   yes: LineOption | null;
 }

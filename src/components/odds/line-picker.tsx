@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ChevronDown, Loader2, Search, X } from "lucide-react";
 import { loadGamePropsAction } from "@/app/actions/odds";
-import { LEAGUE_CONFIG, type FeedLeague, type GameOption, type LineOption, type PropGroup } from "@/lib/odds/markets";
+import { LEAGUE_CONFIG, type FeedLeague, type GameOption, type LineOption, type PropGroup, type PropRow } from "@/lib/odds/markets";
 import { SPORT_EMOJI } from "@/components/pick-card";
 import { formatOdds, formatSlateDate } from "@/lib/i18n/format";
 import { addDays, slateDateString } from "@/lib/slate-date";
@@ -351,25 +351,164 @@ function PropsPanel({
       </div>
       <div className="max-h-80 space-y-1.5 overflow-y-auto">
         {group.rows.map((r) => (
-          <div
-            key={r.player}
-            className="grid grid-cols-[minmax(0,1fr)_repeat(2,3.75rem)] sm:grid-cols-[minmax(0,1fr)_repeat(2,4.5rem)] items-center gap-1.5"
-          >
-            <span className="text-sm leading-tight text-fg">{r.player}</span>
-            {r.yes ? (
-              <>
-                <PriceButton option={r.yes} top="Yes" onPick={onPick} isSelected={isSelected} disabled={disabled} />
-                <span />
-              </>
-            ) : (
-              <>
-                <PriceButton option={r.over} top={r.over ? `O ${r.over.point}` : ""} onPick={onPick} isSelected={isSelected} disabled={disabled} />
-                <PriceButton option={r.under} top={r.under ? `U ${r.under.point}` : ""} onPick={onPick} isSelected={isSelected} disabled={disabled} />
-              </>
-            )}
+          <PropLine key={`${group.marketKey}:${r.player}`} row={r} onPick={onPick} isSelected={isSelected} disabled={disabled} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One player's prop. Over/under rows with alternate lines get a wheel between
+ * the name and the prices: scroll (or tap ▲/▼) through the yardages and both
+ * buttons reprice to the best Over and Under at that number. It opens on the
+ * main line, so a row nobody scrolls behaves exactly as before.
+ */
+function PropLine({
+  row,
+  onPick,
+  isSelected,
+  disabled,
+}: {
+  row: PropRow;
+  onPick: (o: LineOption) => void;
+  isSelected: (lineId: string) => boolean;
+  disabled: boolean;
+}) {
+  const ladder = row.ladder;
+  const mainPoint = row.over?.point ?? row.under?.point ?? null;
+  // Open on whichever rung is already in the slip, else on the main line.
+  const inSlip = ladder.findIndex(
+    (r) => (r.over && isSelected(r.over.lineId)) || (r.under && isSelected(r.under.lineId)),
+  );
+  const initial = inSlip >= 0 ? inSlip : Math.max(0, ladder.findIndex((r) => r.point === mainPoint));
+  const [index, setIndex] = React.useState(initial);
+
+  if (row.yes) {
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)_repeat(2,3.75rem)] sm:grid-cols-[minmax(0,1fr)_repeat(2,4.5rem)] items-center gap-1.5">
+        <span className="text-sm leading-tight text-fg">{row.player}</span>
+        <PriceButton option={row.yes} top="Yes" onPick={onPick} isSelected={isSelected} disabled={disabled} />
+        <span />
+      </div>
+    );
+  }
+
+  const hasWheel = ladder.length > 1;
+  const rung = hasWheel ? ladder[Math.min(index, ladder.length - 1)] : null;
+  const over = rung ? rung.over : row.over;
+  const under = rung ? rung.under : row.under;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_3.25rem_repeat(2,3.75rem)] sm:grid-cols-[minmax(0,1fr)_3.75rem_repeat(2,4.5rem)] items-center gap-1.5">
+      <span className="text-sm leading-tight text-fg">{row.player}</span>
+      {hasWheel ? (
+        <LineWheel
+          player={row.player}
+          points={ladder.map((r) => r.point)}
+          mainPoint={mainPoint}
+          index={Math.min(index, ladder.length - 1)}
+          onChange={setIndex}
+        />
+      ) : (
+        <span />
+      )}
+      <PriceButton option={over} top={over ? `O ${over.point}` : ""} onPick={onPick} isSelected={isSelected} disabled={disabled} />
+      <PriceButton option={under} top={under ? `U ${under.point}` : ""} onPick={onPick} isSelected={isSelected} disabled={disabled} />
+    </div>
+  );
+}
+
+const RUNG_PX = 44; // h-11
+
+/**
+ * A one-number-tall scroll-snap wheel. Scrolling settles on a rung and
+ * reports it; ▲/▼ and the arrow keys step one rung. The main line is marked.
+ */
+function LineWheel({
+  player,
+  points,
+  mainPoint,
+  index,
+  onChange,
+}: {
+  player: string;
+  points: number[];
+  mainPoint: number | null;
+  index: number;
+  onChange: (i: number) => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const settle = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep the wheel on `index` when it changes from outside a scroll (mount, ▲/▼, keys).
+  React.useEffect(() => {
+    const el = ref.current;
+    if (el && Math.round(el.scrollTop / RUNG_PX) !== index) el.scrollTop = index * RUNG_PX;
+  }, [index]);
+  React.useEffect(() => () => {
+    if (settle.current) clearTimeout(settle.current);
+  }, []);
+
+  const step = (d: number) => onChange(Math.min(points.length - 1, Math.max(0, index + d)));
+
+  return (
+    <div className="relative h-11 rounded-xl border border-border bg-surface-2">
+      <div
+        ref={ref}
+        role="spinbutton"
+        tabIndex={0}
+        aria-label={`${player} line`}
+        aria-valuenow={points[index]}
+        aria-valuemin={points[0]}
+        aria-valuemax={points[points.length - 1]}
+        aria-valuetext={`${points[index]}${points[index] === mainPoint ? " (main line)" : ""}`}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (settle.current) clearTimeout(settle.current);
+          settle.current = setTimeout(() => {
+            const i = Math.min(points.length - 1, Math.max(0, Math.round(el.scrollTop / RUNG_PX)));
+            if (i !== index) onChange(i);
+          }, 80);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            step(-1);
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            step(1);
+          }
+        }}
+        className="h-full snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-xl [scrollbar-width:none] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-scrollbar]:hidden"
+      >
+        {points.map((p) => (
+          <div key={p} className="flex h-11 snap-center flex-col items-center justify-center leading-tight">
+            <span className="num text-sm font-semibold text-fg">{p}</span>
+            {p === mainPoint && <span className="text-[0.5625rem] uppercase tracking-wider text-fg-subtle">main</span>}
           </div>
         ))}
       </div>
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={() => step(-1)}
+        disabled={index === 0}
+        className="absolute inset-x-0 top-0 flex h-3 items-start justify-center text-[0.5rem] leading-3 text-fg-subtle hover:text-fg disabled:opacity-0"
+      >
+        ▲
+      </button>
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={() => step(1)}
+        disabled={index === points.length - 1}
+        className="absolute inset-x-0 bottom-0 flex h-3 items-end justify-center text-[0.5rem] leading-3 text-fg-subtle hover:text-fg disabled:opacity-0"
+      >
+        ▼
+      </button>
     </div>
   );
 }
