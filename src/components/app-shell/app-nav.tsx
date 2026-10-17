@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, House, Info, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { Bell, House, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { UnreadBadge, useUnread } from "@/components/app-shell/unread";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,8 @@ interface NavItem {
  * label. The current one is semibold with a heavier, brand-coloured icon; the
  * rest are muted and brighten on hover over a soft pill.
  *
- * The sidebar carries everything. The phone's bottom bar has room for the
+ * The sidebar carries everything but About, which sits in the right rail's
+ * footer on desktop. The phone's bottom bar has room for the
  * five places people actually go back and forth between; the rest (Players,
  * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
  * aren't a destination of their own: they're "Edit profile", on your profile.
@@ -42,7 +43,6 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       community,
       players,
       profile,
-      { href: "/about", label: t().nav.about, icon: Info },
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
     // Your record lives on your profile now (its Stats tab).
