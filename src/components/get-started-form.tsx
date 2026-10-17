@@ -26,7 +26,6 @@ import {
 export function GetStartedForm({ open, source }: { open: boolean; source: "landing" | "signup" }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(getStartedAction, null);
   const [email, setEmail] = React.useState("");
-  const [otherOn, setOtherOn] = React.useState({ sports: false, sportsbook: false, decisionTools: false });
 
   if (state?.ok) return <Done email={email} open={open} message={state.message} />;
 
@@ -54,61 +53,7 @@ export function GetStartedForm({ open, source }: { open: boolean; source: "landi
         onChange={setEmail}
       />
 
-      <Choice legend="Are you 21+?" name="is21" options={["yes", "no"]} labels={YES_NO} error={err("is21")} />
-      <Choice legend="How often do you currently sports bet?" name="betFrequency" options={BET_FREQUENCIES} error={err("betFrequency")} />
-      <Choice
-        legend="How would you describe your sports betting experience?"
-        name="experience"
-        options={EXPERIENCE_LEVELS}
-        error={err("experience")}
-      />
-      <Choice
-        legend="Which sports do you typically bet on?"
-        name="sports"
-        multiple
-        options={[...SPORTS, OTHER]}
-        error={err("sports")}
-        onOther={(on) => setOtherOn((o) => ({ ...o, sports: on }))}
-        other={otherOn.sports && <OtherInput name="sportsOther" error={err("sportsOther")} />}
-      />
-      <Choice
-        legend="What sportsbook do you typically use?"
-        name="sportsbook"
-        options={[...SPORTSBOOKS, OTHER]}
-        error={err("sportsbook")}
-        onOther={(on) => setOtherOn((o) => ({ ...o, sportsbook: on }))}
-        other={otherOn.sportsbook && <OtherInput name="sportsbookOther" error={err("sportsbookOther")} />}
-      />
-      <Field label="Typical bet size" name="betSize" error={err("betSize")} placeholder="e.g. $20" />
-      <Choice
-        legend="What do you currently use to make betting decisions?"
-        name="decisionTools"
-        multiple
-        options={[...DECISION_TOOLS, OTHER]}
-        error={err("decisionTools")}
-        onOther={(on) => setOtherOn((o) => ({ ...o, decisionTools: on }))}
-        other={otherOn.decisionTools && <OtherInput name="decisionToolsOther" error={err("decisionToolsOther")} />}
-      />
-      <Field
-        label="What would you most want from a sports betting analytics platform?"
-        name="wants"
-        multiline
-        error={err("wants")}
-      />
-      <Choice
-        legend="Would you be willing to use Oobee and give feedback throughout the trial?"
-        name="willGiveFeedback"
-        options={["yes", "no"]}
-        labels={YES_NO}
-        error={err("willGiveFeedback")}
-      />
-      <Choice
-        legend="Would you be willing to complete a short survey after the beta trial?"
-        name="willDoSurvey"
-        options={["yes"]}
-        labels={YES_NO}
-        error={err("willDoSurvey")}
-      />
+      <SurveyQuestions err={err} />
 
       <div>
         <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
@@ -136,6 +81,74 @@ export function GetStartedForm({ open, source }: { open: boolean; source: "landi
   );
 }
 
+/**
+ * Every application question after name and email — shared with the invite
+ * wizard, which asks them of anyone who hasn't answered on /signup.
+ */
+export function SurveyQuestions({ err }: { err: (k: string) => string | undefined }) {
+  const [otherOn, setOtherOn] = React.useState({ sports: false, sportsbook: false, decisionTools: false });
+  return (
+    <>
+        <Choice legend="Are you 21+?" name="is21" options={["yes", "no"]} labels={YES_NO} error={err("is21")} />
+        <Choice legend="How often do you currently sports bet?" name="betFrequency" options={BET_FREQUENCIES} error={err("betFrequency")} />
+        <Choice
+          legend="How would you describe your sports betting experience?"
+          name="experience"
+          options={EXPERIENCE_LEVELS}
+          error={err("experience")}
+        />
+        <Choice
+          legend="Which sports do you typically bet on?"
+          name="sports"
+          multiple
+          options={[...SPORTS, OTHER]}
+          error={err("sports")}
+          onOther={(on) => setOtherOn((o) => ({ ...o, sports: on }))}
+          other={otherOn.sports && <OtherInput name="sportsOther" error={err("sportsOther")} />}
+        />
+        <Choice
+          legend="What sportsbook do you typically use?"
+          name="sportsbook"
+          options={[...SPORTSBOOKS, OTHER]}
+          error={err("sportsbook")}
+          onOther={(on) => setOtherOn((o) => ({ ...o, sportsbook: on }))}
+          other={otherOn.sportsbook && <OtherInput name="sportsbookOther" error={err("sportsbookOther")} />}
+        />
+        <Field label="Typical bet size" name="betSize" error={err("betSize")} placeholder="e.g. $20" />
+        <Choice
+          legend="What do you currently use to make betting decisions?"
+          name="decisionTools"
+          multiple
+          options={[...DECISION_TOOLS, OTHER]}
+          error={err("decisionTools")}
+          onOther={(on) => setOtherOn((o) => ({ ...o, decisionTools: on }))}
+          other={otherOn.decisionTools && <OtherInput name="decisionToolsOther" error={err("decisionToolsOther")} />}
+        />
+        <Field
+          label="What would you most want from a sports betting analytics platform?"
+          name="wants"
+          multiline
+          error={err("wants")}
+        />
+        <Choice
+          legend="Would you be willing to use Oobee and give feedback throughout the trial?"
+          name="willGiveFeedback"
+          options={["yes", "no"]}
+          labels={YES_NO}
+          error={err("willGiveFeedback")}
+        />
+        <Choice
+          legend="Would you be willing to complete a short survey after the beta trial?"
+          name="willDoSurvey"
+          options={["yes"]}
+          labels={YES_NO}
+          error={err("willDoSurvey")}
+        />
+
+    </>
+  );
+}
+
 const YES_NO: Record<string, string> = { yes: "Yes", no: "No" };
 
 function Req() {
@@ -155,7 +168,7 @@ function ErrorText({ id, message }: { id: string; message?: string }) {
   );
 }
 
-function Field({
+export function Field({
   label,
   name,
   error,

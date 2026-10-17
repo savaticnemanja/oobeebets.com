@@ -122,6 +122,22 @@ const browser = await chromium.launch();
 
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
 
+/** The beta application's questions, minus email — /signup and the invite wizard both ask them. */
+async function answerSurvey(page, name = "E2E Tester") {
+  const pick = (field, value) => page.locator(`input[name="${field}"][value="${value}"]`).check({ force: true });
+  await page.locator('input[name="fullName"]').fill(name);
+  await pick("is21", "yes");
+  await pick("betFrequency", "A few times per week");
+  await pick("experience", "Intermediate");
+  await pick("sports", "NFL");
+  await pick("sportsbook", "FanDuel");
+  await page.locator('input[name="betSize"]').fill("$20");
+  await pick("decisionTools", "Stats");
+  await page.locator('textarea[name="wants"]').fill("Honest records.");
+  await pick("willGiveFeedback", "yes");
+  await pick("willDoSurvey", "yes");
+}
+
 console.log("\nInvite onboarding and the free board");
 
 const testEmail = `e2e-${Date.now()}@example.com`;
@@ -159,6 +175,8 @@ const testEmail = `e2e-${Date.now()}@example.com`;
     "phone formats as you type",
     `value=${await page.inputValue("#phone-local")}`,
   );
+  // An admin invite skips /signup, so the application is asked here.
+  await answerSurvey(page, "Taylor Tester");
   await page.click('button:has-text("Continue")');
 
   // Step 4 — spend band, then the 21+ / Terms box, then the real submit.
@@ -178,6 +196,8 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   check(Boolean(accepted?.terms_accepted_at), "the account records when the Terms were accepted");
   const [{ waiting }] = await sql`select count(*)::int as waiting from waitlist where email = ${testEmail}`;
   check(waiting === 0, "making the account takes the address off the waitlist");
+  const [answers] = await sql`select full_name, source from signup_surveys where email = ${testEmail}`;
+  check(answers?.full_name === "Taylor Tester" && answers.source === "invite", "the invite wizard keeps the application answers", JSON.stringify(answers));
   // Waited for, not read straight off the page: Home has a loading skeleton,
   // and the client-side redirect after Finish lands while it is still showing.
   check(
@@ -239,6 +259,9 @@ const quietEmail = `e2e-quiet-${Date.now()}@example.com`;
   const inviteTokenHash = createHash("sha256").update(inviteToken).digest("hex");
   await sql`insert into invitations (email, token_hash, status, expires_at)
             values (${quietEmail}, ${inviteTokenHash}, 'pending', ${new Date(Date.now() + 3600_000)})`;
+  // Answered on /signup already, so the wizard doesn't ask again.
+  await sql`insert into signup_surveys (email, full_name, is_21, bet_frequency, experience, sports, sportsbook, bet_size, decision_tools, wants, will_give_feedback, will_do_survey, source)
+            values (${quietEmail}, 'Quiet Tester', true, 'Never', 'Beginner', ${["NFL"]}, 'FanDuel', '$5', ${["Stats"]}, 'x', true, true, 'signup')`;
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -250,6 +273,7 @@ const quietEmail = `e2e-quiet-${Date.now()}@example.com`;
   await page.click('button:has-text("Continue")');
   // A display name, and the phone left empty.
   await page.fill("#name", "Quiet Tester");
+  check((await page.locator('input[name="fullName"]').count()) === 0, "someone who answered on /signup isn't asked again");
   await page.click('button:has-text("Continue")');
   check(
     await page.getByText("How much do you typically spend").isVisible(),
@@ -1703,7 +1727,7 @@ await sql`delete from feedback where body = ${feedbackNote}`;
 // The test users' own sessions cascade with their rows; only the ones minted
 // above need clearing. A blanket delete here would sign out real sessions.
 await sql`delete from users where email in (${testEmail}, ${quietEmail}, ${secondAdmin})`;
-await sql`delete from signup_surveys where email = ${testEmail}`;
+await sql`delete from signup_surveys where email in (${testEmail}, ${quietEmail})`;
 await dropTester(sql, TESTER_EMAIL);
 await sql`delete from invitations where email in (${testEmail}, ${quietEmail})`;
 await sql`delete from sessions where token_hash = any(${mintedSessions})`;

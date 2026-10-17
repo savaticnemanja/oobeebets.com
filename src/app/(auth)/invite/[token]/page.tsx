@@ -5,6 +5,7 @@ import { getAuth, hashToken } from "@/lib/auth";
 import { isInviteUsable, lookupInvite } from "@/lib/invitations";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { signupEnabled } from "@/lib/signup";
+import { hasSignupSurvey } from "@/lib/waitlist";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -51,5 +52,12 @@ export default async function InvitePage({
     );
   }
 
-  return <OnboardingForm email={invite.email} token={token} selfServe={invite.invitedBy === null} />;
+  return (
+    <OnboardingForm
+      email={invite.email}
+      token={token}
+      selfServe={invite.invitedBy === null}
+      needsSurvey={!(await hasSignupSurvey(invite.email))}
+    />
+  );
 }

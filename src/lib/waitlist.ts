@@ -7,7 +7,7 @@ import { idempotencyKey, sendEmail, sendEmailBatch } from "@/lib/email/resend-cl
 import { accountExistsEmail, signupsOpenEmail, waitlistJoinedEmail } from "@/lib/email/templates";
 import { issueInvite } from "@/lib/invitations";
 import { appUrl } from "@/lib/site";
-import { OTHER, type SignupSurvey } from "@/lib/signup-survey";
+import { OTHER, type SignupSurvey, type SurveySource } from "@/lib/signup-survey";
 
 /**
  * The waitlist, and the sign-up that replaces it when SIGNUP_ENABLED is on.
@@ -87,7 +87,12 @@ export async function leaveWaitlist(token: string): Promise<boolean> {
 }
 
 /** Stores /signup's answers, replacing any earlier ones for the address. */
-export async function saveSignupSurvey(v: SignupSurvey, source: "landing" | "signup"): Promise<void> {
+export async function hasSignupSurvey(email: string): Promise<boolean> {
+  const [row] = await db.select({ id: signupSurveys.id }).from(signupSurveys).where(eq(signupSurveys.email, email)).limit(1);
+  return Boolean(row);
+}
+
+export async function saveSignupSurvey(v: SignupSurvey, source: SurveySource): Promise<void> {
   const values = {
     email: v.email,
     fullName: v.fullName,

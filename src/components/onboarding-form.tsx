@@ -12,6 +12,7 @@ import { Reveal } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { HelpLine } from "@/components/help-line";
 import { acceptInviteAction } from "@/app/actions/invite";
+import { Field as SurveyField, SurveyQuestions } from "@/components/get-started-form";
 import { nameSchema, passwordSchema, SPEND_BAND_LABELS, spendBandValues } from "@/lib/validation";
 import type { ActionState } from "@/lib/validation";
 
@@ -104,7 +105,18 @@ function FieldError({ message, id }: { message?: string; id: string }) {
   );
 }
 
-export function OnboardingForm({ email, token, selfServe }: { email: string; token: string; selfServe: boolean }) {
+export function OnboardingForm({
+  email,
+  token,
+  selfServe,
+  needsSurvey,
+}: {
+  email: string;
+  token: string;
+  selfServe: boolean;
+  /** Asked here when the address never answered the application on /signup. */
+  needsSurvey: boolean;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(acceptInviteAction, null);
   const [step, setStep] = React.useState<Step>(1);
 
@@ -126,7 +138,7 @@ export function OnboardingForm({ email, token, selfServe }: { email: string; tok
   if (state !== lastHandledState) {
     setLastHandledState(state);
     const firstField = serverFieldErrors ? Object.keys(serverFieldErrors)[0] : undefined;
-    const target = firstField ? FIELD_STEP[firstField] : undefined;
+    const target = firstField ? (FIELD_STEP[firstField] ?? 3) : undefined;
     if (target) setStep(target);
   }
 
@@ -167,10 +179,15 @@ export function OnboardingForm({ email, token, selfServe }: { email: string; tok
     const fields: Field[] = ["password", "confirm", "name", "phone", "spendBand", "agree"];
     setTouched(Object.fromEntries(fields.map((f) => [f, true])));
     const firstBad = fields.find((f) => validate(f, values));
+    // Submitted by hand: the survey's inputs are uncontrolled, and a form
+    // action would reset them when a submission comes back refused.
+    e.preventDefault();
     if (firstBad) {
-      e.preventDefault();
       setStep(FIELD_STEP[firstBad]);
+      return;
     }
+    const data = new FormData(e.currentTarget);
+    React.startTransition(() => action(data));
   }
 
   return (
@@ -201,7 +218,7 @@ export function OnboardingForm({ email, token, selfServe }: { email: string; tok
         </p>
       )}
 
-      <form action={action} onSubmit={handleSubmit} className="mt-6">
+      <form onSubmit={handleSubmit} noValidate className="mt-6">
         <input type="hidden" name="email" value={email} />
         <input type="hidden" name="token" value={token} />
         {/* E.164 is what the server stores; the formatted national number is
@@ -317,6 +334,13 @@ export function OnboardingForm({ email, token, selfServe }: { email: string; tok
               </p>
             )}
           </div>
+          {needsSurvey && (
+            <div className="space-y-7 border-t border-border pt-6">
+              <p className="text-sm text-fg-muted">A few questions about how you bet, for the beta.</p>
+              <SurveyField label="First and last name" name="fullName" autoComplete="name" error={serverFieldErrors?.fullName?.[0]} />
+              <SurveyQuestions err={(k) => serverFieldErrors?.[k]?.[0]} />
+            </div>
+          )}
         </div>
 
         {/* --------------------------------------------------------- step 4 */}

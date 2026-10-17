@@ -17,7 +17,8 @@ import { violates } from "@/lib/db-errors";
 import { sendEmail } from "@/lib/email/resend-client";
 import { welcomeEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
-import { removeFromWaitlist } from "@/lib/waitlist";
+import { hasSignupSurvey, removeFromWaitlist, saveSignupSurvey } from "@/lib/waitlist";
+import { signupSurveySchema, surveyFromForm, type SignupSurvey } from "@/lib/signup-survey";
 
 const ACCEPT_LIMIT = 10;
 const ACCEPT_WINDOW_MS = 15 * 60 * 1000;
@@ -152,6 +153,17 @@ export async function acceptInviteAction(
     return { ok: false, error: "This invite link isn't valid anymore." };
   }
 
+  // Admin invites skip /signup, so the application is asked here — unless
+  // this address already answered it there.
+  let survey: SignupSurvey | null = null;
+  if (!(await hasSignupSurvey(invite.email))) {
+    const s = signupSurveySchema.safeParse({ ...surveyFromForm(formData), email: invite.email });
+    if (!s.success) {
+      return { ok: false, error: "Check the fields below", fieldErrors: fieldErrorsFrom(s.error) };
+    }
+    survey = s.data;
+  }
+
   const passwordHash = await hashPassword(password);
 
   let created: { id: string; email: string } | undefined;
@@ -198,6 +210,8 @@ export async function acceptInviteAction(
     entityId: created.id,
     meta: { invitationId: invite.id, selfServe: invite.invitedBy === null },
   });
+
+  if (survey) await saveSignupSurvey(survey, "invite");
 
   // They're in: nothing left to wait for. And the welcome goes after the
   // response, so a slow or failed send never stands between them and the board.

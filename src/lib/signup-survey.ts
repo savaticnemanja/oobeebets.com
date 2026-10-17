@@ -88,6 +88,8 @@ export const signupSurveySchema = z
 
 export type SignupSurvey = z.infer<typeof signupSurveySchema>;
 
+export type SurveySource = "landing" | "signup" | "invite";
+
 /** FormData → the schema's input shape. */
 export function surveyFromForm(f: FormData) {
   const s = (k: string) => (typeof f.get(k) === "string" ? (f.get(k) as string) : "");
