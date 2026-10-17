@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { auditLog, parlays, postLikes, postReposts, postViews, posts, userFollows, users } from "@/db/schema";
-import { getAuth, rateLimit } from "@/lib/auth";
+import { SLOW_DOWN, actionLimit, getAuth, rateLimit } from "@/lib/auth";
 import { usernameTaken } from "@/lib/social";
 import { postBodySchema, profileSchema } from "@/lib/social-rules";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
@@ -150,6 +150,7 @@ export async function deletePostAction(postId: string): Promise<ActionState> {
 export async function setPostLikeAction(postId: string, liked: boolean): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: SIGNED_OUT };
+  if (!(await actionLimit("like", auth.user.id, 600))) return { ok: false, error: SLOW_DOWN };
   const parsed = z.object({ postId: z.string().uuid(), liked: z.boolean() }).safeParse({ postId, liked });
   if (!parsed.success) return { ok: false, error: "Bad request" };
   if (parsed.data.liked && !(await canInteract(auth.user.id, await authorOf(parsed.data.postId)))) {
@@ -219,6 +220,7 @@ export async function recordPostViewsAction(postIds: string[]): Promise<void> {
 export async function setPostRepostAction(postId: string, reposted: boolean): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: SIGNED_OUT };
+  if (!(await actionLimit("repost", auth.user.id, 200))) return { ok: false, error: SLOW_DOWN };
   const parsed = z.object({ postId: z.string().uuid(), reposted: z.boolean() }).safeParse({ postId, reposted });
   if (!parsed.success) return { ok: false, error: "Bad request" };
   if (parsed.data.reposted && !(await canInteract(auth.user.id, await authorOf(parsed.data.postId)))) {
@@ -254,6 +256,7 @@ export async function setPostRepostAction(postId: string, reposted: boolean): Pr
 export async function setUserFollowAction(userId: string, follow: boolean): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: SIGNED_OUT };
+  if (!(await actionLimit("follow", auth.user.id, 300))) return { ok: false, error: SLOW_DOWN };
   const parsed = z.object({ userId: z.string().uuid(), follow: z.boolean() }).safeParse({ userId, follow });
   if (!parsed.success) return { ok: false, error: "Bad request" };
   if (parsed.data.userId === auth.user.id) return { ok: false, error: "You can't follow yourself." };
@@ -295,6 +298,7 @@ export async function updateProfileAction(
 ): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: SIGNED_OUT };
+  if (!(await actionLimit("profile", auth.user.id, 60))) return { ok: false, error: SLOW_DOWN };
 
   const parsed = profileSchema.safeParse({
     displayName: formData.get("displayName") ?? "",

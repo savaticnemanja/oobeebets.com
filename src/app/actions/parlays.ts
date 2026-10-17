@@ -19,7 +19,7 @@ import { freezeLine } from "@/lib/odds/board";
 import { baseMarket, eventLabel } from "@/lib/odds/markets";
 import { formatOdds } from "@/lib/i18n/format";
 import type { AuthContext } from "@/lib/auth";
-import { getAuth, requireAdmin } from "@/lib/auth";
+import { SLOW_DOWN, actionLimit, getAuth, requireAdmin } from "@/lib/auth";
 import {
   MAX_PARLAY_LEGS,
   MIN_PARLAY_LEGS,
@@ -75,6 +75,7 @@ export async function createCommunityParlayAction(
   if (!auth) {
     return { ok: false, error: "Your session expired — sign in again to build this." };
   }
+  if (!(await actionLimit("parlay:build", auth.user.id, 60))) return { ok: false, error: SLOW_DOWN };
 
   const parsed = communityLegsSchema.safeParse(legs);
   if (!parsed.success) {

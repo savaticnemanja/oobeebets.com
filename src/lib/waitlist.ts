@@ -86,8 +86,20 @@ export async function leaveWaitlist(token: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Stores the application's answers, replacing any earlier ones for the address. */
-export async function saveSignupSurvey(v: SignupSurvey, source: SurveySource): Promise<void> {
+/**
+ * Stores the application's answers, replacing any earlier ones for the address.
+ *
+ * `unlessAccount` is for /signup, where nobody has proven they own the
+ * address: anyone can type someone else's email there, so an address that
+ * already has an account keeps the answers it gave (the invite wizard, which
+ * is signed by its link, saves without it).
+ */
+export async function saveSignupSurvey(
+  v: SignupSurvey,
+  source: SurveySource,
+  { unlessAccount = false }: { unlessAccount?: boolean } = {},
+): Promise<void> {
+  if (unlessAccount && (await hasAccount(v.email))) return;
   // Never bets: the habit questions weren't asked, so nothing is kept for them.
   const habits = asksBettingHabits(v.betFrequency);
   const sportsbooks = habits ? v.sportsbooks : [];

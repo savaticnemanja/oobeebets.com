@@ -32,6 +32,7 @@ export function SettleList({
   settled,
   scores,
   hideEvent,
+  upcoming,
 }: {
   picks: Pick[];
   emptyMessage: string;
@@ -41,6 +42,8 @@ export function SettleList({
   scores?: Record<string, string>;
   /** The rows sit under a heading naming the game already. */
   hideEvent?: boolean;
+  /** Not kicked off yet: only a void can be recorded (the action refuses the rest). */
+  upcoming?: boolean;
 }) {
   const [state, action] = useActionState(settlePickAction, null);
   const [unsetState, unsetAction] = useActionState(unsettlePickAction, null);
@@ -128,15 +131,21 @@ export function SettleList({
                 ) : (
                   // Each names a result and asks before it's recorded (SettleConfirm).
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Button type="button" variant="hit" size="sm" onClick={() => choose(p, "won")}>
-                      Won
-                    </Button>
-                    <Button type="button" variant="danger" size="sm" onClick={() => choose(p, "lost")}>
-                      Lost
-                    </Button>
-                    <Button type="button" variant="subtle" size="sm" onClick={() => choose(p, "push")}>
-                      Push
-                    </Button>
+                    {upcoming ? (
+                      <span className="text-xs text-fg-subtle">Results open at kick-off</span>
+                    ) : (
+                      <>
+                        <Button type="button" variant="hit" size="sm" onClick={() => choose(p, "won")}>
+                          Won
+                        </Button>
+                        <Button type="button" variant="danger" size="sm" onClick={() => choose(p, "lost")}>
+                          Lost
+                        </Button>
+                        <Button type="button" variant="subtle" size="sm" onClick={() => choose(p, "push")}>
+                          Push
+                        </Button>
+                      </>
+                    )}
                     <Button type="button" variant="ghost" size="sm" onClick={() => choose(p, "void")} className="text-fg-subtle">
                       Void
                     </Button>

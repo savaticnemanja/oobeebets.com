@@ -440,6 +440,13 @@ export async function unpublishSlateAction(
 
 /* --------------------------------------------------------------- settle */
 
+/**
+ * Only a void can be recorded before kick-off (a postponed or cancelled game).
+ * A win, loss or push before the game has started is never a real result, and
+ * once settled it goes on the public record and grades every parlay it's in.
+ */
+const NOT_STARTED = "That game hasn't started — only a void can be recorded before kick-off.";
+
 export async function settlePickAction(
   _prev: ActionState,
   formData: FormData,
@@ -458,6 +465,7 @@ export async function settlePickAction(
 
   const [existing] = await db.select().from(picks).where(eq(picks.id, pickId)).limit(1);
   if (!existing) return { ok: false, error: "Pick not found" };
+  if (status !== "void" && existing.startsAt.getTime() > Date.now()) return { ok: false, error: NOT_STARTED };
 
   // A feed-backed pick is settled through its selection, which writes this
   // pick and every community leg on the same bet in one go — settling the
@@ -608,6 +616,16 @@ export async function settleSelectionAction(
   const { selectionId, status, finalScore, voidReason } = parsed.data;
   if (status === "void" && !voidReason) {
     return { ok: false, error: "A void needs a reason — it goes in the audit log." };
+  }
+  if (status !== "void") {
+    const [row] = await db
+      .select({ commenceTime: games.commenceTime })
+      .from(selections)
+      .innerJoin(games, eq(games.id, selections.gameId))
+      .where(eq(selections.id, selectionId))
+      .limit(1);
+    if (!row) return { ok: false, error: "That line is gone." };
+    if (row.commenceTime.getTime() > Date.now()) return { ok: false, error: NOT_STARTED };
   }
   await settleSelection(
     selectionId,

@@ -31,8 +31,9 @@ export async function getStartedAction(_prev: ActionState, formData: FormData): 
     const ipOk = await rateLimit("get-started:ip", ip, 8, 15 * 60 * 1000);
     const emailOk = await rateLimit("get-started:email", email, 3, 60 * 60 * 1000);
     if (!ipOk || !emailOk) return { ok: false, error: "Too many tries. Give it a few minutes." };
-    // Saved before the reply: the answers are the point of the form.
-    await saveSignupSurvey(parsed.data, source);
+    // Saved before the reply: the answers are the point of the form. Never
+    // over an existing account's own (see saveSignupSurvey).
+    await saveSignupSurvey(parsed.data, source, { unlessAccount: true });
   } catch (err) {
     console.error("[get-started] rate limit or survey save failed:", err);
     return { ok: false, error: "Something went wrong. Try again in a moment." };

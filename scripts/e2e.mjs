@@ -122,8 +122,19 @@ const browser = await chromium.launch();
 
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
 
-/** The beta application's answer cards are visually hidden inputs named q-<question>. */
-const pickAnswer = (page, field, value) => page.locator(`input[name="q-${field}"][value="${value}"]`).check({ force: true });
+/**
+ * The beta application's answer cards are visually hidden inputs named
+ * q-<question>. Clicked by event, not by position: a 1px input under a card
+ * is easy for an overlay (Next's dev badge, a toast) to sit on top of.
+ */
+async function pickAnswer(page, field, value) {
+  const input = page.locator(`input[name="q-${field}"][value="${value}"]`);
+  if (await input.isChecked()) return;
+  await input.dispatchEvent("click");
+  // Rendered state, not just the DOM's: React re-renders the card after the click.
+  for (let i = 0; i < 40 && !(await input.isChecked().catch(() => true)); i++) await page.waitForTimeout(50);
+  await page.waitForTimeout(50);
+}
 
 /** "How you bet", answered as a regular bettor. */
 async function answerBetting(page) {
@@ -343,9 +354,23 @@ console.log("\nSettling a pick");
     await ctx.addCookies([await sessionCookie(ADMIN_EMAIL)]);
     const page = await ctx.newPage();
 
-    // Started picks are under "Needs a result", the rest under "Not started".
-    const started = new Date(target.starts_at ?? 0) <= new Date();
-    await page.goto(`${APP_URL}/admin/settle${started ? "" : "?tab=upcoming"}`);
+    // Before kick-off only a void can be recorded: "Not started" offers no
+    // result buttons, and the action refuses one anyway.
+    const startsAt = target.starts_at;
+    if (new Date(startsAt) > new Date()) {
+      await page.goto(`${APP_URL}/admin/settle?tab=upcoming`);
+      await loaded(page);
+      const row = page.locator(`[data-pick-id="${target.id}"]`);
+      await row.waitFor({ timeout: 15000 });
+      check(
+        (await row.getByRole("button", { name: "Won", exact: true }).count()) === 0 &&
+          (await row.getByText("Results open at kick-off").count()) === 1,
+        "a pick that hasn't started can't be given a result",
+      );
+    }
+    // Then it kicks off, and lands under "Needs a result".
+    await sql`update picks set starts_at = now() - interval '1 hour' where id = ${target.id}`;
+    await page.goto(`${APP_URL}/admin/settle`);
     await loaded(page);
     await hydrated(page, `[data-pick-id="${target.id}"] button`);
     // Won asks first; nothing is recorded until it's confirmed.
@@ -417,7 +442,7 @@ console.log("\nSettling a pick");
 
     // Restore.
     await sql`update picks set status='pending', final_score=null, settled_at=null,
-              settled_by=null where id = ${target.id}`;
+              settled_by=null, starts_at = ${startsAt} where id = ${target.id}`;
     await ctx.close();
   }
 }

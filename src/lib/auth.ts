@@ -252,3 +252,15 @@ export async function rateLimit(
 
   return (row?.count ?? 1) <= limit;
 }
+
+/** The answer every per-hour action limit below gives — see actionLimit. */
+export const SLOW_DOWN = "Slow down a little — try again in a few minutes.";
+
+/**
+ * A per-account, per-hour ceiling for the everyday taps (likes, follows,
+ * reposts, building a parlay): far past what a person does, short of what a
+ * script floods other people's notifications with.
+ */
+export function actionLimit(bucket: string, userId: string, perHour: number): Promise<boolean> {
+  return rateLimit(bucket, userId, perHour, 60 * 60 * 1000);
+}

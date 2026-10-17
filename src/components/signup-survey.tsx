@@ -236,7 +236,9 @@ function OptionCard({
   return (
     <label
       className={cn(
-        "flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-fg transition-colors",
+        // `relative` keeps the visually hidden input inside its own card, so
+        // focusing it (keyboard, or an error jump) scrolls to the right place.
+        "relative flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-fg transition-colors",
         "hover:border-border-strong has-[:checked]:border-brand/60 has-[:checked]:bg-brand/5",
         "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/50",
       )}

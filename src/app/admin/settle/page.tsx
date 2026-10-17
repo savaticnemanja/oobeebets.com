@@ -216,8 +216,8 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
           <Empty icon={Clock3} title="Nothing pending" />
         ) : (
           <>
-            <p className="mb-3 text-xs text-fg-subtle">You can settle early if a result is already known.</p>
-            <SettleList picks={upcoming} emptyMessage="" muted />
+            <p className="mb-3 text-xs text-fg-subtle">Not kicked off yet. Results open at kick-off; a postponed or cancelled game can be voided now.</p>
+            <SettleList picks={upcoming} emptyMessage="" muted upcoming />
           </>
         ))}
 

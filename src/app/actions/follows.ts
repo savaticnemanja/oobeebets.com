@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { parlayFollows, parlays, pickFollows, picks, slates } from "@/db/schema";
 import { getParlaysByIds } from "@/lib/parlay-store";
-import { getAuth } from "@/lib/auth";
+import { SLOW_DOWN, actionLimit, getAuth } from "@/lib/auth";
 import { followWindowOpen } from "@/lib/follows";
 import { notify, unnotify } from "@/lib/notifications";
 import { BLOCKED, canInteract } from "@/lib/moderation";
@@ -38,6 +38,7 @@ export async function setPickFollowAction(
   if (!auth) {
     return { ok: false, error: "Your session expired — sign in again to log this." };
   }
+  if (!(await actionLimit("pick:take", auth.user.id, 600))) return { ok: false, error: SLOW_DOWN };
 
   const parsed = z
     .object({ pickId: z.string().uuid(), taken: z.boolean() })
@@ -129,6 +130,7 @@ export async function setPickFollowAction(
 export async function setParlayFollowAction(parlayId: string, played: boolean): Promise<ActionState> {
   const auth = await getAuth();
   if (!auth) return { ok: false, error: "Your session expired — sign in again to log this." };
+  if (!(await actionLimit("parlay:play", auth.user.id, 600))) return { ok: false, error: SLOW_DOWN };
   const parsed = z.object({ parlayId: z.string().uuid(), played: z.boolean() }).safeParse({ parlayId, played });
   if (!parsed.success) return { ok: false, error: "Bad request" };
 
