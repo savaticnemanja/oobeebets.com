@@ -16,6 +16,8 @@
  * state rather than duplicates. Never run against a database with real users.
  */
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import bcrypt from "bcryptjs";
@@ -26,11 +28,14 @@ import {
   parlays,
   pickFollows,
   picks,
+  playerGameStats,
+  playerSeasonStats,
   postLikes,
   posts,
   rateLimits,
   sessions,
   slates,
+  statPlayers,
   userFollows,
   users,
 } from "./schema";
@@ -131,6 +136,10 @@ async function main() {
   await db.delete(sessions);
   await db.delete(invitations);
   await db.delete(users);
+  // Box scores before their players, which both reference.
+  await db.delete(playerGameStats);
+  await db.delete(playerSeasonStats);
+  await db.delete(statPlayers);
 
   const passwordHash = await bcrypt.hash(PASSWORD, 12);
 
@@ -146,7 +155,9 @@ async function main() {
     })
     .returning({ id: users.id, email: users.email, role: users.role });
 
-  console.log("[seed] done — 1 account, no slates, no picks.");
+  const stats = await seedPlayerStats();
+
+  console.log(`[seed] done — 1 account, no slates, no picks${stats ? `, ${stats}` : ""}.`);
   console.log("");
   console.log("  Sign in as");
   console.log(`    ${created.email}  (${created.role}, password: ${PASSWORD})`);
@@ -158,6 +169,48 @@ async function main() {
   console.log("");
 
   await client.end();
+}
+
+/**
+ * The Players pages' data, so a fresh database has stats before the stats
+ * provider is ever called: every row of stat_players, player_season_stats and
+ * player_game_stats as it stood in production on 2026-10-17 (synced Oct 14–16).
+ * One JSON object per line — {"t": table, "r": row with column names as keys}
+ * — read straight into each table with json_populate_recordset, so the file
+ * and the schema only have to agree on column names.
+ *
+ * Next to this file under tsx (src/db/seed-data), next to the bundle in the
+ * image (docker/seed-data, copied there by the Dockerfile). SEED_PLAYER_STATS=0
+ * skips it.
+ */
+const STATS_TABLES = ["stat_players", "player_season_stats", "player_game_stats"] as const;
+
+async function seedPlayerStats(): Promise<string | null> {
+  if (process.env.SEED_PLAYER_STATS === "0") return null;
+  const file = new URL("./seed-data/player-stats.ndjson.gz", import.meta.url);
+  if (!existsSync(file)) {
+    console.warn("[seed] no seed-data/player-stats.ndjson.gz next to the seed — skipping player stats.");
+    return null;
+  }
+
+  const byTable = new Map<string, unknown[]>(STATS_TABLES.map((t) => [t, []]));
+  for (const line of gunzipSync(readFileSync(file)).toString("utf8").split("\n")) {
+    if (!line) continue;
+    const { t, r } = JSON.parse(line) as { t: string; r: unknown };
+    byTable.get(t)?.push(r);
+  }
+
+  const counts: string[] = [];
+  // In this order: the season and game rows reference stat_players.
+  for (const table of STATS_TABLES) {
+    const rows = byTable.get(table)!;
+    for (let i = 0; i < rows.length; i += 2000) {
+      const batch = JSON.stringify(rows.slice(i, i + 2000));
+      await client.unsafe(`insert into ${table} select * from json_populate_recordset(null::${table}, $1::json)`, [batch]);
+    }
+    counts.push(`${rows.length} ${table}`);
+  }
+  return counts.join(", ");
 }
 
 main().catch(async (err) => {
