@@ -12,7 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE.name,
     short_name: SITE.name,
     description: SITE.description,
-    start_url: "/picks",
+    // Home, like the signed-in site itself (/ → /home). Signed out, it
+    // sends you to sign in and back.
+    start_url: "/home",
     // Installed app opens without browser chrome; falls back gracefully on
     // platforms that don't support the window-controls-overlay display mode.
     display: "standalone",
