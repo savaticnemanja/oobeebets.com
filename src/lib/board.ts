@@ -29,7 +29,7 @@ export const CATEGORY_NOUN: Record<PickCategory, string> = {
  * The database agrees with this on both halves: picks_rank_range checks
  * 1..15, and picks_slate_rank_unique is keyed on (slate_date, category, rank)
  * as of migration 0006 — which is what lets rank 1 exist once per category per
- * day instead of once per day. Both limits are 15 today; raising either means
+ * day instead of once per day. Both limits are 100 today; raising either means
  * a migration to move the check, not just an edit here.
  */
 /** The most units Oobee may put on one pick: game bets go to 100, props stay at 10. */
@@ -39,8 +39,8 @@ export const MAX_UNITS: Record<PickCategory, number> = {
 };
 
 export const PICKS_PER_SLATE: Record<PickCategory, number> = {
-  game: 15,
-  prop: 15,
+  game: 100,
+  prop: 100,
 };
 
 /**
@@ -55,8 +55,8 @@ export const PICKS_PER_SLATE: Record<PickCategory, number> = {
  * code change.
  */
 export const VISIBLE_PICKS: Record<PickCategory, number> = {
-  game: 15,
-  prop: 15,
+  game: 100,
+  prop: 100,
 };
 
 /** A full day across both tabs — the admin overview's denominator. */
@@ -143,10 +143,10 @@ export const TAB_NOUN: Record<BoardTab, string> = {
  * a parlay is a garnish on a board of singles, and fifteen of them a day
  * would be parlay bait.
  *
- * parlays_rank_range in the database allows 1..15, so raising this is an edit
+ * parlays_rank_range in the database allows 1..100, so raising this is an edit
  * here rather than a migration. Lowering it never needs one either.
  */
-export const PARLAYS_PER_SLATE = 5;
+export const PARLAYS_PER_SLATE = 100;
 
 export function isBoardTab(value: unknown): value is BoardTab {
   return typeof value === "string" && (boardTabs as readonly string[]).includes(value);

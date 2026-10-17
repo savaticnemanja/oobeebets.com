@@ -66,7 +66,7 @@ export const TIERS = {
     priceCents: 19999,
     lookupKey: "oobee_elite_monthly",
     tagline: "Every pick we make. Nothing held back.",
-    features: ["Every game bet — up to 15 a game day", "Every player prop — up to 15 a game day", "Oobee's parlays", "Everything in Pro"],
+    features: ["Every game bet — up to 100 a game day", "Every player prop — up to 100 a game day", "Oobee's parlays", "Everything in Pro"],
   },
 } as const satisfies Record<Tier, TierConfig>;
 

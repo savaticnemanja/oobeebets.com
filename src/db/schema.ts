@@ -411,9 +411,9 @@ export const picks = pgTable(
     index("picks_starts_at_idx").on(t.startsAt),
     // Keep in step with PICKS_PER_SLATE in lib/board.ts — changing a list's
     // size needs a migration to move this bound, not just the constant. One
-    // bound covers both categories while they are both 15; the day they
+    // bound covers both categories while they are both 100; the day they
     // diverge this becomes a CASE on category.
-    check("picks_rank_range", sql`${t.rank} >= 1 and ${t.rank} <= 15`),
+    check("picks_rank_range", sql`${t.rank} >= 1 and ${t.rank} <= 100`),
     check("picks_confidence_range", sql`${t.confidence} is null or (${t.confidence} >= 0 and ${t.confidence} <= 100)`),
     // American odds are never between -100 and +100 exclusive, and never 0.
     check("picks_price_valid", sql`${t.price} >= 100 or ${t.price} <= -100`),
@@ -568,7 +568,7 @@ export const parlays = pgTable(
     ),
     check(
       "parlays_rank_range",
-      sql`${t.rank} is null or (${t.rank} >= 1 and ${t.rank} <= 15)`,
+      sql`${t.rank} is null or (${t.rank} >= 1 and ${t.rank} <= 100)`,
     ),
     check(
       "parlays_price_valid",
