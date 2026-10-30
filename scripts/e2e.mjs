@@ -2,8 +2,8 @@
  * Browser-driven flow tests for the paths that mutate the public record.
  * These exercise real server actions, not just rendering.
  *
- * There are no paid plans or billing backend — the whole tier/subscription
- * system was removed. Every account gets the same free board.
+ * Billing is off here (BILLING_ENABLED unset): every account gets the whole
+ * board, and the 14-day pass is checked in verify.mjs instead.
  *
  * "I took this bet" is in here rather than only in verify.mjs because the
  * check circle is the one control on the board a tester actually presses, and

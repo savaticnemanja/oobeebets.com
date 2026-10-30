@@ -69,8 +69,8 @@ export default function PrivacyPage() {
         </p>
         {paid ? (
           <p>
-            If you take a plan: which plan, its status and when it renews, and the ID Stripe
-            gives you as a customer. Your card details go to Stripe and never reach us.
+            If you buy a pass: when you bought it, what you paid, when it runs, and the IDs
+            Stripe gives you and your payment. Your card details go to Stripe and never reach us.
           </p>
         ) : (
           <p>We collect no payment information — {SITE.name} is free.</p>
@@ -97,8 +97,8 @@ export default function PrivacyPage() {
         <ul className="list-disc space-y-2 pl-5">
           {paid && (
             <li>
-              <strong className="text-fg">Stripe</strong> takes payment for plans. When you
-              subscribe it receives your email address and name from us, and your card and
+              <strong className="text-fg">Stripe</strong> takes payment for passes. When you
+              buy one it receives your email address and name from us, and your card and
               billing details from you on its own checkout page.
             </li>
           )}

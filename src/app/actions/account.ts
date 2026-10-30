@@ -3,12 +3,11 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { cookies } from "next/headers";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, invitations, signupSurveys, subscriptions, users, waitlist } from "@/db/schema";
+import { auditLog, invitations, signupSurveys, users, waitlist } from "@/db/schema";
 import { SESSION_COOKIE, getAuth, rateLimit, verifyPassword } from "@/lib/auth";
-import { LIVE_STATUSES } from "@/lib/billing/access";
 import { sendEmail } from "@/lib/email/resend-client";
 import { accountDeletedEmail } from "@/lib/email/templates";
 import { mirrorForget } from "@/lib/newsletter";
@@ -27,8 +26,8 @@ const deleteSchema = z.object({
  * with their name taken off (set null). The audit log keeps its rows but loses
  * their email. Oobee's own picks and results are untouched.
  *
- * Asks for the password again, and refuses while a paid plan would go on
- * billing or while they're the only admin left.
+ * Asks for the password again, and refuses while they're the only admin
+ * left. A pass never bills again, so it doesn't stand in the way.
  */
 export async function deleteAccountAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await getAuth();
@@ -46,20 +45,6 @@ export async function deleteAccountAction(_prev: ActionState, formData: FormData
   }
 
   const { id, email } = auth.user;
-  const [livePlan] = await db
-    .select({ id: subscriptions.stripeSubscriptionId })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.userId, id),
-        inArray(subscriptions.status, [...LIVE_STATUSES]),
-        eq(subscriptions.cancelAtPeriodEnd, false),
-      ),
-    )
-    .limit(1);
-  if (livePlan) {
-    return { ok: false, error: "Cancel your plan first (Plan, above), so it stops billing — then delete your account." };
-  }
   if (auth.isAdmin) {
     const [{ n }] = await db
       .select({ n: sql<number>`count(*)::int` })

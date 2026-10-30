@@ -11,11 +11,10 @@ import { AvatarPicker } from "@/components/social/avatar-picker";
 import { ChangePasswordForm } from "@/components/password-reset-forms";
 import { DeleteAccountForm } from "@/components/delete-account-form";
 import { displayNameOf } from "@/components/social/identity";
-import { ManagePlanButton } from "@/components/billing/plan-button";
-import { PlanList } from "@/components/billing/plan-list";
+import { PassOffer } from "@/components/billing/pass-offer";
 import { viewerAccess } from "@/lib/billing/access";
-import { TIERS } from "@/lib/tiers";
-import { formatDate } from "@/lib/i18n/format";
+import { PASS, formatPrice } from "@/lib/pass";
+import { formatDateTime } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -27,13 +26,13 @@ export const dynamic = "force-dynamic";
 /**
  * Your profile, account settings and plan — reached from "Edit profile" on
  * your profile, not from the navigation, as on X, and from the board's Unlock
- * rows (#base, #pro, #elite). Laid out like every other page: the 600px
+ * rows (#pass). Laid out like every other page: the 600px
  * column, and each part a full-width row.
  */
 export default async function AccountPage() {
   const auth = await getAuth();
   if (!auth) redirect("/login?next=/account");
-  const { access, subscription } = await viewerAccess(auth);
+  const { access, passEndsAt } = await viewerAccess(auth);
 
   return (
     <DocPage title="Account" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
@@ -83,32 +82,23 @@ export default async function AccountPage() {
               <Link href="/picks">See the picks</Link>
             </Button>
           </>
-        ) : subscription ? (
-          <>
-            <p>
-              You&apos;re on <span className="text-fg">{TIERS[subscription.tier].name}</span>
-              {subscription.status === "past_due"
-                ? " — your last payment didn't go through. Update your card to keep it."
-                : subscription.currentPeriodEnd
-                  ? subscription.cancelAtPeriodEnd
-                    ? `, ending ${formatDate(subscription.currentPeriodEnd)}. It won't renew.`
-                    : `, renewing ${formatDate(subscription.currentPeriodEnd)}.`
-                  : "."}
-            </p>
-            <ManagePlanButton />
-          </>
+        ) : passEndsAt ? (
+          <p>
+            Your pass has the whole board open until <span className="text-fg">{formatDateTime(passEndsAt)}</span>.
+            It doesn&apos;t renew — buy another below to add {PASS.days} days on the end.
+          </p>
         ) : (
           <p>
-            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A plan opens up the
-            whole board. Every plan is monthly and can be cancelled any time.
+            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A {PASS.name} opens
+            the whole board, Oobee&apos;s parlays included, for {formatPrice(PASS.priceCents)} — paid once, nothing
+            to cancel.
           </p>
         )}
       </DocSection>
 
       {access !== null && (
-        <PlanList
-          access={access}
-          subscription={subscription}
+        <PassOffer
+          holding={passEndsAt !== null}
           // Test keys (sk_test_…, rk_test_…) mean a sandbox.
           testMode={process.env.STRIPE_SECRET_KEY?.includes("_test_") ?? false}
         />
@@ -129,6 +119,7 @@ export default async function AccountPage() {
           Deletes your profile and everything on it — posts, replies, likes, follows, your parlays, the picks
           you marked and your sign-up answers — and signs you out everywhere. It can&apos;t be undone.
           Oobee&apos;s own picks and their results stay on the record; they never held anything about you.
+          {passEndsAt && " The time left on your pass goes with it and isn't refunded."}
         </p>
         <div className="pt-1 text-fg">
           <DeleteAccountForm email={auth.user.email} />

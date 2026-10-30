@@ -53,27 +53,20 @@ export default function TermsPage() {
       </DocSection>
 
       {billingEnabled() ? (
-        <DocSection title="4. Plans and billing">
+        <DocSection title="4. Passes and payment">
           <p>
-            The top pick of each list is free every game day;
-            the rest of the board comes with a paid plan (Base, Pro or Elite), as listed on
-            the Plans page with its price.
+            The top pick of each list is free every game day. The rest of the board comes
+            with a 14-day pass, at the price shown on your account page.
           </p>
           <p>
-            Plans are billed monthly in advance through Stripe and renew automatically each
-            month until you cancel. You can cancel, change plan or update your card at any
-            time from your account. A cancelled plan stays active until the end of the month
-            already paid for and then does not renew. Changing plan takes effect right away,
-            with the difference prorated on your next invoice. Payments already made are not
-            refunded, except where the law requires it.
+            A pass is a single payment, taken through Stripe when you buy it. It opens the
+            whole board for 14 days from the moment the payment goes through, and then ends
+            on its own: nothing renews and nothing is charged again. A pass bought while
+            another is still running starts when that one ends. Payments are not refunded,
+            except where the law requires it; a refunded pass ends straight away.
           </p>
           <p>
-            If a payment fails we retry it for a short time, and the plan ends if it still
-            can&apos;t be collected. We will tell subscribers by email before any price change
-            applies to them; a new price applies from the next renewal after that notice.
-          </p>
-          <p>
-            A plan buys access to our picks and nothing more: no plan guarantees any result
+            A pass buys access to our picks and nothing more: no pass guarantees any result
             (see section 2).
           </p>
         </DocSection>
@@ -81,7 +74,7 @@ export default function TermsPage() {
         <DocSection title="4. Access">
           <p>
             Access to {SITE.name} is free — we do not take
-            payment, run subscriptions, or offer paid plans at this time. That may change
+            payment or sell passes at this time. That may change
             in the future, and this page will be updated before it does.
           </p>
         </DocSection>

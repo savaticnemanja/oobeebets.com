@@ -1,26 +1,22 @@
 /**
- * Makes the Stripe side of the plans, and is safe to run again: everything is
- * found before it is created.
+ * Makes the Stripe side of the 14-day pass, and is safe to run again:
+ * everything is found before it is created.
  *
- *   npm run stripe:setup                                   # products, prices, portal
+ *   npm run stripe:setup                                   # product and price
  *   npm run stripe:setup -- --webhook https://oobeebets.com/api/webhooks/stripe
  *
- * For each tier in src/lib/tiers.ts: a Product (metadata tier=<id>) and a
- * monthly Price carrying the tier's lookup_key, which is how checkout and the
- * webhook find it. A product that already exists under the tier's name with a
- * monthly price of the same amount (the sandbox's hand-made "Base") is
- * adopted rather than duplicated.
- *
- * Then a customer-portal configuration that lets people switch between the
- * three plans, cancel at period end and update their card; and, with
- * --webhook, the endpoint with exactly the events the app handles. Its signing
- * secret is printed once — that is STRIPE_WEBHOOK_SECRET.
+ * The pass from src/lib/pass.ts: a Product (metadata product=pass) and a
+ * one-time Price carrying the pass's lookup_key, which is how checkout and the
+ * webhook find it. Then any monthly Base / Pro / Elite prices left from the
+ * old plans are archived, so nobody can be sold one; and, with --webhook, the
+ * endpoint with exactly the events the app handles. Its signing secret is
+ * printed once — that is STRIPE_WEBHOOK_SECRET.
  *
  * Needs STRIPE_SECRET_KEY (a test key — it refuses a live one unless
  * --live is passed).
  */
 import Stripe from "stripe";
-import { TIERS, TIER_ORDER } from "../src/lib/tiers.ts";
+import { PASS } from "../src/lib/pass.ts";
 import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 
 const key = process.env.STRIPE_SECRET_KEY;
@@ -32,82 +28,44 @@ const webhookAt = process.argv.indexOf("--webhook");
 const webhookUrl = webhookAt > -1 ? process.argv[webhookAt + 1] : null;
 
 const stripe = new Stripe(key, { apiVersion: "2026-08-26.dahlia" });
-const productIds = {};
-const priceIds = {};
 
-for (const t of TIER_ORDER) {
-  const tier = TIERS[t];
+// Already set up: the lookup key resolves.
+const [existing] = (await stripe.prices.list({ lookup_keys: [PASS.lookupKey], expand: ["data.product"] })).data;
+if (existing) {
+  if (existing.unit_amount !== PASS.priceCents) {
+    console.warn(`! ${PASS.name}: Stripe charges ${existing.unit_amount}¢, pass.ts says ${PASS.priceCents}¢ — make a new Price and move the lookup key, don't edit this one.`);
+  }
+  console.log(`= ${PASS.name}: ${existing.product.id} / ${existing.id}`);
+} else {
   const productData = {
-    name: tier.name,
-    description: tier.tagline,
-    metadata: { app: "oobeebets", tier: t },
-    marketing_features: tier.features.map((name) => ({ name })),
+    name: PASS.name,
+    description: PASS.tagline,
+    metadata: { app: "oobeebets", product: "pass" },
+    marketing_features: PASS.features.map((name) => ({ name })),
   };
-
-  // Already set up: the lookup key resolves.
-  const [existing] = (await stripe.prices.list({ lookup_keys: [tier.lookupKey], expand: ["data.product"] })).data;
-  if (existing) {
-    productIds[t] = existing.product.id;
-    priceIds[t] = existing.id;
-    if (existing.unit_amount !== tier.priceCents) {
-      console.warn(`! ${tier.name}: Stripe charges ${existing.unit_amount}¢, tiers.ts says ${tier.priceCents}¢ — make a new Price and move the lookup key, don't edit this one.`);
-    }
-    console.log(`= ${tier.name}: ${existing.product.id} / ${existing.id}`);
-    continue;
-  }
-
-  // A product made by hand under the same name and price: adopt it.
   const products = (await stripe.products.list({ active: true, limit: 100 })).data;
-  let product = products.find((p) => p.metadata.tier === t) ?? products.find((p) => p.name === tier.name);
-  let price = null;
-  if (product) {
-    const prices = (await stripe.prices.list({ product: product.id, active: true, type: "recurring", limit: 100 })).data;
-    price = prices.find((p) => p.unit_amount === tier.priceCents && p.currency === "usd" && p.recurring?.interval === "month") ?? null;
-    product = await stripe.products.update(product.id, productData);
-  } else {
-    product = await stripe.products.create(productData);
-  }
-  price ??= await stripe.prices.create({
+  let product = products.find((p) => p.metadata.app === "oobeebets" && p.metadata.product === "pass");
+  product = product ? await stripe.products.update(product.id, productData) : await stripe.products.create(productData);
+  const price = await stripe.prices.create({
     product: product.id,
     currency: "usd",
-    unit_amount: tier.priceCents,
-    recurring: { interval: "month" },
-  });
-  price = await stripe.prices.update(price.id, {
-    lookup_key: tier.lookupKey,
+    unit_amount: PASS.priceCents,
+    lookup_key: PASS.lookupKey,
     transfer_lookup_key: true,
-    nickname: `${tier.name} monthly`,
-    metadata: { app: "oobeebets", tier: t },
+    nickname: PASS.name,
+    metadata: { app: "oobeebets", product: "pass" },
   });
   await stripe.products.update(product.id, { default_price: price.id });
-  productIds[t] = product.id;
-  priceIds[t] = price.id;
-  console.log(`+ ${tier.name}: ${product.id} / ${price.id}`);
+  console.log(`+ ${PASS.name}: ${product.id} / ${price.id}`);
 }
 
-// The portal: switch between the plans, cancel at period end, card and invoices.
-const portalFeatures = {
-  customer_update: { enabled: true, allowed_updates: ["email"] },
-  invoice_history: { enabled: true },
-  payment_method_update: { enabled: true },
-  subscription_cancel: { enabled: true, mode: "at_period_end" },
-  subscription_update: {
-    enabled: true,
-    default_allowed_updates: ["price"],
-    proration_behavior: "create_prorations",
-    products: TIER_ORDER.map((t) => ({ product: productIds[t], prices: [priceIds[t]] })),
-  },
-};
-const configs = (await stripe.billingPortal.configurations.list({ active: true, limit: 100 })).data;
-let portal = configs.find((c) => c.metadata?.app === "oobeebets");
-portal = portal
-  ? await stripe.billingPortal.configurations.update(portal.id, { features: portalFeatures })
-  : await stripe.billingPortal.configurations.create({
-      business_profile: { headline: "oobee bets — manage your plan" },
-      features: portalFeatures,
-      metadata: { app: "oobeebets" },
-    });
-console.log(`= portal: ${portal.id}`);
+// The old monthly plans: archived, never deleted — Stripe keeps their history.
+const old = ["oobee_base_monthly", "oobee_pro_monthly", "oobee_elite_monthly"];
+for (const price of (await stripe.prices.list({ lookup_keys: old, active: true, limit: 10 })).data) {
+  await stripe.prices.update(price.id, { active: false });
+  await stripe.products.update(typeof price.product === "string" ? price.product : price.product.id, { active: false });
+  console.log(`- archived ${price.lookup_key}: ${price.id}`);
+}
 
 if (webhookUrl) {
   const endpoints = (await stripe.webhookEndpoints.list({ limit: 100 })).data;
@@ -125,5 +83,3 @@ if (webhookUrl) {
     console.log(`\nSTRIPE_WEBHOOK_SECRET=${created.secret}`);
   }
 }
-
-console.log(`\nSTRIPE_PORTAL_CONFIGURATION=${portal.id}`);

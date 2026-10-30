@@ -91,7 +91,7 @@ export function categoryFromParam(value: string | undefined): PickCategory {
 export function visiblePicks<T extends { rank: number; category: PickCategory }>(
   picks: T[],
   isAdmin: boolean,
-  /** The viewer's plan's depth (lib/tiers.ts); the free board's when billing is off. */
+  /** How deep the viewer reaches (lib/pass.ts); the free board's when billing is off. */
   limits: Record<PickCategory, number> = VISIBLE_PICKS,
 ): T[] {
   return isAdmin ? picks : picks.filter((p) => p.rank <= limits[p.category]);

@@ -47,9 +47,9 @@ export default function AboutPage() {
         </p>
         {billingEnabled() ? (
           <p>
-            The #1 game bet and #1 player prop are free every game day. Base, Pro and Elite
-            open the top 5, top 10 or all 15 of each, and Pro and Elite add our parlays —
-            see <Link href="/account#plan" className="text-brand hover:underline">Plans</Link>.
+            The #1 game bet and #1 player prop are free every game day. A 14-day pass opens
+            every pick and our parlays for $50, paid once —
+            see <Link href="/account#pass" className="text-brand hover:underline">your account</Link>.
           </p>
         ) : (
           <p>

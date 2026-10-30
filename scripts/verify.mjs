@@ -38,7 +38,7 @@ import {
 } from "../src/lib/board.ts";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
-import { ACCESS, TIERS, TIER_ORDER, tierForLookupKey, tierForRank } from "../src/lib/tiers.ts";
+import { ACCESS, PASS, coveredUntil, formatPrice, passWindow } from "../src/lib/pass.ts";
 import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/safe-next.ts";
@@ -352,55 +352,52 @@ for (const category of pickCategories) {
   );
 }
 
-/* --------------------------------------------------- 2c. plans (lib/tiers.ts) */
+/* ------------------------------------------------------ 2c. the pass (lib/pass.ts) */
 
-console.log("\nPlans contract (lib/tiers.ts)");
+console.log("\nThe pass (lib/pass.ts)");
 
 {
-  // Each plan sees at least what the one below it does, list by list.
-  const ladder = ["free", ...TIER_ORDER];
-  for (let i = 1; i < ladder.length; i++) {
-    const [lo, hi] = [ACCESS[ladder[i - 1]], ACCESS[ladder[i]]];
-    check(
-      pickCategories.every((c) => hi.picks[c] >= lo.picks[c]) && (!lo.parlays || hi.parlays),
-      `${ladder[i]} sees everything ${ladder[i - 1]} does`,
-    );
-  }
+  check(PASS.priceCents === 5000 && formatPrice(PASS.priceCents) === "$50", "the pass is $50", formatPrice(PASS.priceCents));
+  check(PASS.days === 14, "the pass runs 14 days");
   check(
-    pickCategories.every((c) => ACCESS.elite.picks[c] === PICKS_PER_SLATE[c]),
-    "Elite reaches the whole slate",
-    pickCategories.map((c) => `${c} ${ACCESS.elite.picks[c]}/${PICKS_PER_SLATE[c]}`).join(", "),
+    pickCategories.every((c) => ACCESS.pass.picks[c] >= PICKS_PER_SLATE[c] && ACCESS.pass.picks[c] >= ACCESS.free.picks[c]),
+    "a pass reaches the whole slate",
+    pickCategories.map((c) => `${c} ${ACCESS.pass.picks[c]}/${PICKS_PER_SLATE[c]}`).join(", "),
   );
+  check(ACCESS.pass.parlays && !ACCESS.free.parlays, "a pass adds Oobee's parlays");
   check(pickCategories.every((c) => ACCESS.free.picks[c] >= 1), "free still sees the #1 of each list");
 
-  // The board, cut per plan: a full slate served at each depth.
-  for (const access of ["free", ...TIER_ORDER]) {
+  // The board, cut each way: a full slate served at each depth.
+  for (const access of ["free", "pass"]) {
     const slate = pickCategories.flatMap((category) =>
       Array.from({ length: PICKS_PER_SLATE[category] }, (_, i) => ({ rank: i + 1, category })),
     );
     const kept = visiblePicks(slate, false, ACCESS[access].picks);
-    const over = kept.filter((p) => p.rank > ACCESS[access].picks[p.category]);
-    check(
-      over.length === 0 && kept.length === pickCategories.reduce((n, c) => n + ACCESS[access].picks[c], 0),
-      `${access} is served exactly its depth`.padEnd(30),
-      `kept=${kept.length}`,
-    );
+    const want = pickCategories.reduce((n, c) => n + Math.min(ACCESS[access].picks[c], PICKS_PER_SLATE[c]), 0);
+    check(kept.length === want, `${access} is served exactly its depth`.padEnd(30), `kept=${kept.length}/${want}`);
   }
 
-  // The unlock prompt names the cheapest plan that opens the next pick.
-  for (const category of pickCategories) {
-    for (const access of ["free", "base", "pro"]) {
-      const next = tierForRank(category, ACCESS[access].picks[category] + 1);
-      check(
-        next && ACCESS[next].picks[category] > ACCESS[access].picks[category],
-        `past ${access}'s ${category}s, ${next} unlocks the next`,
-      );
-    }
-  }
+  // Timing: 14 days from now, or from the end of the pass still running.
+  const day = 24 * 60 * 60 * 1000;
+  const now = new Date("2026-11-01T12:00:00Z");
+  const at = (d) => new Date(now.getTime() + d * day);
+  const first = passWindow(now, null);
+  check(+first.startsAt === +now && +first.endsAt === +at(14), "a first pass runs from now for 14 days");
+  check(+passWindow(now, at(-3)).startsAt === +now, "an expired pass doesn't hold the next one back");
+  const next = passWindow(now, at(5));
+  check(+next.startsAt === +at(5) && +next.endsAt === +at(19), "a pass bought early starts where the last ends");
 
-  // Lookup keys round-trip: the webhook maps a Price back to its tier.
-  check(TIER_ORDER.every((t) => tierForLookupKey(TIERS[t].lookupKey) === t), "every lookup key maps back to its tier");
-  check(tierForLookupKey("someone_elses_price") === null, "a foreign price maps to no tier");
+  check(coveredUntil([], now) === null, "no passes, no access");
+  check(coveredUntil([{ startsAt: at(-14), endsAt: at(0) }], now) === null, "a pass ends on the dot");
+  check(coveredUntil([{ startsAt: at(1), endsAt: at(15) }], now) === null, "a pass not started yet opens nothing");
+  check(
+    +coveredUntil([{ startsAt: at(5), endsAt: at(19) }, { startsAt: at(-9), endsAt: at(5) }], now) === +at(19),
+    "back-to-back passes count as one run",
+  );
+  check(
+    +coveredUntil([{ startsAt: at(-9), endsAt: at(5) }, { startsAt: at(8), endsAt: at(22) }], now) === +at(5),
+    "a gap ends the run",
+  );
 }
 
 /* ------------------------------------------------- 2d. the Stripe webhook */
@@ -434,8 +431,10 @@ console.log("\nStripe webhook (/api/webhooks/stripe)");
   }
 
   check(
-    WEBHOOK_EVENTS.includes("customer.subscription.deleted") && WEBHOOK_EVENTS.includes("checkout.session.completed"),
-    "the endpoint listens for checkout and cancellations",
+    ["checkout.session.completed", "checkout.session.async_payment_succeeded", "charge.refunded"].every((e) =>
+      WEBHOOK_EVENTS.includes(e),
+    ) && !WEBHOOK_EVENTS.some((e) => e.startsWith("customer.subscription.")),
+    "the endpoint listens for paid checkouts and refunds, not subscriptions",
   );
 }
 

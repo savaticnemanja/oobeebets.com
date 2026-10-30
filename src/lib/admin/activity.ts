@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { auditLog, games, picks, selections, users } from "@/db/schema";
 import { lineLabel, eventLabel } from "@/lib/odds/markets";
 import { CATEGORY_NOUN, type PickCategory } from "@/lib/board";
-import { formatOdds, formatSlateDate } from "@/lib/i18n/format";
+import { formatDate, formatOdds, formatSlateDate } from "@/lib/i18n/format";
 
 /**
  * The audit log, read back as sentences. Every admin action and a few
@@ -257,8 +257,14 @@ async function describe(rows: Row[]): Promise<ActivityItem[]> {
     } else if (a === "user.password_changed") {
       text = "Changed their password";
       href = row.entityId ? `/admin/users/${row.entityId}` : null;
-    } else if (a === "billing.subscription") {
-      text = `Plan is now ${str(meta.tier) ?? "?"} · ${str(meta.status)?.replace("_", " ") ?? "?"}`;
+    } else if (a === "billing.pass") {
+      const ends = str(meta.endsAt);
+      text = "Bought a 14-day pass";
+      detail = ends ? `runs until ${formatDate(new Date(ends))}` : null;
+      tone = "hit";
+    } else if (a === "billing.refund") {
+      text = "Pass refunded — access ended";
+      tone = "miss";
     } else if (a === "invite.sent") {
       text = `Invited ${str(meta.email) ?? "someone"}`;
       href = "/admin/users?tab=invites";

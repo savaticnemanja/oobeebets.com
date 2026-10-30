@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { subscriptionIdOf, syncSubscription } from "@/lib/billing/sync";
+import { syncEvent } from "@/lib/billing/sync";
 
 /**
- * Stripe's webhook — the only writer of `subscriptions`. Checkout returning
- * someone to /picks unlocks nothing by itself; this does, when Stripe says
- * the subscription exists.
+ * Stripe's webhook — the only writer of `passes`. Checkout returning someone
+ * to /picks unlocks nothing by itself; this does, when Stripe says the pass
+ * is paid.
  *
  * Open to anyone, with no session: the signature is what keeps everyone but
  * Stripe out.
@@ -28,11 +28,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Bad signature" }, { status: 400 });
   }
 
-  const subscriptionId = subscriptionIdOf(event);
-  if (!subscriptionId) return NextResponse.json({ received: true });
-
   try {
-    await syncSubscription(subscriptionId);
+    await syncEvent(event);
   } catch (err) {
     // A 500 makes Stripe retry, with backoff, for up to three days.
     console.error(`[billing] ${event.id} (${event.type}) failed`, err);

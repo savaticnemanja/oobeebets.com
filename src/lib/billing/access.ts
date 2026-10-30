@@ -1,51 +1,54 @@
 import "server-only";
 import { cache } from "react";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, gt, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { subscriptions, type Subscription, type SubscriptionStatus } from "@/db/schema";
+import { passes } from "@/db/schema";
 import type { AuthContext } from "@/lib/auth";
 import { VISIBLE_PICKS } from "@/lib/board";
-import { ACCESS, TIER_ORDER, type Access, type AccessRule } from "@/lib/tiers";
+import { ACCESS, coveredUntil, type Access, type AccessRule } from "@/lib/pass";
 import { billingEnabled } from "./stripe";
 
-/**
- * Statuses that still unlock the board. past_due keeps access while Stripe
- * retries the card (Smart Retries); once retries run out the subscription
- * goes canceled or unpaid and the viewer drops to free.
- */
-export const LIVE_STATUSES = ["active", "trialing", "past_due"] as const satisfies readonly SubscriptionStatus[];
-
 export interface ViewerAccess {
-  /** The viewer's plan; null where plans don't apply (admins, billing off). */
+  /** The viewer's access; null where passes don't apply (admins, billing off). */
   access: Access | null;
   rule: AccessRule;
-  /** Their live subscription, if any — for the account page. */
-  subscription: Subscription | null;
+  /** When the passes they hold run out — back-to-back passes count as one. */
+  passEndsAt: Date | null;
 }
 
 /** What every viewer gets with billing off: the whole board, free. */
-const BETA_RULE: AccessRule = { picks: VISIBLE_PICKS, parlays: true };
+const OPEN_RULE: AccessRule = { picks: VISIBLE_PICKS, parlays: true };
 
 /**
  * What a viewer may see. Admins see everything (the board's own isAdmin
  * checks cover drafts); with billing off everyone sees the whole board; with
- * it on, the highest tier among their live subscriptions, or free.
+ * it on, the whole board while a pass covers now, or the free board.
  */
 export const viewerAccess = cache(async (auth: AuthContext | null): Promise<ViewerAccess> => {
-  if (auth?.isAdmin) return { access: null, rule: ACCESS.elite, subscription: null };
-  if (!billingEnabled()) return { access: null, rule: BETA_RULE, subscription: null };
-  if (!auth) return { access: "free", rule: ACCESS.free, subscription: null };
+  if (auth?.isAdmin) return { access: null, rule: ACCESS.pass, passEndsAt: null };
+  if (!billingEnabled()) return { access: null, rule: OPEN_RULE, passEndsAt: null };
+  if (!auth) return { access: "free", rule: ACCESS.free, passEndsAt: null };
 
-  const live = await liveSubscriptions(auth.user.id);
-  const best = live.sort((a, b) => TIER_ORDER.indexOf(b.tier) - TIER_ORDER.indexOf(a.tier))[0] ?? null;
-  const access: Access = best?.tier ?? "free";
-  return { access, rule: ACCESS[access], subscription: best };
+  const passEndsAt = (await passesCovering([auth.user.id])).get(auth.user.id) ?? null;
+  return passEndsAt
+    ? { access: "pass", rule: ACCESS.pass, passEndsAt }
+    : { access: "free", rule: ACCESS.free, passEndsAt: null };
 });
 
-export function liveSubscriptions(userId: string): Promise<Subscription[]> {
-  return db
-    .select()
-    .from(subscriptions)
-    .where(and(eq(subscriptions.userId, userId), inArray(subscriptions.status, LIVE_STATUSES)))
-    .orderBy(desc(subscriptions.createdAt));
+/** For each of these accounts that holds a pass right now: when it runs out. */
+export async function passesCovering(userIds: string[], at = new Date()): Promise<Map<string, Date>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({ userId: passes.userId, startsAt: passes.startsAt, endsAt: passes.endsAt })
+    .from(passes)
+    .where(and(inArray(passes.userId, userIds), isNull(passes.refundedAt), gt(passes.endsAt, at)));
+
+  const byUser = Map.groupBy(rows, (r) => r.userId);
+  const covered = new Map<string, Date>();
+  for (const [userId, held] of byUser) {
+    const until = coveredUntil(held, at);
+    if (until) covered.set(userId, until);
+  }
+  return covered;
 }
+

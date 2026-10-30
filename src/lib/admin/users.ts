@@ -1,10 +1,10 @@
 import "server-only";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { feedback, invitations, reports, sessions, subscriptions, users } from "@/db/schema";
+import { feedback, invitations, reports, sessions, users } from "@/db/schema";
 import type { Role } from "@/db/schema";
-import { LIVE_STATUSES } from "@/lib/billing/access";
-import { TIERS, TIER_ORDER } from "@/lib/tiers";
+import { passesCovering } from "@/lib/billing/access";
+import { formatDate } from "@/lib/i18n/format";
 import type { UserFilter, UserSort } from "@/lib/admin/directory";
 
 /** One row of the users directory. */
@@ -135,25 +135,10 @@ export async function listUsers({
   };
 }
 
-/** Each account's best live plan, as a label. */
-async function livePlans(userIds?: string[]): Promise<Map<string, string>> {
-  if (userIds && userIds.length === 0) return new Map();
-  const live = await db
-    .select({ userId: subscriptions.userId, tier: subscriptions.tier, status: subscriptions.status })
-    .from(subscriptions)
-    .where(
-      userIds
-        ? and(inArray(subscriptions.status, LIVE_STATUSES), inArray(subscriptions.userId, userIds))
-        : inArray(subscriptions.status, LIVE_STATUSES),
-    );
-  const best = new Map<string, (typeof live)[number]>();
-  for (const s of live) {
-    const had = best.get(s.userId);
-    if (!had || TIER_ORDER.indexOf(s.tier) > TIER_ORDER.indexOf(had.tier)) best.set(s.userId, s);
-  }
-  return new Map(
-    [...best].map(([id, s]) => [id, `${TIERS[s.tier].name}${s.status === "past_due" ? " · past due" : ""}`]),
-  );
+/** Each account holding a pass right now, as a label. */
+async function livePlans(userIds: string[]): Promise<Map<string, string>> {
+  const covered = await passesCovering(userIds);
+  return new Map([...covered].map(([id, until]) => [id, `Pass · until ${formatDate(until)}`]));
 }
 
 export interface UserDetail {

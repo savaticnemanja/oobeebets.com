@@ -16,7 +16,6 @@ import { playable } from "@/components/social/parlay-row";
 import { PickCard } from "@/components/pick-card";
 import { Badge } from "@/components/ui/badge";
 import { viewerAccess } from "@/lib/billing/access";
-import { tierForRank } from "@/lib/tiers";
 import { UnlockRow } from "@/components/billing/unlock-row";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +58,7 @@ export async function loadBoardDays({
 }): Promise<{ node: React.ReactNode; next: string | null; todayPicks: number }> {
   const today = slateDateString();
   const isParlayTab = tab === "parlay";
-  // How deep into each list this viewer's plan reaches (lib/tiers.ts).
+  // How deep into each list this viewer reaches (lib/pass.ts).
   const { access, rule } = await viewerAccess(auth);
 
   // The sport pill, as SQL on picks — so a day with no MLB props is not
@@ -219,7 +218,7 @@ export async function loadBoardDays({
       if (!isLead) return null;
       return (
         <DaySection key={d} date={d} today={today} draft={draft}>
-          <UnlockRow tier="pro" what="Oobee's parlays" />
+          <UnlockRow what="Oobee's parlays" />
         </DaySection>
       );
     }
@@ -284,10 +283,7 @@ export async function loadBoardDays({
           ))
         )}
         {locked > 0 && (
-          <UnlockRow
-            tier={tierForRank(category, rule.picks[category] + 1) ?? "elite"}
-            what={`${locked} more ${CATEGORY_NOUN[category]}${locked === 1 ? "" : "s"}`}
-          />
+          <UnlockRow what={`${locked} more ${CATEGORY_NOUN[category]}${locked === 1 ? "" : "s"}`} />
         )}
       </DaySection>
     );

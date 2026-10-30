@@ -72,21 +72,6 @@ export const inviteStatusEnum = pgEnum("invite_status", [
   "expired",
 ]);
 
-/** The paid plans, lowest first. No row means the free board (see lib/tiers.ts). */
-export const tierEnum = pgEnum("tier", ["base", "pro", "elite"]);
-
-/** Stripe's subscription status vocabulary, verbatim — the rows mirror Stripe. */
-export const subscriptionStatusEnum = pgEnum("subscription_status", [
-  "incomplete",
-  "incomplete_expired",
-  "trialing",
-  "active",
-  "past_due",
-  "canceled",
-  "unpaid",
-  "paused",
-]);
-
 /* ------------------------------------------------------------------ users */
 
 export const users = pgTable(
@@ -162,34 +147,37 @@ export const users = pgTable(
   ],
 );
 
-/* ---------------------------------------------------------- subscriptions */
+/* ----------------------------------------------------------------- passes */
 
 /**
- * A copy of each Stripe Subscription, written only by the webhook
- * (lib/billing/sync.ts), which re-reads the subscription from Stripe on every
- * event and upserts it here. Re-reading rather than trusting the event's copy
- * is what makes duplicate and out-of-order deliveries harmless.
+ * One row per 14-day pass bought (lib/pass.ts), written only by the Stripe
+ * webhook (lib/billing/sync.ts) once Checkout says it's paid. Keyed by the
+ * Checkout Session, so a retried or duplicated event writes nothing twice.
  *
- * Canceled rows are kept for history. What a viewer may see is read off the
- * live rows (see lib/billing/access.ts).
+ * Passes stack: one bought while another runs starts where that one ends. A
+ * refunded pass is kept for history, marked, and unlocks nothing. What a
+ * viewer may see is read off these rows (see lib/billing/access.ts).
  */
-export const subscriptions = pgTable(
-  "subscriptions",
+export const passes = pgTable(
+  "passes",
   {
-    stripeSubscriptionId: text("stripe_subscription_id").primaryKey(),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id").primaryKey(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     stripeCustomerId: text("stripe_customer_id").notNull(),
-    tier: tierEnum("tier").notNull(),
-    status: subscriptionStatusEnum("status").notNull(),
-    stripePriceId: text("stripe_price_id").notNull(),
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    /** What a refund points back to: charge.refunded names the payment. */
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    amountCents: integer("amount_cents").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("subscriptions_user_idx").on(t.userId, t.status)],
+  (t) => [
+    index("passes_user_idx").on(t.userId, t.endsAt),
+    uniqueIndex("passes_payment_intent_unique").on(t.stripePaymentIntentId),
+  ],
 );
 
 /* --------------------------------------------------------------- sessions */
@@ -1398,9 +1386,7 @@ export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
 export type PlayerGameStat = typeof playerGameStats.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
-export type Subscription = typeof subscriptions.$inferSelect;
-export type Tier = (typeof tierEnum.enumValues)[number];
-export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];
+export type Pass = typeof passes.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];

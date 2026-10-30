@@ -3,9 +3,8 @@ import Stripe from "stripe";
 
 /**
  * The one Stripe client. Server-only: STRIPE_SECRET_KEY never leaves the
- * server, and a restricted key (rk_…) with write access to Customers,
- * Checkout Sessions, Customer portal and Subscriptions, and read access to
- * Prices, is all this needs.
+ * server, and a restricted key (rk_…) with write access to Customers and
+ * Checkout Sessions, and read access to Prices and Charges, is all this needs.
  */
 let client: Stripe | null = null;
 
