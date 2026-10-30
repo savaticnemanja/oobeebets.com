@@ -87,7 +87,7 @@ export function AnnounceComposer({ accounts }: { accounts: Account[] }) {
   const recipientCount =
     audience === "custom"
       ? customList.length
-      : audience === "testers"
+      : audience === "users"
         ? accounts.filter((a) => a.role === "user").length
         : accounts.length;
 
@@ -262,7 +262,7 @@ export function AnnounceComposer({ accounts }: { accounts: Account[] }) {
             <p className="mt-3 text-xs text-fg-subtle">
               {audience === "all"
                 ? "Everyone with an account, you included."
-                : "Accounts with the tester role — admins are skipped."}
+                : "Accounts with the user role — admins are skipped."}
             </p>
           )}
         </fieldset>

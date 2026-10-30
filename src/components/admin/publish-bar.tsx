@@ -91,7 +91,7 @@ export function PublishPanel({
           <p className="mt-1 text-sm text-fg-muted">
             {published && publishedAt ? (
               <>
-                Published <LocalTime at={publishedAt} format="datetime" /> — every tester can see it. Featuring still works;
+                Published <LocalTime at={publishedAt} format="datetime" /> — every user can see it. Featuring still works;
                 anything else is a void on Settle.
               </>
             ) : total === 0 ? (
@@ -101,7 +101,7 @@ export function PublishPanel({
                 Publish before the first kick-off: <LocalTime at={firstKickoff} format="kickoff" />.
               </>
             ) : (
-              "Testers can't see a draft until it's published."
+              "Users can't see a draft until it's published."
             )}
           </p>
         </div>
@@ -170,7 +170,7 @@ export function PublishPanel({
             <>
               <AlertDialogTitle>Publish {dayLabel}?</AlertDialogTitle>
               <AlertDialogDescription>
-                {breakdown.join(", ")} go live to every tester now. Published picks can&apos;t be edited, reordered or
+                {breakdown.join(", ")} go live to every user now. Published picks can&apos;t be edited, reordered or
                 removed — a mistake becomes a void on Settle. You can still feature or unfeature them.
               </AlertDialogDescription>
               <AlertDialogFooter>
@@ -192,7 +192,7 @@ export function PublishPanel({
             <>
               <AlertDialogTitle>Take {dayLabel} back to draft?</AlertDialogTitle>
               <AlertDialogDescription>
-                It disappears from the board for testers until you publish it again. Nothing has started yet, so
+                It disappears from the board for users until you publish it again. Nothing has started yet, so
                 nothing is lost from the record.
               </AlertDialogDescription>
               <AlertDialogFooter>

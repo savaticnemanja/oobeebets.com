@@ -74,7 +74,7 @@ export default async function AdminUsersPage({
             <Button size="sm" variant="outline" asChild>
               <Link href="/admin/users?tab=invites">
                 <UserPlus aria-hidden="true" />
-                Invite a tester
+                Invite a user
               </Link>
             </Button>
           )

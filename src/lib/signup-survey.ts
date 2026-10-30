@@ -2,7 +2,7 @@ import { z } from "zod";
 import { emailSchema } from "./validation";
 
 /**
- * The beta application: what /signup asks before it takes an address, and
+ * The sign-up application: what /signup asks before it takes an address, and
  * what the invite wizard asks anyone who never went through /signup.
  * Answers live in signup_surveys, one row per email; asking again replaces
  * them.
@@ -113,7 +113,7 @@ export const signupSurveySchema = z
     }
     if (!v.wants) fail("wants", "A sentence is plenty");
     if (v.willGiveFeedback !== "yes" && v.willGiveFeedback !== "no") fail("willGiveFeedback", "Pick yes or no");
-    if (v.willDoSurvey !== "yes") fail("willDoSurvey", "Tick this to join the beta");
+    if (v.willDoSurvey !== "yes") fail("willDoSurvey", "Tick this to join");
   });
 
 export type SignupSurvey = z.infer<typeof signupSurveySchema>;

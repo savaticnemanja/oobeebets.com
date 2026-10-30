@@ -53,7 +53,7 @@ export default function AboutPage() {
           </p>
         ) : (
           <p>
-            During our beta the whole board is free for every tester — no plan
+            The whole board is free for every user — no plan
             required.
           </p>
         )}

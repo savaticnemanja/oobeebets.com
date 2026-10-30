@@ -486,7 +486,7 @@ console.log("\nRedirect targets (safeNextPath)");
   }
 }
 
-console.log("\nBeta application rules (lib/signup-survey.ts)");
+console.log("\nSign-up application rules (lib/signup-survey.ts)");
 {
   const base = {
     fullName: "Pat Doe",
@@ -518,7 +518,7 @@ console.log("\nBeta application rules (lib/signup-survey.ts)");
   check(failsOn({ ...base, decisionTools: ["Nothing", "Stats"] }).includes("decisionTools"), '"Nothing" can\'t go with a method');
   check(failsOn({ ...base, sportsbooks: ["Don't use one", "FanDuel"] }).includes("sportsbooks"), '"Don\'t use one" can\'t go with a sportsbook');
   check(failsOn({ ...base, sports: ["Other"] }).includes("sportsOther"), "Other needs its text");
-  check(failsOn({ ...base, willDoSurvey: "" }).includes("willDoSurvey"), "the end-of-beta survey is agreed to");
+  check(failsOn({ ...base, willDoSurvey: "" }).includes("willDoSurvey"), "the follow-up survey is agreed to");
 }
 
 console.log("\nStake in units (unitsSchema)");
@@ -686,7 +686,7 @@ let followedPickId = null;
   }
   check(
     Number(FOLLOW_STAKE_UNITS) === 1,
-    "beta record is flat-staked at one unit",
+    "users' record is flat-staked at one unit",
     `FOLLOW_STAKE_UNITS=${FOLLOW_STAKE_UNITS}`,
   );
 

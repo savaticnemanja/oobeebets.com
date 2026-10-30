@@ -159,7 +159,7 @@ export async function loadBoardDays({
   );
   const shownPicks = [...picksOn.values()].flat();
   // Open picks on a day the plan doesn't reach — counted, never sent. Only on
-  // a plan (billing on); admins and the free beta have nothing held back.
+  // a plan (billing on); admins, and everyone while billing is off, have nothing held back.
   const lockedOn = (d: string) =>
     access ? rows.filter((r) => r.slateDate === d).length - (picksOn.get(d)?.length ?? 0) : 0;
 

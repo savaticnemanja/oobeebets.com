@@ -36,9 +36,9 @@ export async function resolveAudience(
   const rows = await db
     .select({ email: users.email })
     .from(users)
-    // "Testers" is everyone the beta is *for* — admins are the ones running it.
+    // "Users" is everyone the site is *for* — admins are the ones running it.
     // A suspended account gets no announcements.
-    .where(audience === "testers" ? sql`${users.role} = 'user' and ${users.suspendedAt} is null` : sql`${users.suspendedAt} is null`)
+    .where(audience === "users" ? sql`${users.role} = 'user' and ${users.suspendedAt} is null` : sql`${users.suspendedAt} is null`)
     .orderBy(asc(users.email));
 
   return { recipients: rows.map((r) => r.email), invalid: [] };

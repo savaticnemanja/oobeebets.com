@@ -125,12 +125,12 @@ export function inviteEmail({
     preheader: `You've been invited to oobee bets — the link is inside, and it expires ${expiresLabel}.`,
     footerNote:
       "If you weren't expecting this, you can ignore it — the link only works once and nothing happens until it's used.",
-    cardHtml: `              <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:${c.brand};">Closed beta</p>
+    cardHtml: `              <p style="margin:0 0 14px;font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:${c.brand};">Invitation</p>
 
               <h1 style="margin:0 0 16px;font-family:${FONT};font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;color:${c.fg};">You're invited to oobee bets</h1>
 
               <p style="margin:0 0 28px;font-family:${FONT};font-size:15px;line-height:1.6;color:${c.fgMuted};">
-                Someone on the team invited you to the closed beta. Follow the link below to set a password and finish creating your account.
+                Someone on the team invited you to join. Follow the link below to set a password and finish creating your account.
               </p>
 
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
@@ -150,12 +150,12 @@ export function inviteEmail({
   });
 
   const text = [
-    "CLOSED BETA",
+    "INVITATION",
     "",
     "You're invited to oobee bets",
     "",
-    "Someone on the team invited you to the closed beta. Follow the link below",
-    "to set a password and finish creating your account.",
+    "Someone on the team invited you to join. Follow the link below to set",
+    "a password and finish creating your account.",
     "",
     inviteUrl,
     "",
@@ -393,7 +393,7 @@ export function waitlistConfirmEmail({
       "Someone — hopefully you — asked to join the oobee bets waitlist with this address. Press the button below to confirm, and we'll email you the day there's a place for you — plus the odd update before then, which you can unsubscribe from in one click.",
       answered
         ? "We have your answers to the sign-up questions, so there's nothing else to do."
-        : "Once you've confirmed, you can answer a few quick questions about how you bet — testers who do are let in first.",
+        : "Once you've confirmed, you can answer a few quick questions about how you bet — people who do are let in first.",
       { text: "Changed your mind?", link: { label: "Leave the waitlist", url: leaveUrl } },
     ],
     cta: { label: "Confirm my place", url: confirmUrl },

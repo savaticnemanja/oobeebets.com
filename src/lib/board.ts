@@ -44,11 +44,11 @@ export const PICKS_PER_SLATE: Record<PickCategory, number> = {
 };
 
 /**
- * Picks a non-admin viewer sees, per category. Beta is one free tier — no
+ * Picks a non-admin viewer sees, per category. Billing off is one free tier — no
  * paid plans.
  *
  * Equal to PICKS_PER_SLATE right now, so on a full slate the cut below is a
- * no-op and every tester sees both whole lists. That is the intended beta
+ * no-op and every user sees both whole lists. That is the intended free
  * product, not an oversight; the two stay separate constants because the free
  * limit and the slate size are different decisions, and the day either list
  * goes back above its free limit the truncation starts applying again with no
@@ -91,7 +91,7 @@ export function categoryFromParam(value: string | undefined): PickCategory {
 export function visiblePicks<T extends { rank: number; category: PickCategory }>(
   picks: T[],
   isAdmin: boolean,
-  /** The viewer's plan's depth (lib/tiers.ts); the free beta's when billing is off. */
+  /** The viewer's plan's depth (lib/tiers.ts); the free board's when billing is off. */
   limits: Record<PickCategory, number> = VISIBLE_PICKS,
 ): T[] {
   return isAdmin ? picks : picks.filter((p) => p.rank <= limits[p.category]);

@@ -23,12 +23,12 @@ export interface ViewerAccess {
   subscription: Subscription | null;
 }
 
-/** What every viewer gets with billing off: the free beta's whole board. */
+/** What every viewer gets with billing off: the whole board, free. */
 const BETA_RULE: AccessRule = { picks: VISIBLE_PICKS, parlays: true };
 
 /**
  * What a viewer may see. Admins see everything (the board's own isAdmin
- * checks cover drafts); with billing off everyone sees the beta board; with
+ * checks cover drafts); with billing off everyone sees the whole board; with
  * it on, the highest tier among their live subscriptions, or free.
  */
 export const viewerAccess = cache(async (auth: AuthContext | null): Promise<ViewerAccess> => {

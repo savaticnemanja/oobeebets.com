@@ -22,7 +22,7 @@ import {
 } from "@/lib/signup-survey";
 
 /**
- * The beta application's questions, for /signup (get-started-form.tsx) and
+ * The sign-up application's questions, for /signup (get-started-form.tsx) and
  * the invite wizard (onboarding-form.tsx). Every answer is controlled state,
  * checked in the browser by the same schema the server uses, and posted by
  * the form through appendSurvey — the inputs carry `q-` names so they never
@@ -429,7 +429,7 @@ export function BettingQuestions({ survey }: { survey: Survey }) {
   );
 }
 
-/** What they want from us, and what they'll give the beta. */
+/** What they want from us, and the feedback they'll give. */
 export function BetaQuestions({ survey }: { survey: Survey }) {
   const error = survey.errors.willDoSurvey;
   const id = fieldId("willDoSurvey");
@@ -446,7 +446,7 @@ export function BetaQuestions({ survey }: { survey: Survey }) {
       <ChoiceQuestion
         survey={survey}
         field="willGiveFeedback"
-        legend="Would you be willing to use oobee bets and give feedback throughout the beta?"
+        legend="Would you be willing to use oobee bets and give us feedback as it grows?"
         options={YES_NO}
         labels={YES_NO_LABELS}
         columns={2}
@@ -463,7 +463,7 @@ export function BetaQuestions({ survey }: { survey: Survey }) {
             aria-describedby={error ? `${id}-error` : undefined}
             className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
           />
-          <span>I&apos;ll complete a short survey when the beta ends.</span>
+          <span>I&apos;ll complete a short survey about oobee bets when asked.</span>
         </label>
         <ErrorText id={`${id}-error`} message={error} />
       </div>

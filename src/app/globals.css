@@ -224,8 +224,8 @@
 
 /* ------------------------------------------------------------ launch page
    The homepage is main's pre-launch page ((launch)/page.tsx): its ambient
-   aurora behind the page, and the ripple on the "Launching soon" dot. Brought
-   over with it when beta merged into main; nothing else uses them. */
+   aurora behind the page, and the ripple on the "Launching soon" dot. Nothing
+   else uses them. */
 
 /* Rings travel out from the dot and fade as they go. The ceiling is 3x rather
    than anything larger because the dot sits one gap-width from the label beside

@@ -15,7 +15,7 @@ import { loadCommunityChunk } from "../community-feed";
 
 export const metadata: Metadata = {
   title: "Community",
-  description: "Parlays testers built and shared, day by day.",
+  description: "Parlays users built and shared, day by day.",
   robots: { index: false, follow: false },
 };
 
@@ -61,7 +61,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
             </Link>
             <InfoTip label="About Community">
               <p>
-                Parlays testers built from the day&apos;s lines and shared, newest day first, graded
+                Parlays users built from the day&apos;s lines and shared, newest day first, graded
                 leg by leg as the games finish.
               </p>
               <p>Build your own with the + — share it here, or keep it on your Stats.</p>

@@ -74,7 +74,7 @@ export default async function AdminFeedbackPage({
     <div>
       <PageHeader
         title="Feedback"
-        description="What testers send from “Send feedback”, newest first. Mark an item resolved once it's dealt with."
+        description="What users send from “Send feedback”, newest first. Mark an item resolved once it's dealt with."
       />
       <TabNav label="Feedback lists" tabs={tabs.map((t) => ({ href: t.href, label: t.label, count: t.n, active: t.active, attention: t.label === "Open" }))} />
 

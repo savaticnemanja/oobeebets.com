@@ -123,7 +123,7 @@ const browser = await chromium.launch();
 /* ---------------------------------------------- 1. invite -> onboarding -> board */
 
 /**
- * The beta application's answer cards: a visually hidden input named
+ * The sign-up application's answer cards: a visually hidden input named
  * q-<question> inside each card. Clicked as a person would — on the card —
  * then waited on until the input reads checked.
  */
@@ -158,8 +158,8 @@ async function answerBetting(page) {
   await pickAnswer(page, "decisionTools", "Stats");
 }
 
-/** "The beta": what they want, and what they'll give. */
-async function answerBeta(page) {
+/** "Your feedback": what they want, and what they'll give. */
+async function answerFeedback(page) {
   await page.locator('textarea[name="q-wants"]').fill("Honest records.");
   await pickAnswer(page, "willGiveFeedback", "yes");
   await page.locator('input[name="q-willDoSurvey"]').check();
@@ -217,8 +217,8 @@ const testEmail = `e2e-${Date.now()}@example.com`;
   await answerBetting(page);
   await page.click('button:has-text("Continue")');
 
-  // Step 5 — the beta questions, the 21+ / Terms box, then the real submit.
-  await answerBeta(page);
+  // Step 5 — the feedback questions, the 21+ / Terms box, then the real submit.
+  await answerFeedback(page);
   await page.click('button:has-text("Finish")');
   await page.waitForTimeout(500);
   check(
@@ -280,7 +280,7 @@ const testEmail = `e2e-${Date.now()}@example.com`;
       (overServed.length ? ` OVER-SERVED:${overServed.join(",")}` : ""),
   );
 
-  // No paid plans during beta, but /pricing is still linked from the wild.
+  // No paid plans while billing is off, but /pricing is still linked from the wild.
   // It must land on the board rather than 404 — a prerendered redirect page
   // is the kind of thing a build quietly gets wrong.
   await page.goto(`${APP_URL}/pricing`);
@@ -682,7 +682,7 @@ console.log("\nAdmin inspection");
   check(res.status() === 200, "admin opens the parlay inspector", `${res.status()}`);
   const html = await page.content();
   check(html.includes(TESTER_EMAIL), "the tester's parlay is listed with its owner");
-  check(html.includes("Built by testers"), "tester-built parlays have their own section");
+  check(html.includes("Built by users"), "user-built parlays have their own section");
 
   await sql`delete from parlays where id = ${p.id}`;
   await ctx.close();
@@ -747,7 +747,7 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
     "/admin/follows",
     "/admin/follows?tab=breakdown",
     "/admin/follows?tab=day",
-    "/admin/follows?tab=testers",
+    "/admin/follows?tab=users",
     `/admin/follows/${someone.id}`,
     "/admin/parlays",
     "/admin/slate",
@@ -805,11 +805,11 @@ const secondAdmin = `e2e-admin-${Date.now()}@example.com`;
   const [{ n: testerTotal }] = await sql`select count(*)::int as n from users where role = 'user'`;
   await page.goto(`${APP_URL}/admin/follows`);
   await loaded(page);
-  const shown = Number((await page.content()).match(/Testers<\/dt><dd[^>]*><span[^>]*>(\d+)/)?.[1]);
+  const shown = Number((await page.content()).match(/Users<\/dt><dd[^>]*><span[^>]*>(\d+)/)?.[1]);
   check(shown === testerTotal, "Follows counts every tester", `shown=${shown} testers=${testerTotal}`);
-  await page.goto(`${APP_URL}/admin/follows?tab=testers`);
+  await page.goto(`${APP_URL}/admin/follows?tab=users`);
   await loaded(page);
-  check((await page.getByText(`of ${testerTotal} testers`).count()) === 1, "the tester table pages through all of them");
+  check((await page.getByText(`of ${testerTotal} users`).count()) === 1, "the tester table pages through all of them");
 
   // Signing in marks the account active for the day (user_active_days).
   const [seen] = await sql`select 1 from user_active_days where user_id = ${t.id}`;
@@ -1219,7 +1219,7 @@ console.log("\nWaitlist, change password and profile pictures");
   check(!(await page.locator('input[name="q-decisionTools"][value="Nothing"]').isChecked()), 'a method unticks "Nothing"');
   await pickAnswer(page, "sports", "Other");
   await page.locator('input[name="q-sportsOther"]').fill("Darts");
-  await answerBeta(page);
+  await answerFeedback(page);
   await submitApplication(page);
   await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
   let row;
@@ -1250,7 +1250,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.locator('input[name="q-fullName"]').fill("E2E Tester");
   await page.locator('input[name="q-email"]').fill(testEmail);
   await answerBetting(page);
-  await answerBeta(page);
+  await answerFeedback(page);
   await submitApplication(page);
   await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
@@ -1319,7 +1319,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await page.locator('input[name="q-fullName"]').fill("Bot Bot");
   await page.locator('input[name="q-email"]').fill(botEmail);
   await answerBetting(page);
-  await answerBeta(page);
+  await answerFeedback(page);
   await page.locator('input[name="website"]').evaluate((el) => (el.value = "http://spam.example"));
   await submitApplication(page);
   await page.getByText("Check your inbox").first().waitFor({ timeout: 10000 });

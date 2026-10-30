@@ -7,13 +7,12 @@ Next.js 16 app (App Router, server actions) on Postgres via Drizzle.
 | Branch | Site | Deploy hook |
 | --- | --- | --- |
 | `main` | oobeebets.com | `https://nemanjas.dev/hooks/oobeebets` |
-| `beta` | beta.oobeebets.com | `https://nemanjas.dev/hooks/beta-oobeebets` |
 
-A push deploys **only after CI passes**: the `deploy` / `deploy-beta` jobs in
+A push deploys **only after CI passes**: the `deploy` job in
 `.github/workflows/deploy.yaml` call the hook once `checks` (typecheck, lint,
 build, migrate, seed, verify, e2e) is green. A red run ships nothing.
 
-The repo's own push webhooks to those hooks deployed every push untested,
+The repo's own push webhook to that hook deployed every push untested,
 minutes before CI finished; they were deactivated on 2026-10-15 (GitHub →
 Settings → Webhooks, to turn them back on).
 

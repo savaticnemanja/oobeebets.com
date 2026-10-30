@@ -111,7 +111,7 @@ export default async function AdminOverviewPage() {
       title: `${queues.dueToSettle} ${queues.dueToSettle === 1 ? "pick needs" : "picks need"} a result`,
       detail: queues.oldestDue ? (
         <>
-          Oldest kicked off {since(queues.oldestDue, now)} — testers see it as awaiting a result
+          Oldest kicked off {since(queues.oldestDue, now)} — users see it as awaiting a result
         </>
       ) : undefined,
       href: "/admin/settle",
@@ -124,7 +124,7 @@ export default async function AdminOverviewPage() {
       key: "legs",
       icon: Layers,
       title: `${legs} community parlay ${legs === 1 ? "leg needs" : "legs need"} a result`,
-      detail: "Props the box score couldn't grade — testers' parlays wait on them",
+      detail: "Props the box score couldn't grade — users' parlays wait on them",
       href: "/admin/settle?tab=community",
       cta: "Settle",
       urgent: true,
@@ -135,7 +135,7 @@ export default async function AdminOverviewPage() {
       key: "reports",
       icon: Flag,
       title: `${queues.openReports} open ${queues.openReports === 1 ? "report" : "reports"}`,
-      detail: "Posts or accounts testers flagged",
+      detail: "Posts or accounts users flagged",
       href: "/admin/reports",
       cta: "Review",
       urgent: true,
@@ -292,7 +292,7 @@ export default async function AdminOverviewPage() {
                 Published <LocalTime at={slate.publishedAt} format="datetime" /> — live to everyone.
               </>
             ) : slateTotal > 0 ? (
-              "Testers can't see a draft until it's published."
+              "Users can't see a draft until it's published."
             ) : (
               "Nothing added yet."
             )}

@@ -19,7 +19,7 @@ export function stripe(): Stripe {
 /**
  * Whether plans are switched on. Both BILLING_ENABLED=1 and a key, so a
  * deployment with a key but no flag (or the reverse) behaves exactly as the
- * free beta did: the whole board, no pricing.
+ * billing-off site does: the whole board, no pricing.
  */
 export function billingEnabled(): boolean {
   return process.env.BILLING_ENABLED === "1" && Boolean(process.env.STRIPE_SECRET_KEY);

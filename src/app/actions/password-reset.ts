@@ -15,8 +15,8 @@ import { passwordChangedEmail, passwordResetEmail } from "@/lib/email/templates"
 import { appUrl } from "@/lib/site";
 
 /**
- * "Forgot password": an emailed link that lets you choose a new one. The beta
- * is invite-only, so without this a tester who forgot their password had no
+ * "Forgot password": an emailed link that lets you choose a new one. The site
+ * is invite-only, so without this a user who forgot their password had no
  * way back in at all.
  */
 

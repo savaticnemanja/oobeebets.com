@@ -73,7 +73,7 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
     <div>
       <PageHeader
         title="Reports"
-        description="Posts and accounts testers reported. Remove a post that breaks the Terms, or dismiss the report."
+        description="Posts and accounts users reported. Remove a post that breaks the Terms, or dismiss the report."
       />
       <TabNav label="Report lists" tabs={tabs.map((t) => ({ href: t.href, label: t.label, count: t.n, active: t.active, attention: t.label === "Open" }))} />
 

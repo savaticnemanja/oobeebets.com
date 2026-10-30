@@ -19,7 +19,7 @@ const from = process.env.EMAIL_FROM;
 const replyTo = process.env.EMAIL_REPLY_TO?.trim() || undefined;
 
 /**
- * Namespaces idempotency keys per deployment. Beta and production share one
+ * Namespaces idempotency keys per deployment. Deployments may share one
  * Resend key by deliberate choice, and a key means "this exact send already
  * happened" to the account, not to the environment.
  */

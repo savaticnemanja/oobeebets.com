@@ -246,7 +246,7 @@ export const userActiveDays = pgTable(
 /* -------------------------------------------------------------- invitations */
 
 /**
- * The only way a new account gets created — closed beta, no open signup.
+ * The only way a new account gets created — while sign-ups are closed.
  * `tokenHash` follows the same "random token, store only its hash" pattern as
  * sessions (see lib/auth.ts hashToken). One live invite per email: sending a
  * second invite to the same address updates this row in place rather than
@@ -328,7 +328,7 @@ export const waitlist = pgTable(
 /* -------------------------------------------------------- signup surveys */
 
 /**
- * The beta application /signup asks before it takes an address. One row per
+ * The sign-up application /signup asks before it takes an address. One row per
  * email — asking again replaces the answers. Unlike the waitlist row it
  * outlives account creation (it's what we know about the tester); leaving the
  * waitlist deletes it, as the leave page promises.
@@ -494,7 +494,7 @@ export const picks = pgTable(
  * One row per tester per pick they say they actually placed. The whole fact is
  * the primary key: this user, this pick. Nothing else is collected.
  *
- * That is the point rather than a shortcut. Asking a beta tester for stake,
+ * That is the point rather than a shortcut. Asking a user for stake,
  * book and price before the row would be written is how a tracking feature
  * gets an 8% completion rate and answers nothing; "did you take this one?" is
  * a single tap, and everything the analysis needs is already on the pick —
@@ -503,7 +503,7 @@ export const picks = pgTable(
  * with the pick it points at.
  *
  * Stake is the one figure that genuinely is not on the pick, and it stays
- * uncollected: the beta record is flat-staked at FOLLOW_STAKE_UNITS (see
+ * uncollected: the users' record is flat-staked at FOLLOW_STAKE_UNITS (see
  * lib/follows.ts), which is a deliberately different number from the pick's
  * own recommended `units`. Oobee's record is what its own staking plan
  * returned; a tester's is one unit a bet, because one unit a bet is the only
@@ -689,7 +689,7 @@ export const parlayLegs = pgTable(
  * one query shape and one delete path for both.
  *
  * Deleting a post deletes the thread under it (cascade). That is blunter than
- * X's "this post was deleted" tombstone, and deliberate for a small beta:
+ * X's "this post was deleted" tombstone, and deliberate for a small site:
  * a tombstone row is a second kind of post every query has to remember.
  *
  * Posts are plain text: no photos, GIFs, polls or link cards (removed

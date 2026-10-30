@@ -198,7 +198,7 @@ export default async function AdminSettlePage({ searchParams }: { searchParams: 
       {tab === "community" &&
         (communityLegs.length === 0 ? (
           <Empty icon={Layers} title="No community legs waiting">
-            Props in testers&apos; parlays that the box score can&apos;t grade show up here.
+            Props in users&apos; parlays that the box score can&apos;t grade show up here.
           </Empty>
         ) : (
           <>

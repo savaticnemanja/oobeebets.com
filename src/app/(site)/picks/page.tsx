@@ -199,8 +199,8 @@ export default async function PicksPage({
         <div className="flex shrink-0 items-center pr-2">
           <InfoTip label="About Picks">
             <p>
-              Every game day&apos;s picks, newest first, graded against the final score. All free during
-              our beta.
+              Every game day&apos;s picks, newest first, graded against the final score. All of them
+              free.
             </p>
             <p>
               The number on each tab counts {lead === today ? "today's" : `${formatSlateWeekday(lead)}'s`} board;

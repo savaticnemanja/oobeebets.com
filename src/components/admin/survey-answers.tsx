@@ -12,7 +12,7 @@ function withOther(xs: string[], other: string | null): string {
   return xs.map((x) => (x === "Other" && other ? `Other: ${other}` : x)).join(", ");
 }
 
-/** The beta application as an admin reads it — /admin/waitlist and /admin/users/[id]. */
+/** The sign-up application as an admin reads it — /admin/waitlist and /admin/users/[id]. */
 export function SurveyAnswerList({ s }: { s: SignupSurveyRow }) {
   const yn = (b: boolean) => (b ? "Yes" : "No");
   const never = "— (never bets)";
@@ -27,7 +27,7 @@ export function SurveyAnswerList({ s }: { s: SignupSurveyRow }) {
     ["Decides with", s.decisionTools.length ? withOther(s.decisionTools, s.decisionToolsOther) : never],
     ["Wants", s.wants],
     ["Will give feedback", yn(s.willGiveFeedback)],
-    ["End-of-beta survey", yn(s.willDoSurvey)],
+    ["Follow-up survey", yn(s.willDoSurvey)],
     [
       "Answered",
       <>

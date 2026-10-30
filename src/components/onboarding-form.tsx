@@ -27,9 +27,9 @@ import { nameSchema, passwordSchema } from "@/lib/validation";
 import type { ActionState } from "@/lib/validation";
 
 /**
- * The invite wizard. Someone who came through /signup has answered the beta
+ * The invite wizard. Someone who came through /signup has answered the sign-up
  * application already and gets four steps; someone an admin invited directly
- * answers it here, over two extra steps, so it's asked of every tester once.
+ * answers it here, over two extra steps, so it's asked of every user once.
  */
 type Step = "intro" | "password" | "profile" | "betting" | "last";
 type Field = "password" | "confirm" | "name" | "phone" | "agree";
@@ -62,7 +62,7 @@ function stepTitle(step: Step, needsSurvey: boolean): string {
     case "betting":
       return "How you bet";
     case "last":
-      return needsSurvey ? "The beta" : "Last thing";
+      return needsSurvey ? "Your feedback" : "Last thing";
   }
 }
 

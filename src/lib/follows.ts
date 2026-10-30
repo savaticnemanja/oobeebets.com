@@ -4,11 +4,11 @@
  * Two datasets come out of one table (see pickFollows in db/schema.ts):
  *
  *   Oobee performance    — every published pick, at the stake Oobee called.
- *   Beta user performance — only the picks a tester checked off, flat-staked.
+ *   User performance — only the picks a user checked off, flat-staked.
  *
  * They are deliberately not the same arithmetic over the same rows, and the
  * difference between them is the whole point of collecting this: Oobee's
- * record says whether the picks were good, the beta record says whether the
+ * record says whether the picks were good, the users' record says whether the
  * picks people actually took were good.
  *
  * Nothing here touches the database, so the client bundle and the server
@@ -21,11 +21,11 @@ import type { PickStatus } from "@/db/schema";
  *
  * Testers are never asked for a stake — that was the explicit brief, and it is
  * the right call: a stake field turns a one-tap question into a form, and a
- * form is a thing people skip. So the beta record is flat: every bet a tester
+ * form is a thing people skip. So the users' record is flat: every bet a user
  * took counts one unit, win or lose.
  *
  * This is *not* the pick's own `units`. A pick Oobee staked 2u on still counts
- * 1u in the beta record, because what a tester actually risked is unknown and
+ * 1u in the users' record, because what a user actually risked is unknown and
  * borrowing Oobee's number would quietly turn their record into a rescaled
  * copy of Oobee's — the one comparison this feature exists to make.
  *

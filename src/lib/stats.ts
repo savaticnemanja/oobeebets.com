@@ -114,7 +114,7 @@ export async function getTrackRecord(): Promise<TrackRecord> {
   return summarise(rows);
 }
 
-/* --------------------------------------------------- beta user performance */
+/* -------------------------------------------------------- user performance */
 
 /**
  * The second dataset: not how Oobee's picks did, but how the picks testers
@@ -122,12 +122,12 @@ export async function getTrackRecord(): Promise<TrackRecord> {
  *
  * Both halves are computed from the same rows by the same `summarise`, with
  * exactly one difference — the stake. Oobee's record uses the units Oobee
- * called; the beta record is flat at FOLLOW_STAKE_UNITS, because what a tester
- * risked was never collected and borrowing Oobee's number would make the beta
+ * called; the users' record is flat at FOLLOW_STAKE_UNITS, because what a user
+ * risked was never collected and borrowing Oobee's number would make the users'
  * record a rescaled copy of the thing it is supposed to be compared against.
  * See lib/follows.ts.
  *
- * The cohort is non-admin accounts. Admins are the people running the beta,
+ * The cohort is non-admin accounts. Admins are the people running the site,
  * and they tick boxes while testing the feature; their follows stay out of
  * every figure here so that "our testers went 9-7" means the testers. The
  * board still lets an admin use the control — it is just not evidence.
@@ -153,7 +153,7 @@ export interface FollowBreakdown {
   record: TrackRecord;
 }
 
-/** One tester's own row in the beta dataset. */
+/** One user's own row in the follows dataset. */
 export interface TesterFollowRow {
   userId: string;
   email: string;
@@ -184,7 +184,7 @@ export interface FollowSummary {
   /** Oobee's own published record, at Oobee's own stakes. */
   oobee: TrackRecord;
   /** The followed picks only, flat-staked. */
-  beta: TrackRecord;
+  taken: TrackRecord;
   /** Two halves of the cohort, or empty when there are too few to halve. */
   byConsistency: ConsistencySplit[];
 }
@@ -206,7 +206,7 @@ export interface ConsistencySplit {
 }
 
 /**
- * The beta dataset is summed in Postgres, not in Node. It used to fetch every
+ * The follows dataset is summed in Postgres, not in Node. It used to fetch every
  * tester follow (300k rows at the load-test scale) and group them in
  * JavaScript, which took 1.7s and — being synchronous work in the one Node
  * process — stalled every other request while it ran (admin perf audit,
@@ -385,7 +385,7 @@ export async function getFollowSummary(): Promise<FollowSummary> {
     takeRate: opportunities > 0 ? follows / opportunities : null,
     avgPerFollower: followers.length > 0 ? follows / followers.length : null,
     oobee,
-    beta: recordFromCounts(followers.reduce((c, r) => addCounts(c, r.counts), ZERO)),
+    taken: recordFromCounts(followers.reduce((c, r) => addCounts(c, r.counts), ZERO)),
     byConsistency,
   };
 }

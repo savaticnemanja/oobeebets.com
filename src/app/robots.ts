@@ -14,7 +14,7 @@ export default function robots(): MetadataRoute.Robots {
   // Noindex (see lib/indexing.ts). Crawling stays allowed on purpose:
   // the noindex travels in a response header, and a crawler barred by
   // robots.txt never fetches the page to read it — it can still list a bare
-  // URL it found linked elsewhere, and beta's URLs get shared. No sitemap
+  // URL it found linked elsewhere, and preview URLs get shared. No sitemap
   // either, since it would only advertise pages that ask not to be indexed.
   if (siteNoIndex()) {
     return { rules: [{ userAgent: "*", allow: "/" }] };

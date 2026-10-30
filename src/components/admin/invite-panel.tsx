@@ -81,7 +81,7 @@ export function InvitePanel({ invitations }: { invitations: InviteRow[] }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            placeholder="new-tester@example.com"
+            placeholder="new-user@example.com"
             className="mt-1.5"
             aria-invalid={Boolean(fe?.email)}
             aria-describedby={fe?.email ? "invite-email-error" : undefined}

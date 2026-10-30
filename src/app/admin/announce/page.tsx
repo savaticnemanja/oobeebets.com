@@ -38,7 +38,7 @@ export default async function AdminAnnouncePage() {
     <div>
       <PageHeader
         title="Announce"
-        description="Write once and email it to testers."
+        description="Write once and email it to users."
         info="Same envelope as the invite email — wordmark, card and footer — with your heading and words inside it. Everyone gets their own copy, so no address is visible to anyone else."
       />
 

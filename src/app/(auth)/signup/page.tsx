@@ -33,7 +33,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       <p className="mt-2 text-sm text-fg-muted">
         {open
           ? "A few questions about how you bet — about two minutes — then we'll email a link to choose a password and set up your profile."
-          : "We're letting testers in a few at a time. Answer a few questions about how you bet — about two minutes — and we'll write the day there's a place for you."}
+          : "We're letting new users in a few at a time. Answer a few questions about how you bet — about two minutes — and we'll write the day there's a place for you."}
       </p>
       {/* Up top: below a two-minute form, it'd be found too late. */}
       <p className="mt-2 text-sm text-fg-muted">

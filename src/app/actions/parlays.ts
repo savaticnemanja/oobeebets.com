@@ -454,7 +454,7 @@ export async function deleteOobeeParlayAction(
 
   if (!existing) return { ok: false, error: "Parlay not found" };
   if (existing.ownerId !== null) {
-    return { ok: false, error: "That is a tester's parlay, not one of ours." };
+    return { ok: false, error: "That is a user's parlay, not one of ours." };
   }
 
   const [slate] = await db

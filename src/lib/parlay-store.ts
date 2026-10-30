@@ -279,7 +279,7 @@ export async function getUserParlays(userId: string): Promise<ParlayView[]> {
  * Every parlay a tester has built — the admin inspector.
  *
  * Admin-owned parlays are excluded for the same reason admin follows are: the
- * people running the beta tick boxes while testing the thing, and their
+ * people running the site tick boxes while testing the thing, and their
  * tickets are not evidence about testers.
  */
 export async function getAllUserParlays({ limit = 25, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<ParlayView[]> {

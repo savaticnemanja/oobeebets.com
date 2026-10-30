@@ -78,7 +78,7 @@ jobs:
       # Runs even when verify failed, as long as there is a server to drive it:
       # both suites read the same product rules, so a product change tends to
       # break both, and learning that one round-trip at a time is what made the
-      # 2026-08-23 beta break look smaller than it was.
+      # 2026-08-23 break look smaller than it was.
       - run: npm run e2e
         if: ${{ !cancelled() && steps.app.outcome == 'success' }}
 

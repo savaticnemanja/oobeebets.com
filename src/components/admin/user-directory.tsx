@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 const FILTERS: { key: UserFilter; label: string }[] = [
   { key: "all", label: "Everyone" },
-  { key: "user", label: "Testers" },
+  { key: "user", label: "Users" },
   { key: "admin", label: "Admins" },
   { key: "quiet", label: "Never active" },
 ];

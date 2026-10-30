@@ -3,7 +3,7 @@
  * found before it is created.
  *
  *   npm run stripe:setup                                   # products, prices, portal
- *   npm run stripe:setup -- --webhook https://beta.oobeebets.com/api/webhooks/stripe
+ *   npm run stripe:setup -- --webhook https://oobeebets.com/api/webhooks/stripe
  *
  * For each tier in src/lib/tiers.ts: a Product (metadata tier=<id>) and a
  * monthly Price carrying the tier's lookup_key, which is how checkout and the

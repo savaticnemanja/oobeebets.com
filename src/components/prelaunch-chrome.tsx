@@ -27,7 +27,7 @@ export function PrelaunchChrome({ children }: { children: React.ReactNode }) {
     <div className="pl-safe-left pr-safe-right">
       <header className="pt-safe-top">
         <div className="mx-auto flex h-16 max-w-3xl items-center px-4 sm:px-6">
-          <Logo badge={false} />
+          <Logo />
         </div>
       </header>
 

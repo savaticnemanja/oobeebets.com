@@ -66,7 +66,7 @@ function Units({ units, settled }: { units: number; settled: number }) {
   );
 }
 
-const TABS = ["summary", "breakdown", "day", "testers"] as const;
+const TABS = ["summary", "breakdown", "day", "users"] as const;
 const TESTERS_PAGE = 50;
 type Tab = (typeof TABS)[number];
 
@@ -102,24 +102,24 @@ export default async function AdminFollowsPage({
             .limit(30),
         ]).then(([rates, dates]) => ({ rates, dates }))
       : null,
-    tab === "testers" ? getTesterRows({ page, size: TESTERS_PAGE }) : null,
+    tab === "users" ? getTesterRows({ page, size: TESTERS_PAGE }) : null,
   ]);
 
   // The take-up denominator. Every tester is a possible taker of a pick on a
   // slate they were around for, and the cohort is small enough that quoting
   // the whole of it is more honest than quoting only the engaged part — which
   // would make a pick two of three active testers took read as 67% take-up
-  // across a beta of thirty.
+  // across a cohort of thirty.
   const denominator = testerCount;
 
   return (
     <div>
       <PageHeader
         title="Follows"
-        description="Who took which picks, and how those bets did — the testers' record next to Oobee's."
+        description="Who took which picks, and how those bets did — the users' record next to Oobee's."
         info={
           <>
-            A tester taps one circle on a pick card and nothing else is asked for — no stake, no book — so every unit
+            A user taps one circle on a pick card and nothing else is asked for — no stake, no book — so every unit
             figure here is flat at {Number(FOLLOW_STAKE_UNITS).toFixed(2)}u a bet, the one thing we can honestly claim to
             know about their stake. Admin accounts are left out of every cohort figure.
           </>
@@ -132,7 +132,7 @@ export default async function AdminFollowsPage({
           { href: "/admin/follows", label: "Summary", active: tab === "summary" },
           { href: "/admin/follows?tab=breakdown", label: "What they take", active: tab === "breakdown" },
           { href: `/admin/follows?tab=day&date=${date}`, label: "Pick by pick", active: tab === "day" },
-          { href: "/admin/follows?tab=testers", label: "Testers", count: testerCount, active: tab === "testers" },
+          { href: "/admin/follows?tab=users", label: "Users", count: testerCount, active: tab === "users" },
         ]}
       />
 
@@ -141,7 +141,7 @@ export default async function AdminFollowsPage({
       {/* ------------------------------------------------------------ tiles */}
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
-          label="Testers"
+          label="Users"
           value={summary.testers}
           sub={`${summary.followers} have followed something`}
         />
@@ -150,7 +150,7 @@ export default async function AdminFollowsPage({
           label="Take-up"
           tone="brand"
           value={summary.takeRate === null ? "—" : formatRate(summary.takeRate)}
-          sub="of the chances testers had"
+          sub="of the chances users had"
         />
         <Kpi
           label="Per follower"
@@ -169,7 +169,7 @@ export default async function AdminFollowsPage({
           <CardTitle>Oobee vs. the room</CardTitle>
           <CardDescription>
             Two records over the same board. Oobee&apos;s is every published pick at
-            the stake it was called at; the testers&apos; is only the picks they
+            the stake it was called at; the users&apos; is only the picks they
             actually took, flat-staked. A gap between them is the interesting
             result either way round — it says the picks people take are not the
             picks we publish.
@@ -201,7 +201,7 @@ export default async function AdminFollowsPage({
               <TableBody>
                 {[
                   { label: "Oobee — every published pick", r: summary.oobee },
-                  { label: "Testers — the picks they took", r: summary.beta },
+                  { label: "Users — the picks they took", r: summary.taken },
                 ].map(({ label, r }) => (
                   <TableRow key={label}>
                     <TableCell className="text-fg">{label}</TableCell>
@@ -238,14 +238,14 @@ export default async function AdminFollowsPage({
         <CardHeader>
           <CardTitle>Do the regulars do better?</CardTitle>
           <CardDescription>
-            Testers who have followed at least one pick, split at the cohort&apos;s
+            Users who have followed at least one pick, split at the cohort&apos;s
             median — how often they take a pick that was available to them.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {summary.byConsistency.length === 0 ? (
             <p className="text-sm text-fg-muted">
-              Not enough testers following yet to split the room in half — this
+              Not enough users following yet to split the room in half — this
               appears once four of them have taken something.
             </p>
           ) : (
@@ -255,7 +255,7 @@ export default async function AdminFollowsPage({
                   <TableRow>
                     <TableHead scope="col">Group</TableHead>
                     <TableHead scope="col" className="text-right">
-                      Testers
+                      Users
                     </TableHead>
                     <TableHead scope="col" className="text-right">
                       Follows
@@ -335,7 +335,7 @@ export default async function AdminFollowsPage({
             </h2>
             <p className="mt-1 text-xs text-fg-subtle">
               <span className="num">{formatSlateDate(date)}</span> · out of{" "}
-              {denominator} tester{denominator === 1 ? "" : "s"}
+              {denominator} user{denominator === 1 ? "" : "s"}
             </p>
           </div>
           {day.dates.length > 0 && (
@@ -408,23 +408,23 @@ export default async function AdminFollowsPage({
       {testers && (
       <section aria-labelledby="testers-heading">
         <h2 id="testers-heading" className="text-sm font-semibold tracking-tight">
-          Tester by tester
+          User by user
         </h2>
         <p className="mt-1 max-w-2xl text-xs text-fg-subtle">
           &ldquo;Of chances&rdquo; counts only the picks that were still ahead of
           kick-off when the account was created — somebody who joined on Tuesday
-          is not marked down for Monday&apos;s board. Open a tester to see every
+          is not marked down for Monday&apos;s board. Open a user to see every
           bet they have taken, day by day.
         </p>
 
         {testers.rows.length === 0 ? (
-          <p className="mt-4 text-sm text-fg-muted">No tester accounts yet.</p>
+          <p className="mt-4 text-sm text-fg-muted">No user accounts yet.</p>
         ) : (
           <div className="card-hairline mt-4 overflow-hidden">
             <Table className="min-w-[46rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">Tester</TableHead>
+                  <TableHead scope="col">User</TableHead>
                   <TableHead scope="col" className="text-right">
                     Followed
                   </TableHead>
@@ -481,8 +481,8 @@ export default async function AdminFollowsPage({
           page={page}
           pageSize={TESTERS_PAGE}
           total={testers.total}
-          noun="testers"
-          href={(n) => `/admin/follows?tab=testers&page=${n}`}
+          noun="users"
+          href={(n) => `/admin/follows?tab=users&page=${n}`}
         />
       </section>
       )}

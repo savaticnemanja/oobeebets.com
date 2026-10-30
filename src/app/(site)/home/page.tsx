@@ -71,8 +71,8 @@ export default async function HomePage({
       {/* Once, straight after onboarding: where they landed, and where the picks are. */}
       {params.welcome === "1" && (
         <div role="status" className="m-4 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand">
-          Account created — welcome in. Every game bet and player prop on the board is free
-          during our beta.{" "}
+          Account created — welcome in. Every game bet and player prop on the board is
+          free.{" "}
           <Link href="/picks" className="font-semibold underline-offset-2 hover:underline">
             See the board →
           </Link>
@@ -97,7 +97,7 @@ export default async function HomePage({
 
       {/* Follows nobody: say why they're seeing what they're seeing, and
           hand them the way out right here — the side rail is hidden on a
-          phone, which is where most testers are. */}
+          phone, which is where most users are. */}
       {tab === "for-you" && followingCount === 0 && firstPage && (
         <div className="border-b border-border px-4 py-3">
           <p className="flex items-start gap-2 text-sm text-fg-muted">

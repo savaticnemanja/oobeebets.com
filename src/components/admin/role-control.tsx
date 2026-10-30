@@ -59,7 +59,7 @@ export function RoleControl({ userId, email, role }: { userId: string; email: st
           <AlertDialogDescription>
             {pending === "admin"
               ? `${email} gets the whole admin console: publishing, settling, users and announcements.`
-              : `${email} goes back to being a tester and loses the admin console.`}
+              : `${email} goes back to being a regular user and loses the admin console.`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel asChild>

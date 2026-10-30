@@ -49,19 +49,19 @@ export default async function AdminParlaysPage({ searchParams }: { searchParams:
     <div>
       <PageHeader
         title="Parlays"
-        description="Every parlay a tester has built, how it went, and Oobee's own on the next slate."
+        description="Every parlay a user has built, how it went, and Oobee's own on the next slate."
         info={
           <>
-            Testers&apos; parlays are flat at {Number(PARLAY_STAKE_UNITS).toFixed(2)}u each — no stake is collected — and
+            Users&apos; parlays are flat at {Number(PARLAY_STAKE_UNITS).toFixed(2)}u each — no stake is collected — and
             graded from their legs, so they update themselves as results come in. Admin-built parlays are left out, the
-            same way admin follows are: the people running the beta aren&apos;t evidence about it. Open a builder to see
+            same way admin follows are: the people running the site aren&apos;t evidence about it. Open a builder to see
             all of theirs.
           </>
         }
       />
 
       <KpiGrid>
-        <Kpi label="Parlays built" value={totals.parlays} sub={`by ${builders} tester${builders === 1 ? "" : "s"} · ${shared} shared`} />
+        <Kpi label="Parlays built" value={totals.parlays} sub={`by ${builders} user${builders === 1 ? "" : "s"} · ${shared} shared`} />
         <Kpi label="Average legs" value={avgLegs === null ? "—" : avgLegs.toFixed(1)} sub={`${open} still running`} />
         <Kpi label="Record" value={`${record.wins}–${record.losses}`} sub={rateLabel(record)} />
         <Kpi
@@ -103,7 +103,7 @@ export default async function AdminParlaysPage({ searchParams }: { searchParams:
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id="built-heading" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
             <Layers className="size-4 text-brand" aria-hidden="true" />
-            Built by testers
+            Built by users
           </h2>
           {open > 0 && <Badge variant="pending">{open} running</Badge>}
         </div>

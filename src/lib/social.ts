@@ -13,7 +13,7 @@ import { visibleTo } from "@/lib/moderation";
 /**
  * Reads for the social layer: feeds, profiles, threads and who-to-follow.
  *
- * Counts are correlated subqueries rather than stored counters. At beta scale
+ * Counts are correlated subqueries rather than stored counters. At this scale
  * a count(*) over an indexed foreign key is microseconds, and a counter column
  * is a second copy of a fact the rows already hold — one more thing that can
  * drift. When the feed gets hot, this is the file where counters go.
@@ -628,7 +628,7 @@ export async function listConnections(
 
 /**
  * The order Who to follow suggests accounts in, which is the same for every
- * viewer: admins first — on a beta this small the house account is the one
+ * viewer: admins first — on a site this small the house account is the one
  * with something to say on day one — then most-followed, then whoever has
  * been posting. Worked out at most every few minutes per process, not on
  * every page: it counted every account's followers and latest post for each

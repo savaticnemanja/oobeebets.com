@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <Logo />
       </header>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-8">
-        {/* The beta application's pages mark themselves data-wide: long
+        {/* The sign-up application's pages mark themselves data-wide: long
             questions and two-up answer cards need more than a login form. */}
         <div className="w-full max-w-sm has-[[data-wide]]:max-w-lg">{children}</div>
       </main>

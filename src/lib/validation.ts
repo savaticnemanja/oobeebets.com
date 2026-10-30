@@ -85,7 +85,7 @@ export const onboardingSchema = z
     name: nameSchema,
     // Optional (empty → null) since 13 Oct 2026: nothing in the product uses
     // it yet. The monthly-spend question that sat beside it went on 17 Oct:
-    // the beta application (lib/signup-survey.ts) asks bet size and how often.
+    // the sign-up application (lib/signup-survey.ts) asks bet size and how often.
     phone: z.union([z.literal("").transform(() => null), phoneSchema]),
     // The 21+ / Terms checkbox. Required: sports betting is 21+ in nearly every
     // US state, and this is where they say so (users.terms_accepted_at
@@ -103,18 +103,18 @@ export const onboardingSchema = z
 
 /* --------------------------------------------------------- announcements */
 
-export const audienceValues = ["all", "testers", "custom"] as const;
+export const audienceValues = ["all", "users", "custom"] as const;
 
 export type Audience = (typeof audienceValues)[number];
 
 export const AUDIENCE_LABELS: Record<Audience, string> = {
   all: "Every account",
-  testers: "Testers only",
+  users: "Users only",
   custom: "Custom list",
 };
 
 /**
- * A hard ceiling on one send. Not a Resend limit — a blast radius. The beta is
+ * A hard ceiling on one send. Not a Resend limit — a blast radius. The site is
  * a room deliberately kept small, so a send addressing more than this many
  * people means something has gone wrong with the audience, and stopping is a
  * better answer than delivering it.

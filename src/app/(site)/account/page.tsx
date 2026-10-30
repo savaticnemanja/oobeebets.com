@@ -39,7 +39,7 @@ export default async function AccountPage() {
     <DocPage title="Account" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
       <DocSection title="Public profile">
         <p>
-          What other testers see on your profile and next to your posts. Your email and
+          What other users see on your profile and next to your posts. Your email and
           phone number are never shown.
         </p>
         <div className="pt-1 text-fg">
@@ -77,7 +77,7 @@ export default async function AccountPage() {
             <p>
               {auth.isAdmin
                 ? "As an admin you see the whole board — every pick, drafts included. No plan needed."
-                : "You have the whole board — every pick, free during our beta. No plan needed."}
+                : "You have the whole board — every pick, free. No plan needed."}
             </p>
             <Button asChild className="rounded-full">
               <Link href="/picks">See the picks</Link>

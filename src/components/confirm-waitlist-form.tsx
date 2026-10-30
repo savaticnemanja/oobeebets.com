@@ -32,7 +32,7 @@ export function ConfirmWaitlistForm({ token }: { token: string }) {
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-fg-muted">
-              Want in sooner? Testers who answer a few questions about how they bet are let in first. It takes
+              Want in sooner? People who answer a few questions about how they bet are let in first. It takes
               about two minutes.
             </p>
             <Button asChild className="w-full">

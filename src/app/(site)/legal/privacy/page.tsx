@@ -73,20 +73,20 @@ export default function PrivacyPage() {
             gives you as a customer. Your card details go to Stripe and never reach us.
           </p>
         ) : (
-          <p>We collect no payment information — the beta is free.</p>
+          <p>We collect no payment information — {SITE.name} is free.</p>
         )}
       </DocSection>
 
       <DocSection title="Who can see it">
         <p>
-          Other testers see your display name, @handle, profile picture and bio, your posts and replies, the
+          Other users see your display name, @handle, profile picture and bio, your posts and replies, the
           posts you like and repost, who you follow and who follows you, and any parlay you
           share to Community.
         </p>
         <p>
           Nobody else sees your email address, phone number or spend. The picks you mark as
-          taken, your parlays and your Stats are yours: other testers only ever see totals.
-          Oobee&apos;s admins can see all of the above, to run the beta.
+          taken, your parlays and your Stats are yours: other users only ever see totals.
+          Oobee&apos;s admins can see all of the above, to run the site.
         </p>
         <p>
           Your profile picture can be opened by anyone who has its link, without signing in.
@@ -136,8 +136,8 @@ export default function PrivacyPage() {
           Delete your account yourself at any time, from the bottom of your account page. It
           removes your profile and everything in it — posts, profile picture, likes, follows, ticks,
           parlays and your sign-up answers — and signs you out everywhere; feedback and reports you
-          sent stay, without your name on them. Email us for a copy of your data; during the beta we
-          do that by hand, within 30 days. Oobee&apos;s own picks and their results stay on the record; they never
+          sent stay, without your name on them. Email us for a copy of your data; we
+          send it within 30 days. Oobee&apos;s own picks and their results stay on the record; they never
           contained anything about you.
         </p>
       </DocSection>

@@ -23,7 +23,7 @@ import { SpamGuardFields } from "@/components/spam-guard-fields";
 import type { ActionState } from "@/lib/validation";
 
 /**
- * /signup: the beta application, then "Join waitlist" while sign-ups are
+ * /signup: the sign-up application, then "Join waitlist" while sign-ups are
  * closed or "Sign up" once SIGNUP_ENABLED is on. Answers are kept in
  * signup_surveys. Age comes first, so someone under 21 learns it before
  * typing anything else.
@@ -96,7 +96,7 @@ export function GetStartedForm({
             <BettingQuestions survey={survey} />
           </SurveySection>
 
-          <SurveySection title="The beta">
+          <SurveySection title="Your feedback">
             <BetaQuestions survey={survey} />
           </SurveySection>
 

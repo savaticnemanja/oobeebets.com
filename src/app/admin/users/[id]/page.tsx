@@ -185,7 +185,7 @@ export default async function AdminUserPage({
               </dl>
             </Panel>
 
-            <Panel id="application" title="Beta application" description="Their answers when they signed up">
+            <Panel id="application" title="Application" description="Their answers when they signed up">
               {survey ? (
                 <div className="text-sm">
                   <SurveyAnswerList s={survey} />
