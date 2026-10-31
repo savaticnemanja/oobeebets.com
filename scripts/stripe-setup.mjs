@@ -62,8 +62,10 @@ if (existing) {
 // The old monthly plans: archived, never deleted — Stripe keeps their history.
 const old = ["oobee_base_monthly", "oobee_pro_monthly", "oobee_elite_monthly"];
 for (const price of (await stripe.prices.list({ lookup_keys: old, active: true, limit: 10 })).data) {
-  await stripe.prices.update(price.id, { active: false });
+  // Product first: Stripe won't archive a price that's still an active
+  // product's default.
   await stripe.products.update(typeof price.product === "string" ? price.product : price.product.id, { active: false });
+  await stripe.prices.update(price.id, { active: false });
   console.log(`- archived ${price.lookup_key}: ${price.id}`);
 }
 
