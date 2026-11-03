@@ -51,7 +51,7 @@ export default function AboutPage() {
             Every pick is open to everyone once it&apos;s graded — the record is the pitch.
             Seeing them before kick-off, parlays included, takes a subscription: {PLAN.trialDays}{" "}
             days free, then {PLAN_PRICE_LABEL}, cancel anytime —
-            see <Link href="/account#plan" className="text-brand hover:underline">your account</Link>.
+            see <Link href="/settings#plan" className="text-brand hover:underline">Settings</Link>.
           </p>
         ) : (
           <p>

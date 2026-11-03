@@ -51,6 +51,7 @@ export const en = {
     picks: "Picks",
     myBets: "My bets",
     account: "Account",
+    settings: "Settings",
     admin: "Admin",
     signIn: "Sign in",
     signOut: "Sign out",

@@ -21,8 +21,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The last step of signing up, straight after the account is made: the
  * subscription, with its free trial — card in at Stripe, nothing charged
  * today. Skippable: "Skip for now" goes on to Home, where the board shows
- * settled picks only until they subscribe (from the banner on Picks, or the
- * account page).
+ * settled picks only until they subscribe (from the banner on Picks, or
+ * Settings).
  *
  * Anyone it doesn't apply to — admins, a deployment with billing off,
  * someone already subscribed — goes straight on.
@@ -67,8 +67,8 @@ export default async function WelcomePage() {
       </div>
       <p className="mt-3 text-xs text-fg-subtle">
         {trialEligible
-          ? `Stripe takes your card; nothing is charged today. The first ${formatPrice(PLAN.priceCents)} is on ${firstCharge} unless you cancel before then — one click on your account page.`
-          : "Stripe takes your card. Cancel anytime from your account page; you keep the board to the end of what you've paid for."}
+          ? `Stripe takes your card; nothing is charged today. The first ${formatPrice(PLAN.priceCents)} is on ${firstCharge} unless you cancel before then — one click in Settings.`
+          : "Stripe takes your card. Cancel anytime in Settings; you keep the board to the end of what you've paid for."}
       </p>
 
       <div className="mt-8 border-t border-border pt-5 text-center">

@@ -176,7 +176,7 @@ const changeSchema = z
   .refine((d) => d.password !== d.current, { message: "That's the password you have now", path: ["password"] });
 
 /**
- * Changing it while signed in, from the account page. Needs the current one,
+ * Changing it while signed in, from Settings. Needs the current one,
  * so a session left open on a shared computer can't be used to take the
  * account over. Keeps this device signed in and signs out every other.
  */

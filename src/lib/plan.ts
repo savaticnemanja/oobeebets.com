@@ -53,7 +53,7 @@ export const PLAN_PRICE_LABEL = `${formatPrice(PLAN.priceCents)} every ${PLAN.in
 
 /**
  * Stripe statuses that open the board. A failed renewal (past_due) does not:
- * the account page asks for a new card, and the board opens again the moment
+ * Settings asks for a new card, and the board opens again the moment
  * Stripe takes the payment.
  */
 export const LIVE_STATUSES = ["trialing", "active"] as const;

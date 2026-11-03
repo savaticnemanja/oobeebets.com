@@ -18,12 +18,12 @@ import type { ActionState } from "@/lib/validation";
 const INTEGRATION_ID = "oobee_sub_trial_7cq2mfza";
 
 /** Where a checkout was started from — and so where "Back" in Checkout returns to. */
-export type CheckoutFrom = "signup" | "picks" | "account";
+export type CheckoutFrom = "signup" | "picks" | "settings";
 
 const CANCEL_URL: Record<CheckoutFrom, string> = {
   signup: "/welcome",
   picks: "/picks",
-  account: "/account#plan",
+  settings: "/settings#plan",
 };
 
 /**
@@ -90,8 +90,8 @@ export async function startCheckoutAction(from: CheckoutFrom): Promise<ActionSta
         custom_text: {
           submit: {
             message: trial
-              ? `Nothing is charged today. Cancel anytime from your account — cancel before the ${PLAN.trialDays} days are up and you're never charged.`
-              : "Cancel anytime from your account; you keep access to the end of the period you've paid for.",
+              ? `Nothing is charged today. Cancel anytime in Settings — cancel before the ${PLAN.trialDays} days are up and you're never charged.`
+              : "Cancel anytime in Settings; you keep access to the end of the period you've paid for.",
           },
         },
         allow_promotion_codes: true,
@@ -113,7 +113,7 @@ export async function startCheckoutAction(from: CheckoutFrom): Promise<ActionSta
 /** Card, invoices and receipts: Stripe's customer portal. */
 export async function openPortalAction(): Promise<ActionState> {
   const auth = await getAuth();
-  if (!auth) redirect("/login?next=/account");
+  if (!auth) redirect("/login?next=/settings");
   if (!billingEnabled() || !auth.user.stripeCustomerId) return { ok: false, error: "You don't have a subscription to manage." };
 
   let url: string;
@@ -141,7 +141,7 @@ export async function resumeSubscriptionAction(): Promise<ActionState> {
 
 async function changeCancellation(cancel: boolean): Promise<ActionState> {
   const auth = await getAuth();
-  if (!auth) redirect("/login?next=/account");
+  if (!auth) redirect("/login?next=/settings");
   if (!billingEnabled()) return { ok: false, error: "Subscriptions aren't open yet." };
   if (!(await rateLimit("billing:cancel", auth.user.id, 20, 60 * 60 * 1000))) {
     return { ok: false, error: "Too many tries — give it a few minutes." };
@@ -163,18 +163,18 @@ async function changeCancellation(cancel: boolean): Promise<ActionState> {
     console.error(`[billing] ${cancel ? "cancel" : "resume"} failed for ${auth.user.id}`, err);
     return { ok: false, error: "Couldn't reach Stripe — try again." };
   }
-  revalidatePath("/account");
+  revalidatePath("/settings");
   return {
     ok: true,
     message: cancel ? "Cancelled — you won't be charged again." : "You're subscribed again — nothing else changes.",
   };
 }
 
-/** A customer-portal session, back to the account page's Plan section. */
+/** A customer-portal session, back to Settings' Plan section. */
 async function portalUrl(auth: AuthContext): Promise<string> {
   const params: Stripe.BillingPortal.SessionCreateParams = {
     customer: await customerFor(auth),
-    return_url: appUrl("/account#plan"),
+    return_url: appUrl("/settings#plan"),
     // Unset: the account's default configuration, which stripe:setup fills in.
     configuration: process.env.STRIPE_PORTAL_CONFIGURATION || undefined,
   };

@@ -477,7 +477,7 @@ export function welcomeEmail({ name, homeUrl, accountUrl }: { name: string; home
     paragraphs: [
       "Your account is ready. Every game day we put out our game bets and player props, each with its price, its stake and the reasoning behind it — logged before kick-off and graded against the final score after.",
       "Mark the ones you take and your profile keeps your own record alongside ours.",
-      { text: "Add a profile picture and a bio from", link: { label: "your account page", url: accountUrl } },
+      { text: "Add a profile picture and a bio from", link: { label: "Edit profile", url: accountUrl } },
       "Please bet responsibly. If gambling stops being fun, call or text 1-800-GAMBLER.",
     ],
     cta: { label: "See the board", url: homeUrl },

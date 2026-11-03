@@ -1402,7 +1402,7 @@ console.log("\nWaitlist, change password and profile pictures");
   await ctx.addCookies([await sessionCookie(testEmail)]);
   const elsewhere = await sessionCookie(testEmail);
   const page = await ctx.newPage();
-  await page.goto(`${APP_URL}/account`);
+  await page.goto(`${APP_URL}/settings`);
   await hydrated(page, "#current-password");
   await page.fill("#current-password", "not-my-password");
   await page.fill("#new-password", "changed-on-the-account-page");
@@ -2010,7 +2010,7 @@ const goneEmail = `e2e-suspend-${Date.now()}@example.com`;
 
   // Then they delete their own account: the password again, and a ticked box.
   await theirs.addCookies([await sessionCookie(goneEmail)]);
-  await them.goto(`${APP_URL}/account`);
+  await them.goto(`${APP_URL}/settings`);
   await loaded(them);
   await hydrated(them, "#delete-password");
   await them.fill("#delete-password", "not-my-password");

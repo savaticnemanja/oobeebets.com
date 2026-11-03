@@ -95,7 +95,7 @@ const portal = {
     privacy_policy_url: `${site}/legal/privacy`,
     terms_of_service_url: `${site}/legal/terms`,
   },
-  default_return_url: `${site}/account#plan`,
+  default_return_url: `${site}/settings#plan`,
   features: {
     payment_method_update: { enabled: true },
     invoice_history: { enabled: true },

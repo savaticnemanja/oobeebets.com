@@ -68,7 +68,7 @@ export default function TermsPage() {
             each period, until you cancel.
           </p>
           <p>
-            You can cancel at any time from your account page. Cancelling stops every future
+            You can cancel at any time in Settings. Cancelling stops every future
             charge; you keep access to the end of the period already paid for, or of the trial,
             in which case nothing is ever charged. Payments are not refunded, including for part
             of a period, except where the law requires it. If a renewal can&apos;t be charged,

@@ -81,7 +81,7 @@ export async function deleteAccountAction(_prev: ActionState, formData: FormData
     await tx.delete(users).where(eq(users.id, id));
   });
 
-  // Forgotten by the newsletter too — the account page promises everything goes.
+  // Forgotten by the newsletter too — Settings promises everything goes.
   try {
     await mirrorForget(email);
   } catch (err) {

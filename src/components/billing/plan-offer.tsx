@@ -4,8 +4,8 @@ import { DocSection } from "@/components/doc-page";
 import { PLAN, PLAN_PRICE_LABEL, formatPrice } from "@/lib/plan";
 
 /**
- * The subscription, one full-width row under the account page's Plan
- * section, for someone who doesn't have one running.
+ * The subscription, one full-width row under Settings' Plan section, for
+ * someone who doesn't have one running.
  */
 export function PlanOffer({
   trial,
@@ -40,7 +40,7 @@ export function PlanOffer({
           ))}
         </ul>
         <div className="mt-4 max-w-xs">
-          <SubscribeButton from="account" label={trial ? `Start ${PLAN.trialDays}-day free trial` : `Subscribe — ${PLAN_PRICE_LABEL}`} />
+          <SubscribeButton from="settings" label={trial ? `Start ${PLAN.trialDays}-day free trial` : `Subscribe — ${PLAN_PRICE_LABEL}`} />
         </div>
       </section>
 

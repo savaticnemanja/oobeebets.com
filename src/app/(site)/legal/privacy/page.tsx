@@ -134,7 +134,7 @@ export default function PrivacyPage() {
 
       <DocSection title="Your rights">
         <p>
-          Delete your account yourself at any time, from the bottom of your account page. It
+          Delete your account yourself at any time, from the bottom of Settings. It
           removes your profile and everything in it — posts, profile picture, likes, follows, ticks,
           parlays and your sign-up answers — and signs you out everywhere; feedback and reports you
           sent stay, without your name on them. Email us for a copy of your data; we

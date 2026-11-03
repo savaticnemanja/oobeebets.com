@@ -143,7 +143,7 @@ export function ResetPasswordForm({ token, email }: { token: string; email: stri
   );
 }
 
-/** Signed in, on the account page: the current password, then the new one twice. */
+/** Signed in, in Settings: the current password, then the new one twice. */
 export function ChangePasswordForm({ email }: { email: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(changePasswordAction, null);
   const fe = state && !state.ok ? state.fieldErrors : undefined;

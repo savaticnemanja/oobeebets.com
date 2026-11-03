@@ -9,7 +9,7 @@ import { deleteAccountAction } from "@/app/actions/account";
 import type { ActionState } from "@/lib/validation";
 
 /**
- * The last section of /account. The password again plus a ticked box, so a
+ * The last section of /settings. The password again plus a ticked box, so a
  * borrowed, signed-in phone can't delete an account in one tap. On success the
  * action redirects to /account-deleted; anything else comes back here.
  */

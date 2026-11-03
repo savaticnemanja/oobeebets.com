@@ -48,6 +48,7 @@ const SHOTS = [
   // The board is two tabs; a shot of only the default one reviews half of it.
   { name: "03b-picks-props", path: "/picks?category=prop", user: TESTER_EMAIL, full: false },
   { name: "04-account", path: "/account", user: TESTER_EMAIL, full: false },
+  { name: "04b-settings", path: "/settings", user: TESTER_EMAIL, full: false },
   { name: "05-admin", path: "/admin", user: ADMIN_EMAIL, full: false },
   { name: "05b-admin-activity", path: "/admin/activity", user: ADMIN_EMAIL, full: false },
   { name: "06-admin-slate", path: "/admin/slate", user: ADMIN_EMAIL, full: false },

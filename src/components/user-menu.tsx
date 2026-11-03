@@ -59,9 +59,9 @@ export function UserMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/account">
+          <Link href="/settings">
             <Settings aria-hidden="true" />
-            {t().account.account}
+            {t().nav.settings}
           </Link>
         </DropdownMenuItem>
         {isAdmin && (

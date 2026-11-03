@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, House, MessageSquareText, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
+import { Bell, House, MessageSquareText, Settings, Shield, Shirt, Target, User, Users, type LucideIcon } from "lucide-react";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { UnreadBadge, useUnread } from "@/components/app-shell/unread";
 import { cn } from "@/lib/utils";
@@ -22,8 +22,10 @@ interface NavItem {
  * The sidebar carries everything but About, which sits in the right rail's
  * footer on desktop. The phone's bottom bar has room for the
  * five places people actually go back and forth between; the rest (Players,
- * About, Admin) sit in the drawer behind the avatar in the top bar. Account settings
- * aren't a destination of their own: they're "Edit profile", on your profile.
+ * About, Admin) sit in the drawer behind the avatar in the top bar. Settings
+ * (sign-in, plan, password, deleting the account) sits below Profile, in the
+ * sidebar and at the top of the drawer; the public profile itself is edited
+ * from "Edit profile", on your profile.
  */
 function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom: NavItem[] } {
   const home = { href: "/home", label: t().nav.home, icon: House };
@@ -35,6 +37,7 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
   // Everyone else's numbers — league tables and player pages.
   const players = { href: "/players", label: "Players", icon: Shirt };
   const profile = { href: `/u/${username}`, label: t().nav.profile, icon: User };
+  const settings = { href: SETTINGS_HREF, label: t().nav.settings, icon: Settings };
   return {
     sidebar: [
       home,
@@ -43,6 +46,7 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
       community,
       players,
       profile,
+      settings,
       ...(isAdmin ? [{ href: "/admin", label: t().nav.admin, icon: Shield }] : []),
     ],
     // Your record lives on your profile now (its Stats tab).
@@ -51,6 +55,7 @@ function items(username: string, isAdmin: boolean): { sidebar: NavItem[]; bottom
 }
 
 const NOTIFICATIONS_HREF = "/notifications";
+const SETTINGS_HREF = "/settings";
 
 /** ", 3 unread" after a label, for screen readers — the badge itself is hidden from them. */
 function unreadSuffix(href: string, unread: number) {
@@ -175,8 +180,10 @@ export function BottomNav({ username, isAdmin }: { username: string; isAdmin: bo
 export function drawerItems(username: string, isAdmin: boolean): NavItem[] {
   const { sidebar, bottom } = items(username, isAdmin);
   const inBar = new Set(bottom.map((i) => i.href));
+  // Profile, then Settings right below it, then the rest the bar has no room for.
+  const top = [`/u/${username}`, SETTINGS_HREF];
   return [
-    sidebar.find((i) => i.href === `/u/${username}`)!,
-    ...sidebar.filter((i) => !inBar.has(i.href)),
+    ...top.map((href) => sidebar.find((i) => i.href === href)!),
+    ...sidebar.filter((i) => !inBar.has(i.href) && !top.includes(i.href)),
   ];
 }
