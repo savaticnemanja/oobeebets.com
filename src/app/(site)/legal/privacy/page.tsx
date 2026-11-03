@@ -97,9 +97,10 @@ export default function PrivacyPage() {
         <ul className="list-disc space-y-2 pl-5">
           {paid && (
             <li>
-              <strong className="text-fg">Stripe</strong> takes payment for passes. When you
-              buy one it receives your email address and name from us, and your card and
-              billing details from you on its own checkout page.
+              <strong className="text-fg">Stripe</strong> runs subscriptions and takes their
+              payments. When you subscribe it receives your email address and name from us, and
+              your card and billing details from you on its own checkout page; we keep only the
+              subscription&apos;s status and dates.
             </li>
           )}
           <li>

@@ -125,12 +125,15 @@ export function OnboardingForm({
   token,
   selfServe,
   needsSurvey,
+  subscribeStep = false,
 }: {
   email: string;
   token: string;
   selfServe: boolean;
   /** Asked here when the address never answered the application on /signup. */
   needsSurvey: boolean;
+  /** One more step comes after this form: the subscription (see (auth)/welcome). */
+  subscribeStep?: boolean;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(acceptInviteAction, null);
   const steps: Step[] = needsSurvey
@@ -259,6 +262,7 @@ export function OnboardingForm({
         {steps.map((s, i) => (
           <div key={s} className={cn("h-1 flex-1 rounded-full transition-colors", i <= index ? "bg-brand" : "bg-border")} />
         ))}
+        {subscribeStep && <div className="h-1 flex-1 rounded-full bg-border" />}
       </div>
 
       <h1
@@ -269,7 +273,7 @@ export function OnboardingForm({
         {stepTitle(step, needsSurvey)}
       </h1>
       <p className="mt-1 text-xs text-fg-subtle">
-        Step {index + 1} of {steps.length}
+        Step {index + 1} of {steps.length + (subscribeStep ? 1 : 0)}
       </p>
 
       {state && !state.ok && !state.fieldErrors && (
@@ -494,7 +498,7 @@ export function OnboardingForm({
           ) : (
             <Button key="submit" type="submit" disabled={pending}>
               {pending && <Loader2 className="animate-spin" aria-hidden="true" />}
-              Finish
+              {subscribeStep ? "Create account" : "Finish"}
             </Button>
           )}
         </div>

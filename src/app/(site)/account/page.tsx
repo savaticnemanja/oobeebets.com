@@ -11,10 +11,11 @@ import { AvatarPicker } from "@/components/social/avatar-picker";
 import { ChangePasswordForm } from "@/components/password-reset-forms";
 import { DeleteAccountForm } from "@/components/delete-account-form";
 import { displayNameOf } from "@/components/social/identity";
-import { PassOffer } from "@/components/billing/pass-offer";
+import { BillingNote, PlanOffer } from "@/components/billing/plan-offer";
+import { CancelSubscriptionButton, ManageBillingButton, ResumeSubscriptionButton } from "@/components/billing/plan-controls";
 import { viewerAccess } from "@/lib/billing/access";
-import { PASS, formatPrice } from "@/lib/pass";
-import { formatDateTime } from "@/lib/i18n/format";
+import { PLAN_PRICE_LABEL } from "@/lib/plan";
+import { formatDate } from "@/lib/i18n/format";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -25,14 +26,20 @@ export const dynamic = "force-dynamic";
 
 /**
  * Your profile, account settings and plan — reached from "Edit profile" on
- * your profile, not from the navigation, as on X, and from the board's Unlock
- * rows (#pass). Laid out like every other page: the 600px
+ * your profile, not from the navigation, as on X. The subscription is
+ * started, cancelled and resumed here (#plan). Laid out like every other page: the 600px
  * column, and each part a full-width row.
  */
 export default async function AccountPage() {
   const auth = await getAuth();
   if (!auth) redirect("/login?next=/account");
-  const { access, passEndsAt } = await viewerAccess(auth);
+  const { access, subscription: sub, trialEligible } = await viewerAccess(auth);
+  // Test keys (sk_test_…, rk_test_…) mean a sandbox.
+  const testMode = process.env.STRIPE_SECRET_KEY?.includes("_test_") ?? false;
+  const cancelling = Boolean(sub && (sub.cancelAtPeriodEnd || sub.cancelAt));
+  // When it stops (cancelled) or next bills (not): the trial's end on a trial.
+  const runsTo = sub ? (cancelling && sub.cancelAt ? sub.cancelAt : (sub.currentPeriodEnd ?? sub.trialEnd)) : null;
+  const on = runsTo ? formatDate(runsTo) : "the end of the period";
 
   return (
     <DocPage title="Account" back={{ href: `/u/${auth.user.username}`, label: "Back to your profile" }}>
@@ -82,27 +89,69 @@ export default async function AccountPage() {
               <Link href="/picks">See the picks</Link>
             </Button>
           </>
-        ) : passEndsAt ? (
-          <p>
-            Your pass has the whole board open until <span className="text-fg">{formatDateTime(passEndsAt)}</span>.
-            It doesn&apos;t renew — buy another below to add {PASS.days} days on the end.
-          </p>
+        ) : sub && access === "subscriber" ? (
+          <>
+            {sub.status === "trialing" ? (
+              cancelling ? (
+                <p>
+                  Your free trial is cancelled. The whole board stays open until{" "}
+                  <span className="text-fg">{on}</span>, and you won&apos;t be charged.
+                </p>
+              ) : (
+                <p>
+                  You&apos;re on the free trial — the whole board is open. On <span className="text-fg">{on}</span> it
+                  becomes {PLAN_PRICE_LABEL}, charged to the card you gave. Cancel before then and you&apos;re never
+                  charged.
+                </p>
+              )
+            ) : cancelling ? (
+              <p>
+                Your subscription is cancelled. The whole board stays open until <span className="text-fg">{on}</span>,
+                and nothing more is charged.
+              </p>
+            ) : (
+              <p>
+                You&apos;re subscribed — {PLAN_PRICE_LABEL}. The next charge is on{" "}
+                <span className="text-fg">{on}</span>. Cancel anytime; you keep the board to the end of what
+                you&apos;ve paid for.
+              </p>
+            )}
+            <div className="flex flex-wrap items-start gap-2 pt-1">
+              {cancelling ? (
+                <ResumeSubscriptionButton />
+              ) : (
+                <CancelSubscriptionButton
+                  consequence={
+                    sub.status === "trialing"
+                      ? `The board stays open until ${on} and you're never charged.`
+                      : `The board stays open until ${on}; nothing more is charged.`
+                  }
+                />
+              )}
+              <ManageBillingButton />
+            </div>
+          </>
+        ) : sub ? (
+          <>
+            <p>
+              Your last payment didn&apos;t go through, so the open picks are locked. Update your card and Stripe
+              will try again — the board opens the moment it&apos;s paid.
+            </p>
+            <div className="flex flex-wrap items-start gap-2 pt-1">
+              <ManageBillingButton label="Update card" />
+              <CancelSubscriptionButton consequence="Nothing more is charged." />
+            </div>
+          </>
         ) : (
           <p>
-            You&apos;re on the free board: the #1 game bet and #1 player prop each game day. A {PASS.name} opens
-            the whole board, Oobee&apos;s parlays included, for {formatPrice(PASS.priceCents)} — paid once, nothing
-            to cancel.
+            Without a subscription you see every pick once it&apos;s graded, but not the open ones before kick-off.
+            {trialEligible ? " Try it free for 14 days:" : ""} {PLAN_PRICE_LABEL}, cancel anytime.
           </p>
         )}
       </DocSection>
 
-      {access !== null && (
-        <PassOffer
-          holding={passEndsAt !== null}
-          // Test keys (sk_test_…, rk_test_…) mean a sandbox.
-          testMode={process.env.STRIPE_SECRET_KEY?.includes("_test_") ?? false}
-        />
-      )}
+      {access !== null && !sub && <PlanOffer trial={trialEligible} testMode={testMode} />}
+      {access !== null && sub && <BillingNote testMode={testMode} />}
 
       <DocSection title="Security">
         <p>
@@ -119,7 +168,7 @@ export default async function AccountPage() {
           Deletes your profile and everything on it — posts, replies, likes, follows, your parlays, the picks
           you marked and your sign-up answers — and signs you out everywhere. It can&apos;t be undone.
           Oobee&apos;s own picks and their results stay on the record; they never held anything about you.
-          {passEndsAt && " The time left on your pass goes with it and isn't refunded."}
+          {sub && " Your subscription ends with it, straight away: nothing more is charged, and time left isn't refunded."}
         </p>
         <div className="pt-1 text-fg">
           <DeleteAccountForm email={auth.user.email} />

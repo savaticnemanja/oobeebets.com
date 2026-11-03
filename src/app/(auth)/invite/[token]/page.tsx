@@ -5,6 +5,7 @@ import { getAuth, hashToken } from "@/lib/auth";
 import { isInviteUsable, lookupInvite } from "@/lib/invitations";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { signupEnabled } from "@/lib/signup";
+import { billingEnabled } from "@/lib/billing/stripe";
 import { hasSignupSurvey } from "@/lib/waitlist";
 
 export const metadata: Metadata = {
@@ -55,7 +56,13 @@ export default async function InvitePage({
   const needsSurvey = !(await hasSignupSurvey(invite.email));
   return (
     <div data-wide={needsSurvey || undefined}>
-      <OnboardingForm email={invite.email} token={token} selfServe={invite.invitedBy === null} needsSurvey={needsSurvey} />
+      <OnboardingForm
+        email={invite.email}
+        token={token}
+        selfServe={invite.invitedBy === null}
+        needsSurvey={needsSurvey}
+        subscribeStep={billingEnabled()}
+      />
     </div>
   );
 }

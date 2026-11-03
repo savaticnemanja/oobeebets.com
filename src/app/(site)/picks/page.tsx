@@ -30,7 +30,10 @@ import { loadBoardAction } from "@/app/actions/feeds";
 import { loadBoardDays } from "./board-days";
 import { cn } from "@/lib/utils";
 import { viewerAccess } from "@/lib/billing/access";
-import { PaidBanner } from "@/components/billing/paid-banner";
+import { billingEnabled } from "@/lib/billing/stripe";
+import { syncCheckoutSession } from "@/lib/billing/sync";
+import { SubscribedBanner } from "@/components/billing/subscribed-banner";
+import { SubscribeBanner } from "@/components/billing/subscribe-banner";
 import { formatDate } from "@/lib/i18n/format";
 
 const TAB_SHORT_LABELS: Record<(typeof pickTabs)[number], string> = {
@@ -65,10 +68,23 @@ export const dynamic = "force-dynamic";
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sport?: string; paid?: string }>;
+  searchParams: Promise<{ category?: string; sport?: string; subscribed?: string; session_id?: string }>;
 }) {
   const [auth, params] = await Promise.all([getAuth(), searchParams]);
   if (!auth) redirect("/login?next=/picks");
+
+  // Back from Stripe Checkout: copy the new subscription now, before anything
+  // reads what this viewer may see, so the board is open on this very page
+  // rather than whenever the webhook lands.
+  const backFromCheckout = params.subscribed === "1" && billingEnabled();
+  if (backFromCheckout && params.session_id) {
+    try {
+      await syncCheckoutSession(params.session_id, auth.user.id);
+    } catch (err) {
+      console.error("[billing] couldn't copy the subscription on the way back from Checkout", err);
+    }
+  }
+  const viewer = await viewerAccess(auth);
 
   // Shared tickets have their own page now; the old tab's links land there.
   if (params.category === "community") redirect(`/community${params.sport ? `?sport=${params.sport}` : ""}`);
@@ -97,9 +113,9 @@ export default async function PicksPage({
       : db.select({ publishedAt: slates.publishedAt }).from(slates).where(eq(slates.date, lead)).limit(1),
   ]);
   const publishedLead = Boolean(leadSlate[0]?.publishedAt);
-  // Back from Stripe Checkout: say so, and wait out the webhook.
-  const justPaid = params.paid === "1" ? await viewerAccess(auth) : null;
-  const passUntil = justPaid?.passEndsAt ? formatDate(justPaid.passEndsAt) : null;
+  const subscribed = viewer.access === "subscriber";
+  const trialEnds =
+    viewer.subscription?.status === "trialing" && viewer.subscription.trialEnd ? formatDate(viewer.subscription.trialEnd) : null;
 
   // Counts for the tab labels — the alternative is a tab that claims nothing
   // is there until you click it. Only for a board the viewer can see: a
@@ -140,7 +156,12 @@ export default async function PicksPage({
     <SocialShell>
       {/* The page is named by the nav and the tabs; the heading is for screen readers. */}
       <h1 className="sr-only">Picks</h1>
-      {justPaid && <PaidBanner until={passUntil} />}
+      {/* Back from Checkout: say so (and wait out Stripe if it's slow). */}
+      {backFromCheckout && <SubscribedBanner on={subscribed} trialEnds={trialEnds} />}
+      {/* No subscription: the open picks are held back, and this says why. */}
+      {viewer.access === "free" && !backFromCheckout && (
+        <SubscribeBanner trial={viewer.trialEligible} paymentFailed={viewer.subscription !== null} />
+      )}
 
       {/* -------------------------------------------------------------- tabs */}
       {/* Home's tab strip, scrollable on a narrow phone, with the info tip at
@@ -199,8 +220,10 @@ export default async function PicksPage({
         <div className="flex shrink-0 items-center pr-2">
           <InfoTip label="About Picks">
             <p>
-              Every game day&apos;s picks, newest first, graded against the final score. All of them
-              free.
+              Every game day&apos;s picks, newest first, graded against the final score.
+              {viewer.access === null
+                ? " All of them free."
+                : " Open picks are for subscribers; once a pick is graded it's here for everyone."}
             </p>
             <p>
               The number on each tab counts {lead === today ? "today's" : `${formatSlateWeekday(lead)}'s`} board;

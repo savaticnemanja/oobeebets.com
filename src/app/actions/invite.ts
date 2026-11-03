@@ -17,6 +17,7 @@ import { violates } from "@/lib/db-errors";
 import { sendEmail } from "@/lib/email/resend-client";
 import { welcomeEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/site";
+import { billingEnabled } from "@/lib/billing/stripe";
 import { hasSignupSurvey, removeFromWaitlist, saveSignupSurvey } from "@/lib/waitlist";
 import { signupSurveySchema, surveyFromForm, type SignupSurvey } from "@/lib/signup-survey";
 
@@ -229,5 +230,7 @@ export async function acceptInviteAction(
   });
 
   await createSession(created.id);
-  redirect("/home?welcome=1");
+  // With billing on, one more step: the subscription and its free trial,
+  // which they can skip (see (auth)/welcome).
+  redirect(billingEnabled() ? "/welcome" : "/home?welcome=1");
 }

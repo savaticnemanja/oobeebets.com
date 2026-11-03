@@ -11,6 +11,8 @@ import { SESSION_COOKIE, getAuth, rateLimit, verifyPassword } from "@/lib/auth";
 import { sendEmail } from "@/lib/email/resend-client";
 import { accountDeletedEmail } from "@/lib/email/templates";
 import { mirrorForget } from "@/lib/newsletter";
+import { openSubscriptions } from "@/lib/billing/access";
+import { stripe } from "@/lib/billing/stripe";
 import { fieldErrorsFrom, type ActionState } from "@/lib/validation";
 
 const deleteSchema = z.object({
@@ -27,7 +29,9 @@ const deleteSchema = z.object({
  * their email. Oobee's own picks and results are untouched.
  *
  * Asks for the password again, and refuses while they're the only admin
- * left. A pass never bills again, so it doesn't stand in the way.
+ * left. A subscription is cancelled at Stripe first, straight away — if
+ * Stripe can't be reached the account stays, so nobody is billed for an
+ * account that's gone.
  */
 export async function deleteAccountAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await getAuth();
@@ -51,6 +55,19 @@ export async function deleteAccountAction(_prev: ActionState, formData: FormData
       .from(users)
       .where(and(eq(users.role, "admin"), ne(users.id, id)));
     if (n === 0) return { ok: false, error: "You're the only admin. Make someone else an admin first." };
+  }
+
+  try {
+    for (const sub of await openSubscriptions(id)) {
+      // Our copy can lag Stripe: one already ended there needs nothing.
+      const live = await stripe().subscriptions.retrieve(sub.stripeSubscriptionId);
+      if (live.status !== "canceled" && live.status !== "incomplete_expired") {
+        await stripe().subscriptions.cancel(sub.stripeSubscriptionId);
+      }
+    }
+  } catch (err) {
+    console.error(`[account] couldn't cancel ${id}'s subscription before deleting`, err);
+    return { ok: false, error: "Couldn't cancel your subscription with Stripe, so nothing was deleted. Try again in a minute." };
   }
 
   await db.transaction(async (tx) => {

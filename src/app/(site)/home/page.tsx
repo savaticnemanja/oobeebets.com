@@ -12,6 +12,7 @@ import { WhoToFollow } from "@/components/social/user-row";
 import { SocialShell } from "@/components/social/social-shell";
 import { LoadMore } from "@/components/load-more";
 import { loadHomeAction } from "@/app/actions/feeds";
+import { viewerAccess } from "@/lib/billing/access";
 
 export const metadata: Metadata = {
   title: "Home",
@@ -64,6 +65,7 @@ export default async function HomePage({
         : null;
 
   const firstPage = !before && pageIndex === 0;
+  const welcomeAccess = params.welcome === "1" ? (await viewerAccess(auth)).access : null;
   const viewerName = displayNameOf(auth.user);
 
   return (
@@ -71,8 +73,11 @@ export default async function HomePage({
       {/* Once, straight after onboarding: where they landed, and where the picks are. */}
       {params.welcome === "1" && (
         <div role="status" className="m-4 rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand">
-          Account created — welcome in. Every game bet and player prop on the board is
-          free.{" "}
+          {welcomeAccess === "free"
+            ? "Account created — welcome in. Graded picks are on the board for everyone; subscribe there to see the open ones."
+            : welcomeAccess === "subscriber"
+              ? "Account created — welcome in. Your free trial is on: every pick on the board is open."
+              : "Account created — welcome in. Every game bet and player prop on the board is free."}{" "}
           <Link href="/picks" className="font-semibold underline-offset-2 hover:underline">
             See the board →
           </Link>

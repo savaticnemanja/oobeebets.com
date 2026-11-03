@@ -253,6 +253,13 @@
       "when": 1793403813576,
       "tag": "0035_passes",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793739550549,
+      "tag": "0036_subscriptions",
+      "breakpoints": true
     }
   ]
 }

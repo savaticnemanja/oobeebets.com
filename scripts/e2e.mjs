@@ -3,7 +3,8 @@
  * These exercise real server actions, not just rendering.
  *
  * Billing is off here (BILLING_ENABLED unset): every account gets the whole
- * board, and the 14-day pass is checked in verify.mjs instead.
+ * board and sign-up ends on Home, and the subscription's rules are checked in
+ * verify.mjs instead.
  *
  * "I took this bet" is in here rather than only in verify.mjs because the
  * check circle is the one control on the board a tester actually presses, and

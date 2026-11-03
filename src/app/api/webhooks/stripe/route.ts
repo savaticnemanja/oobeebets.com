@@ -3,9 +3,10 @@ import Stripe from "stripe";
 import { syncEvent } from "@/lib/billing/sync";
 
 /**
- * Stripe's webhook — the only writer of `passes`. Checkout returning someone
- * to /picks unlocks nothing by itself; this does, when Stripe says the pass
- * is paid.
+ * Stripe's webhook: keeps `subscriptions` in step with Stripe — a trial
+ * starting, renewals paid or failed, cancellations and the end. The return
+ * from Checkout copies the new subscription too (so the board opens on the
+ * next page), but everything after that arrives here.
  *
  * Open to anyone, with no session: the signature is what keeps everyone but
  * Stripe out.

@@ -147,37 +147,53 @@ export const users = pgTable(
   ],
 );
 
-/* ----------------------------------------------------------------- passes */
+/* ---------------------------------------------------------- subscriptions */
 
 /**
- * One row per 14-day pass bought (lib/pass.ts), written only by the Stripe
- * webhook (lib/billing/sync.ts) once Checkout says it's paid. Keyed by the
- * Checkout Session, so a retried or duplicated event writes nothing twice.
+ * A copy of each Stripe Subscription (lib/plan.ts: a 14-day free trial, then
+ * $50 every two weeks until cancelled), written only from Stripe's side of
+ * things (lib/billing/sync.ts): the webhook, and the return from Checkout.
+ * Both re-read the subscription from Stripe and upsert it here, so duplicate
+ * and out-of-order deliveries can only ever write the current state.
  *
- * Passes stack: one bought while another runs starts where that one ends. A
- * refunded pass is kept for history, marked, and unlocks nothing. What a
- * viewer may see is read off these rows (see lib/billing/access.ts).
+ * Ended rows are kept for history — they're also how a returning subscriber
+ * is told apart from someone who never had the trial. What a viewer may see
+ * is read off the live rows (see lib/billing/access.ts).
  */
-export const passes = pgTable(
-  "passes",
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "incomplete",
+  "incomplete_expired",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+  "paused",
+]);
+
+export const subscriptions = pgTable(
+  "subscriptions",
   {
-    stripeCheckoutSessionId: text("stripe_checkout_session_id").primaryKey(),
+    stripeSubscriptionId: text("stripe_subscription_id").primaryKey(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     stripeCustomerId: text("stripe_customer_id").notNull(),
-    /** What a refund points back to: charge.refunded names the payment. */
-    stripePaymentIntentId: text("stripe_payment_intent_id"),
-    amountCents: integer("amount_cents").notNull(),
-    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
-    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
-    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    /** Stripe's own status, verbatim. */
+    status: subscriptionStatusEnum("status").notNull(),
+    stripePriceId: text("stripe_price_id").notNull(),
+    /** When the free trial ends (the first charge), if it had one. */
+    trialEnd: timestamp("trial_end", { withTimezone: true }),
+    /** When the period paid for (or the trial) runs out — the next charge, unless cancelled. */
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    /** Cancelled, but running to `cancelAt`: no more charges. */
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    cancelAt: timestamp("cancel_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index("passes_user_idx").on(t.userId, t.endsAt),
-    uniqueIndex("passes_payment_intent_unique").on(t.stripePaymentIntentId),
-  ],
+  (t) => [index("subscriptions_user_idx").on(t.userId, t.status)],
 );
 
 /* --------------------------------------------------------------- sessions */
@@ -1386,7 +1402,8 @@ export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
 export type PlayerGameStat = typeof playerGameStats.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
-export type Pass = typeof passes.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];
 export type Role = (typeof roleEnum.enumValues)[number];
 export type PickStatus = (typeof pickStatusEnum.enumValues)[number];
 export type Sport = (typeof sportEnum.enumValues)[number];

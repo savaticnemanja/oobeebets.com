@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SITE, pageSocial } from "@/lib/site";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { billingEnabled } from "@/lib/billing/stripe";
+import { PLAN, PLAN_PRICE_LABEL } from "@/lib/plan";
 
 export const metadata: Metadata = {
   title: "Terms of service",
@@ -53,28 +54,37 @@ export default function TermsPage() {
       </DocSection>
 
       {billingEnabled() ? (
-        <DocSection title="4. Passes and payment">
+        <DocSection title="4. Subscription and payment">
           <p>
-            The top pick of each list is free every game day. The rest of the board comes
-            with a 14-day pass, at the price shown on your account page.
+            Every pick is open to everyone once it&apos;s graded. Seeing picks before
+            they&apos;re graded takes a subscription, at the price shown when you subscribe
+            ({PLAN_PRICE_LABEL} at the time of writing).
           </p>
           <p>
-            A pass is a single payment, taken through Stripe when you buy it. It opens the
-            whole board for 14 days from the moment the payment goes through, and then ends
-            on its own: nothing renews and nothing is charged again. A pass bought while
-            another is still running starts when that one ends. Payments are not refunded,
-            except where the law requires it; a refunded pass ends straight away.
+            A new subscription starts with a {PLAN.trialDays}-day free trial, once per
+            account. You give a card through Stripe when you start it, and nothing is charged
+            during the trial. When the trial ends the subscription renews automatically every{" "}
+            {PLAN.intervalWeeks} weeks and the price is charged to that card at the start of
+            each period, until you cancel.
           </p>
           <p>
-            A pass buys access to our picks and nothing more: no pass guarantees any result
-            (see section 2).
+            You can cancel at any time from your account page. Cancelling stops every future
+            charge; you keep access to the end of the period already paid for, or of the trial,
+            in which case nothing is ever charged. Payments are not refunded, including for part
+            of a period, except where the law requires it. If a renewal can&apos;t be charged,
+            access to open picks pauses until it is paid. Deleting your account cancels the
+            subscription straight away.
+          </p>
+          <p>
+            A subscription buys access to our picks and nothing more: it doesn&apos;t
+            guarantee any result (see section 2).
           </p>
         </DocSection>
       ) : (
         <DocSection title="4. Access">
           <p>
             Access to {SITE.name} is free — we do not take
-            payment or sell passes at this time. That may change
+            payment or sell subscriptions at this time. That may change
             in the future, and this page will be updated before it does.
           </p>
         </DocSection>

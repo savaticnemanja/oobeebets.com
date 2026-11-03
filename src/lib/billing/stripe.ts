@@ -3,8 +3,9 @@ import Stripe from "stripe";
 
 /**
  * The one Stripe client. Server-only: STRIPE_SECRET_KEY never leaves the
- * server, and a restricted key (rk_…) with write access to Customers and
- * Checkout Sessions, and read access to Prices and Charges, is all this needs.
+ * server, and a restricted key (rk_…) with write access to Customers,
+ * Checkout Sessions, Subscriptions and Customer portal sessions, and read
+ * access to Prices, is all this needs.
  */
 let client: Stripe | null = null;
 
@@ -16,9 +17,9 @@ export function stripe(): Stripe {
 }
 
 /**
- * Whether plans are switched on. Both BILLING_ENABLED=1 and a key, so a
- * deployment with a key but no flag (or the reverse) behaves exactly as the
- * billing-off site does: the whole board, no pricing.
+ * Whether the subscription is switched on. Both BILLING_ENABLED=1 and a key,
+ * so a deployment with a key but no flag (or the reverse) behaves exactly as
+ * the billing-off site does: the whole board, free, and nothing to sell.
  */
 export function billingEnabled(): boolean {
   return process.env.BILLING_ENABLED === "1" && Boolean(process.env.STRIPE_SECRET_KEY);

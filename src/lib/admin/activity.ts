@@ -257,10 +257,33 @@ async function describe(rows: Row[]): Promise<ActivityItem[]> {
     } else if (a === "user.password_changed") {
       text = "Changed their password";
       href = row.entityId ? `/admin/users/${row.entityId}` : null;
+    } else if (a === "billing.subscription") {
+      const status = str(meta.status);
+      const trialEnd = str(meta.trialEnd);
+      const periodEnd = str(meta.periodEnd);
+      const from = (meta.from ?? null) as { status?: string } | null;
+      if (meta.cancelling && status !== "canceled") {
+        text = "Cancelled their subscription";
+        detail = periodEnd ? `access until ${formatDate(new Date(periodEnd))}` : null;
+        tone = "miss";
+      } else if (status === "trialing") {
+        text = from?.status === "trialing" ? "Took back their cancellation" : "Started the free trial";
+        detail = trialEnd ? `first charge ${formatDate(new Date(trialEnd))}` : null;
+        tone = "hit";
+      } else if (status === "active") {
+        text = from?.status === "trialing" ? "Trial converted — first payment" : from?.status === "active" ? "Took back their cancellation" : "Subscribed";
+        detail = periodEnd ? `renews ${formatDate(new Date(periodEnd))}` : null;
+        tone = "hit";
+      } else if (status === "canceled") {
+        text = "Subscription ended";
+        tone = "miss";
+      } else {
+        text = `Subscription ${status?.replace("_", " ") ?? "changed"}`;
+        tone = status === "past_due" || status === "unpaid" ? "miss" : "brand";
+      }
     } else if (a === "billing.pass") {
-      const ends = str(meta.endsAt);
+      // From the 14-day passes sold before the subscription (to 2026-11).
       text = "Bought a 14-day pass";
-      detail = ends ? `runs until ${formatDate(new Date(ends))}` : null;
       tone = "hit";
     } else if (a === "billing.refund") {
       text = "Pass refunded — access ended";

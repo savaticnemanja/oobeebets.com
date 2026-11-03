@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DocPage, DocSection } from "@/components/doc-page";
 import { SITE, pageSocial } from "@/lib/site";
 import { billingEnabled } from "@/lib/billing/stripe";
+import { PLAN, PLAN_PRICE_LABEL } from "@/lib/plan";
 
 const description = "Who runs oobee bets, how the board is built, and why every loss stays on the record.";
 
@@ -47,9 +48,10 @@ export default function AboutPage() {
         </p>
         {billingEnabled() ? (
           <p>
-            The #1 game bet and #1 player prop are free every game day. A 14-day pass opens
-            every pick and our parlays for $50, paid once —
-            see <Link href="/account#pass" className="text-brand hover:underline">your account</Link>.
+            Every pick is open to everyone once it&apos;s graded — the record is the pitch.
+            Seeing them before kick-off, parlays included, takes a subscription: {PLAN.trialDays}{" "}
+            days free, then {PLAN_PRICE_LABEL}, cancel anytime —
+            see <Link href="/account#plan" className="text-brand hover:underline">your account</Link>.
           </p>
         ) : (
           <p>

@@ -3,7 +3,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { feedback, invitations, reports, sessions, users } from "@/db/schema";
 import type { Role } from "@/db/schema";
-import { passesCovering } from "@/lib/billing/access";
+import { liveSubscriptions } from "@/lib/billing/access";
 import { formatDate } from "@/lib/i18n/format";
 import type { UserFilter, UserSort } from "@/lib/admin/directory";
 
@@ -135,10 +135,18 @@ export async function listUsers({
   };
 }
 
-/** Each account holding a pass right now, as a label. */
+/** Each account with a live subscription, as a label: "Trial · to Nov 17", "Subscribed · cancels Nov 17". */
 async function livePlans(userIds: string[]): Promise<Map<string, string>> {
-  const covered = await passesCovering(userIds);
-  return new Map([...covered].map(([id, until]) => [id, `Pass · until ${formatDate(until)}`]));
+  const live = await liveSubscriptions(userIds);
+  return new Map(
+    [...live].map(([id, sub]) => {
+      const kind = sub.status === "trialing" ? "Trial" : "Subscribed";
+      const cancelling = sub.cancelAtPeriodEnd || sub.cancelAt !== null;
+      const at = (cancelling && sub.cancelAt) || sub.currentPeriodEnd;
+      const when = at ? ` · ${cancelling ? "ends" : sub.status === "trialing" ? "bills" : "renews"} ${formatDate(at)}` : "";
+      return [id, `${kind}${when}`];
+    }),
+  );
 }
 
 export interface UserDetail {

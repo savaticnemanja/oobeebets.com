@@ -1,105 +1,124 @@
 import "server-only";
 import type Stripe from "stripe";
-import { and, eq, isNull, max, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog, passes, users } from "@/db/schema";
-import { PASS, passWindow } from "@/lib/pass";
+import { auditLog, subscriptions, users, type SubscriptionStatus } from "@/db/schema";
+import { PLAN } from "@/lib/plan";
 import { stripe } from "./stripe";
 
 const idOf = (v: string | { id: string } | null | undefined) => (typeof v === "string" ? v : (v?.id ?? null));
+const dateOf = (s: number | null | undefined) => (s ? new Date(s * 1000) : null);
 
-/**
- * Act on one webhook event; a type this app doesn't handle does nothing.
- *
- * Each handler reads the object fresh from Stripe rather than trusting the
- * event's snapshot, so a retried, duplicated or out-of-order event can only
- * ever act on the current state.
- */
-export async function syncEvent(event: Stripe.Event): Promise<void> {
+/** The subscription an event is about, or null for one this app ignores. */
+export function subscriptionIdOf(event: Stripe.Event): string | null {
   switch (event.type) {
     case "checkout.session.completed":
-    case "checkout.session.async_payment_succeeded":
-      if (event.data.object.mode === "payment") await grantPass(event.data.object.id);
-      return;
-    case "charge.refunded":
-      await revokePass(event.data.object.id);
-      return;
+      return event.data.object.mode === "subscription" ? idOf(event.data.object.subscription) : null;
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+    case "customer.subscription.paused":
+    case "customer.subscription.resumed":
+      return event.data.object.id;
+    case "invoice.paid":
+    case "invoice.payment_failed":
+      return idOf(event.data.object.parent?.subscription_details?.subscription);
+    default:
+      return null;
   }
+}
+
+/** Act on one webhook event; a type this app doesn't handle does nothing. */
+export async function syncEvent(event: Stripe.Event): Promise<void> {
+  const id = subscriptionIdOf(event);
+  if (id) await syncSubscription(id);
 }
 
 /**
- * A paid Checkout Session for the pass becomes a row in `passes`, starting
- * now or where the buyer's latest pass ends. The owner comes from the
- * metadata checkout stamps on the session, falling back to whoever holds the
- * Customer; a payment made outside the app for someone with no account is
- * skipped.
+ * Back from Checkout: copy the subscription it made straight away rather
+ * than wait for the webhook, so the board is open on the very next page.
+ * Only for the session's own account — the id comes in on a URL.
  */
-async function grantPass(sessionId: string): Promise<void> {
-  const session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["line_items.data.price"] });
-  // Not paid yet: async_payment_succeeded brings it back when it is.
-  if (session.payment_status !== "paid") return;
-
-  const price = session.line_items?.data[0]?.price;
-  if (price?.lookup_key !== PASS.lookupKey) {
-    console.warn(`[billing] ${session.id}: price ${price?.id ?? "none"} is not the pass — skipped`);
-    return;
-  }
-
-  const customerId = idOf(session.customer);
-  const userId = (await existingUser(session.metadata?.user_id)) ?? (customerId ? await userForCustomer(customerId) : null);
-  if (!userId || !customerId) {
-    console.warn(`[billing] ${session.id}: no account for customer ${customerId ?? "none"} — skipped`);
-    return;
-  }
-
-  await db.transaction(async (tx) => {
-    // One grant per buyer at a time, so two passes paid at once still stack.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pass:${userId}`}))`);
-    const [done] = await tx
-      .select({ id: passes.stripeCheckoutSessionId })
-      .from(passes)
-      .where(eq(passes.stripeCheckoutSessionId, session.id));
-    if (done) return;
-
-    const [{ latest }] = await tx
-      .select({ latest: max(passes.endsAt) })
-      .from(passes)
-      .where(and(eq(passes.userId, userId), isNull(passes.refundedAt)));
-    const { startsAt, endsAt } = passWindow(new Date(), latest);
-
-    await tx.insert(passes).values({
-      stripeCheckoutSessionId: session.id,
-      userId,
-      stripeCustomerId: customerId,
-      stripePaymentIntentId: idOf(session.payment_intent),
-      amountCents: session.amount_total ?? 0,
-      startsAt,
-      endsAt,
-    });
-    await tx.insert(auditLog).values({
-      actorId: userId,
-      action: "billing.pass",
-      entity: "pass",
-      entityId: session.id,
-      meta: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), amountCents: session.amount_total },
-    });
-  });
+export async function syncCheckoutSession(sessionId: string, userId: string): Promise<void> {
+  if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) return;
+  const session = await stripe().checkout.sessions.retrieve(sessionId);
+  if (session.client_reference_id !== userId || session.mode !== "subscription") return;
+  const subscriptionId = idOf(session.subscription);
+  if (subscriptionId) await syncSubscription(subscriptionId);
 }
 
-/** A fully refunded payment takes its pass back. A partial refund leaves it. */
-async function revokePass(chargeId: string): Promise<void> {
-  const charge = await stripe().charges.retrieve(chargeId);
-  const paymentIntentId = idOf(charge.payment_intent);
-  if (!charge.refunded || !paymentIntentId) return;
-
-  const revoked = await db
-    .update(passes)
-    .set({ refundedAt: new Date() })
-    .where(and(eq(passes.stripePaymentIntentId, paymentIntentId), isNull(passes.refundedAt)))
-    .returning({ id: passes.stripeCheckoutSessionId, userId: passes.userId });
-  for (const p of revoked) {
-    await db.insert(auditLog).values({ actorId: p.userId, action: "billing.refund", entity: "pass", entityId: p.id });
+/**
+ * Copy one Stripe Subscription into `subscriptions`.
+ *
+ * Reads the subscription itself rather than an event's snapshot, so a
+ * retried, duplicated or out-of-order event can only ever write the current
+ * state. The owner comes from the metadata checkout stamps on it, falling
+ * back to whoever holds the Customer; a subscription made outside the app
+ * (in the Dashboard, say) for someone with no account is skipped, as is one
+ * on a price that isn't the plan's.
+ */
+export async function syncSubscription(subscriptionId: string): Promise<void> {
+  const sub = await stripe().subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+  const customerId = idOf(sub.customer)!;
+  const item = sub.items.data[0];
+  if (!item || item.price.lookup_key !== PLAN.lookupKey) {
+    console.warn(`[billing] ${sub.id}: price ${item?.price.id ?? "none"} is not the plan — skipped`);
+    return;
   }
+
+  const userId = (await existingUser(sub.metadata.user_id)) ?? (await userForCustomer(customerId));
+  if (!userId) {
+    console.warn(`[billing] ${sub.id}: no account for customer ${customerId} — skipped`);
+    return;
+  }
+
+  const row = {
+    userId,
+    stripeCustomerId: customerId,
+    status: sub.status as SubscriptionStatus,
+    stripePriceId: item.price.id,
+    trialEnd: dateOf(sub.trial_end),
+    currentPeriodEnd: dateOf(item.current_period_end),
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+    cancelAt: dateOf(sub.cancel_at),
+    endedAt: dateOf(sub.ended_at),
+    updatedAt: new Date(),
+  };
+
+  await db.transaction(async (tx) => {
+    // The webhook and the return from Checkout can land at once; one at a
+    // time per subscription keeps the audit trail to one line per change.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`subscription:${sub.id}`}))`);
+    const [before] = await tx
+      .select({ status: subscriptions.status, cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd, cancelAt: subscriptions.cancelAt })
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, sub.id))
+      .limit(1);
+
+    await tx
+      .insert(subscriptions)
+      .values({ stripeSubscriptionId: sub.id, createdAt: dateOf(sub.created) ?? new Date(), ...row })
+      .onConflictDoUpdate({ target: subscriptions.stripeSubscriptionId, set: row });
+
+    // One audit line per change a person would care about, not per event.
+    const cancelling = row.cancelAtPeriodEnd || row.cancelAt !== null;
+    const wasCancelling = before ? before.cancelAtPeriodEnd || before.cancelAt !== null : false;
+    if (before?.status !== row.status || cancelling !== wasCancelling) {
+      await tx.insert(auditLog).values({
+        actorId: userId,
+        action: "billing.subscription",
+        entity: "subscription",
+        entityId: sub.id,
+        meta: {
+          status: row.status,
+          cancelling,
+          trialEnd: row.trialEnd?.toISOString() ?? null,
+          periodEnd: row.currentPeriodEnd?.toISOString() ?? null,
+          from: before ? { status: before.status, cancelling: wasCancelling } : null,
+        },
+      });
+    }
+  });
 }
 
 async function existingUser(id: string | undefined): Promise<string | null> {

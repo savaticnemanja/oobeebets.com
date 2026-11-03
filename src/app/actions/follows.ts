@@ -67,7 +67,7 @@ export async function setPickFollowAction(
   // name any id: the plan is checked here too.
   const { rule } = await viewerAccess(auth);
   if (!auth.isAdmin && pick.rank > rule.picks[pick.category]) {
-    return { ok: false, error: "That pick isn't on your plan." };
+    return { ok: false, error: "Open picks are for subscribers." };
   }
 
   // Admins preview draft slates, and the cards there render without a control
@@ -144,6 +144,11 @@ export async function setParlayFollowAction(parlayId: string, played: boolean): 
   if (row.ownerId === auth.user.id) return { ok: false, error: "That's your own ticket — it's already on your stats." };
   if (parsed.data.played && !(await canInteract(auth.user.id, row.ownerId))) return { ok: false, error: BLOCKED };
   if (row.ownerId === null ? !row.publishedAt : !row.shared) return { ok: false, error: "That parlay isn't public." };
+  // Oobee's open parlays are for subscribers; the board never sends one
+  // past the plan, but a request can name any id.
+  if (row.ownerId === null && parsed.data.played && !auth.isAdmin && !(await viewerAccess(auth)).rule.parlays) {
+    return { ok: false, error: "Oobee's parlays are for subscribers." };
+  }
 
   const [view] = await getParlaysByIds([parsed.data.parlayId]);
   if (!view?.open) {

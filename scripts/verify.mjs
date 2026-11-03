@@ -38,7 +38,7 @@ import {
 } from "../src/lib/board.ts";
 import { FOLLOW_STAKE_UNITS, followWindowOpen } from "../src/lib/follows.ts";
 import { combineOdds } from "../src/lib/settlement.ts";
-import { ACCESS, PASS, coveredUntil, formatPrice, passWindow } from "../src/lib/pass.ts";
+import { ACCESS, LIVE_STATUSES, OPEN_STATUSES, PLAN, PLAN_PRICE_LABEL, formatPrice, isLiveStatus } from "../src/lib/plan.ts";
 import { WEBHOOK_EVENTS } from "../src/lib/billing/events.ts";
 import Stripe from "stripe";
 import { safeNextPath } from "../src/lib/safe-next.ts";
@@ -352,51 +352,41 @@ for (const category of pickCategories) {
   );
 }
 
-/* ------------------------------------------------------ 2c. the pass (lib/pass.ts) */
+/* ---------------------------------------------- 2c. the subscription (lib/plan.ts) */
 
-console.log("\nThe pass (lib/pass.ts)");
+console.log("\nThe subscription (lib/plan.ts)");
 
 {
-  check(PASS.priceCents === 5000 && formatPrice(PASS.priceCents) === "$50", "the pass is $50", formatPrice(PASS.priceCents));
-  check(PASS.days === 14, "the pass runs 14 days");
+  check(PLAN.priceCents === 5000 && formatPrice(PLAN.priceCents) === "$50", "it's $50", formatPrice(PLAN.priceCents));
+  check(PLAN.intervalWeeks === 2 && PLAN_PRICE_LABEL === "$50 every 2 weeks", "billed every 2 weeks", PLAN_PRICE_LABEL);
+  check(PLAN.trialDays === 14, "after a 14-day free trial");
   check(
-    pickCategories.every((c) => ACCESS.pass.picks[c] >= PICKS_PER_SLATE[c] && ACCESS.pass.picks[c] >= ACCESS.free.picks[c]),
-    "a pass reaches the whole slate",
-    pickCategories.map((c) => `${c} ${ACCESS.pass.picks[c]}/${PICKS_PER_SLATE[c]}`).join(", "),
+    pickCategories.every((c) => ACCESS.subscriber.picks[c] >= PICKS_PER_SLATE[c]),
+    "a subscriber reaches the whole slate",
+    pickCategories.map((c) => `${c} ${ACCESS.subscriber.picks[c]}/${PICKS_PER_SLATE[c]}`).join(", "),
   );
-  check(ACCESS.pass.parlays && !ACCESS.free.parlays, "a pass adds Oobee's parlays");
-  check(pickCategories.every((c) => ACCESS.free.picks[c] >= 1), "free still sees the #1 of each list");
+  check(ACCESS.subscriber.parlays && !ACCESS.free.parlays, "Oobee's open parlays are for subscribers");
+  check(pickCategories.every((c) => ACCESS.free.picks[c] === 0), "without one, no open pick at all");
 
   // The board, cut each way: a full slate served at each depth.
-  for (const access of ["free", "pass"]) {
+  for (const access of ["free", "subscriber"]) {
     const slate = pickCategories.flatMap((category) =>
       Array.from({ length: PICKS_PER_SLATE[category] }, (_, i) => ({ rank: i + 1, category })),
     );
     const kept = visiblePicks(slate, false, ACCESS[access].picks);
     const want = pickCategories.reduce((n, c) => n + Math.min(ACCESS[access].picks[c], PICKS_PER_SLATE[c]), 0);
-    check(kept.length === want, `${access} is served exactly its depth`.padEnd(30), `kept=${kept.length}/${want}`);
+    check(kept.length === want, `${access} is served exactly its depth`.padEnd(36), `kept=${kept.length}/${want}`);
   }
 
-  // Timing: 14 days from now, or from the end of the pass still running.
-  const day = 24 * 60 * 60 * 1000;
-  const now = new Date("2026-11-01T12:00:00Z");
-  const at = (d) => new Date(now.getTime() + d * day);
-  const first = passWindow(now, null);
-  check(+first.startsAt === +now && +first.endsAt === +at(14), "a first pass runs from now for 14 days");
-  check(+passWindow(now, at(-3)).startsAt === +now, "an expired pass doesn't hold the next one back");
-  const next = passWindow(now, at(5));
-  check(+next.startsAt === +at(5) && +next.endsAt === +at(19), "a pass bought early starts where the last ends");
-
-  check(coveredUntil([], now) === null, "no passes, no access");
-  check(coveredUntil([{ startsAt: at(-14), endsAt: at(0) }], now) === null, "a pass ends on the dot");
-  check(coveredUntil([{ startsAt: at(1), endsAt: at(15) }], now) === null, "a pass not started yet opens nothing");
+  // Which Stripe statuses open the board.
+  check(isLiveStatus("trialing") && isLiveStatus("active"), "a trial and a paid-up subscription open the board");
   check(
-    +coveredUntil([{ startsAt: at(5), endsAt: at(19) }, { startsAt: at(-9), endsAt: at(5) }], now) === +at(19),
-    "back-to-back passes count as one run",
+    ["past_due", "unpaid", "canceled", "incomplete", "incomplete_expired", "paused"].every((st) => !isLiveStatus(st)),
+    "a failed renewal, an ended or unfinished one doesn't",
   );
   check(
-    +coveredUntil([{ startsAt: at(-9), endsAt: at(5) }, { startsAt: at(8), endsAt: at(22) }], now) === +at(5),
-    "a gap ends the run",
+    LIVE_STATUSES.every((st) => OPEN_STATUSES.includes(st)) && OPEN_STATUSES.includes("past_due") && !OPEN_STATUSES.includes("canceled"),
+    "a failed renewal still counts as one to manage, an ended one doesn't",
   );
 }
 
@@ -431,10 +421,15 @@ console.log("\nStripe webhook (/api/webhooks/stripe)");
   }
 
   check(
-    ["checkout.session.completed", "checkout.session.async_payment_succeeded", "charge.refunded"].every((e) =>
-      WEBHOOK_EVENTS.includes(e),
-    ) && !WEBHOOK_EVENTS.some((e) => e.startsWith("customer.subscription.")),
-    "the endpoint listens for paid checkouts and refunds, not subscriptions",
+    [
+      "checkout.session.completed",
+      "customer.subscription.created",
+      "customer.subscription.updated",
+      "customer.subscription.deleted",
+      "invoice.paid",
+      "invoice.payment_failed",
+    ].every((e) => WEBHOOK_EVENTS.includes(e)),
+    "the endpoint listens for the subscription's whole life",
   );
 }
 

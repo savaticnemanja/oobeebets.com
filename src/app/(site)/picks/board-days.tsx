@@ -58,7 +58,7 @@ export async function loadBoardDays({
 }): Promise<{ node: React.ReactNode; next: string | null; todayPicks: number }> {
   const today = slateDateString();
   const isParlayTab = tab === "parlay";
-  // How deep into each list this viewer reaches (lib/pass.ts).
+  // How deep into each list this viewer reaches (lib/plan.ts).
   const { access, rule } = await viewerAccess(auth);
 
   // The sport pill, as SQL on picks — so a day with no MLB props is not
@@ -141,7 +141,7 @@ export async function loadBoardDays({
   // Which picks a viewer sees is decided by rank; the order they're listed in
   // is by kick-off, so a day reads like the schedule it is. Rank breaks ties.
   //
-  // A plan only holds back picks that are still open. Once one is settled it
+  // The plan only holds back picks that are still open. Once one is settled it
   // is history, not a tip — and the record being there for anyone to check,
   // losses included, is the whole pitch — so every viewer sees how it went.
   const picksOn = new Map(
@@ -183,16 +183,20 @@ export async function loadBoardDays({
 
   /* --------------------------------------------------------- parlay tabs */
 
-  const oobeeOn = new Map<string, ParlayView[]>(
+  // As with picks, a non-subscriber sees a parlay once it's graded; open
+  // ones are counted (under the pill) and never sent.
+  const oobeeOn = new Map<string, { list: ParlayView[]; locked: number }>(
     // By first leg's kick-off, as picks are, rank breaking ties.
-    isParlayTab && rule.parlays
+    isParlayTab
       ? await Promise.all(
           visibleDays.map(async (d) => {
             const first = (pl: ParlayView) => Math.min(...pl.legs.map((l) => l.startsAt.getTime()));
-            const list = (await markPlayed(await getOobeeParlays(d), auth.user.id)).sort(
+            const all = (await getOobeeParlays(d)).filter(ticketMatches);
+            const shown = rule.parlays ? all : all.filter((pl) => pl.status !== "pending");
+            const list = (await markPlayed(shown, auth.user.id)).sort(
               (a, b) => first(a) - first(b) || (a.rank ?? 0) - (b.rank ?? 0),
             );
-            return [d, list] as const;
+            return [d, { list, locked: all.length - shown.length }] as const;
           }),
         )
       : [],
@@ -213,22 +217,12 @@ export async function loadBoardDays({
     const draft = draftOn.has(d) && auth.isAdmin;
     const dayPicks = picksOn.get(d) ?? [];
 
-    if (isParlayTab && !rule.parlays) {
-      // The lead day only: one prompt, not one under every past day.
-      if (!isLead) return null;
-      return (
-        <DaySection key={d} date={d} today={today} draft={draft}>
-          <UnlockRow what="Oobee's parlays" />
-        </DaySection>
-      );
-    }
-
     if (isParlayTab) {
-      const list = (oobeeOn.get(d) ?? []).filter(ticketMatches);
-      if (narrowed && list.length === 0) return null;
+      const { list, locked } = oobeeOn.get(d) ?? { list: [], locked: 0 };
+      if (narrowed && list.length === 0 && locked === 0) return null;
       return (
-        <DaySection key={d} date={d} today={today} draft={draft} count={countLabel(list.length, "parlay")}>
-          {list.length === 0 ? (
+        <DaySection key={d} date={d} today={today} draft={draft} count={countLabel(list.length + locked, "parlay")}>
+          {list.length === 0 && locked === 0 ? (
             <Empty>
               {isLead && !isToday
                 ? `No ${what}games today. Oobee's ${formatSlateWeekday(d)} parlays go out with the rest of the board.`
@@ -250,6 +244,7 @@ export async function loadBoardDays({
               ))}
             </>
           )}
+          {locked > 0 && <UnlockRow what={`${locked} open parlay${locked === 1 ? "" : "s"}`} />}
         </DaySection>
       );
     }
@@ -283,7 +278,7 @@ export async function loadBoardDays({
           ))
         )}
         {locked > 0 && (
-          <UnlockRow what={`${locked} more ${CATEGORY_NOUN[category]}${locked === 1 ? "" : "s"}`} />
+          <UnlockRow what={`${locked} open ${CATEGORY_NOUN[category]}${locked === 1 ? "" : "s"}`} />
         )}
       </DaySection>
     );
