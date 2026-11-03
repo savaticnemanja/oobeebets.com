@@ -11,6 +11,7 @@ const STAT: Record<string, string> = {
   player_pass_yds: "pass_yds",
   player_pass_tds: "pass_td",
   player_rush_yds: "rush_yds",
+  player_rush_attempts: "rush_att",
   player_receptions: "rec",
   player_reception_yds: "rec_yds",
   player_pass_completions: "pass_cmp",
