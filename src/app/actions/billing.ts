@@ -105,7 +105,7 @@ export async function startCheckoutAction(from: CheckoutFrom): Promise<ActionSta
       url = session.url;
     }
   } catch (err) {
-    return { ok: false, error: err instanceof BillingError ? err.message : "Couldn't reach Stripe — try again." };
+    return failure("checkout", auth, err);
   }
   redirect(url);
 }
@@ -120,7 +120,7 @@ export async function openPortalAction(): Promise<ActionState> {
   try {
     url = await portalUrl(auth);
   } catch (err) {
-    return { ok: false, error: err instanceof BillingError ? err.message : "Couldn't reach Stripe — try again." };
+    return failure("portal", auth, err);
   }
   redirect(url);
 }
@@ -186,9 +186,21 @@ async function portalUrl(auth: AuthContext): Promise<string> {
  * The account's Stripe Customer, made on first use. The idempotency key
  * means two checkouts started at once still make one Customer; the
  * conditional update keeps the first one written.
+ *
+ * A stored Customer that Stripe no longer has (deleted in the Dashboard, or
+ * from another account or mode) is forgotten and replaced, rather than
+ * failing every checkout from then on.
  */
 async function customerFor(auth: AuthContext): Promise<string> {
-  if (auth.user.stripeCustomerId) return auth.user.stripeCustomerId;
+  const stored = auth.user.stripeCustomerId;
+  if (stored) {
+    if (await customerExists(stored)) return stored;
+    console.warn(`[billing] customer ${stored} of ${auth.user.id} is gone from Stripe; making a new one`);
+    await db
+      .update(users)
+      .set({ stripeCustomerId: null })
+      .where(and(eq(users.id, auth.user.id), eq(users.stripeCustomerId, stored)));
+  }
 
   const customer = await stripe().customers.create(
     {
@@ -196,7 +208,8 @@ async function customerFor(auth: AuthContext): Promise<string> {
       name: auth.user.displayName ?? undefined,
       metadata: { user_id: auth.user.id },
     },
-    { idempotencyKey: `customer:${auth.user.id}` },
+    // A replacement needs its own key: the first one is the Customer that was deleted.
+    { idempotencyKey: stored ? `customer:${auth.user.id}:replaces:${stored}` : `customer:${auth.user.id}` },
   );
   const [row] = await db
     .update(users)
@@ -207,4 +220,22 @@ async function customerFor(auth: AuthContext): Promise<string> {
 
   const [current] = await db.select({ id: users.stripeCustomerId }).from(users).where(eq(users.id, auth.user.id));
   return current?.id ?? customer.id;
+}
+
+/** Whether Stripe still has this Customer (a deleted one reads back as `deleted`). */
+async function customerExists(id: string): Promise<boolean> {
+  try {
+    const customer = await stripe().customers.retrieve(id);
+    return !customer.deleted;
+  } catch (err) {
+    if ((err as { code?: string }).code === "resource_missing") return false;
+    throw err;
+  }
+}
+
+/** Stripe's own errors are logged; the person sees something they can act on. */
+function failure(what: string, auth: AuthContext, err: unknown): ActionState {
+  if (err instanceof BillingError) return { ok: false, error: err.message };
+  console.error(`[billing] ${what} failed for ${auth.user.id}`, err);
+  return { ok: false, error: "Couldn't reach Stripe — try again." };
 }
