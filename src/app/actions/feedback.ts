@@ -7,13 +7,18 @@ import { z } from "zod";
 import { db } from "@/db";
 import { auditLog, feedback } from "@/db/schema";
 import { getAuth, rateLimit, requireAdmin } from "@/lib/auth";
+import { SITE } from "@/lib/site";
+import { feedbackTicket, sendTicket } from "@/lib/tracker";
 import { feedbackSchema, fieldErrorsFrom, type ActionState } from "@/lib/validation";
 
 /** Plenty for someone reporting as they go; not enough to flood the inbox. */
 const SEND_LIMIT = 10;
 const SEND_WINDOW_MS = 60 * 60 * 1000;
 
-/** From a tester, through "Send feedback" in the sidebar or the phone drawer. */
+/**
+ * From a tester, through "Send feedback" in the sidebar or the phone drawer.
+ * Saved for /admin/feedback and filed as a ticket in the external tracker.
+ */
 export async function sendFeedbackAction(
   _prev: ActionState,
   formData: FormData,
@@ -35,13 +40,28 @@ export async function sendFeedbackAction(
   }
 
   const h = await headers();
-  await db.insert(feedback).values({
-    userId: auth.user.id,
-    kind: parsed.data.kind,
-    body: parsed.data.body,
-    pagePath: parsed.data.pagePath || null,
-    userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
-  });
+  const [row] = await db
+    .insert(feedback)
+    .values({
+      userId: auth.user.id,
+      kind: parsed.data.kind,
+      body: parsed.data.body,
+      pagePath: parsed.data.pagePath || null,
+      userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
+    })
+    .returning({ id: feedback.id, kind: feedback.kind, body: feedback.body, pagePath: feedback.pagePath, userAgent: feedback.userAgent });
+
+  // Also a ticket in the external tracker (TRACKER_API_KEY); sent in the
+  // background, so a slow or down tracker never holds up the reply.
+  if (row) {
+    sendTicket(
+      feedbackTicket({
+        ...row,
+        user: { id: auth.user.id, email: auth.user.email, username: auth.user.username, displayName: auth.user.displayName },
+        siteUrl: SITE.url,
+      }),
+    );
+  }
 
   revalidatePath("/admin/feedback");
   revalidatePath("/admin");
